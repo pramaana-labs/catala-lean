@@ -38,6 +38,13 @@
  (flags (-linkall))
  (libraries shared_ast catala.driver ocamlgraph))
 
+(library
+ (name lean4)
+ (public_name catala.plugins.lean4)
+ (synopsis "Catala plugin that generates Lean 4 code")
+ (modules lean4)
+ (libraries catala.driver))
+
 (alias
  (name plugins)
  (deps
