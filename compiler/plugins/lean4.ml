@@ -94,39 +94,102 @@ let rec format_expr (_ctx : decl_ctx) (fmt : Format.formatter) (e : 'm expr) : u
         (format_expr _ctx) etrue
         (format_expr _ctx) efalse
   | ETuple es ->
+      (* Tuples in Lean use simple comma syntax *)
       Format.fprintf fmt "(%a)"
         (Format.pp_print_list
            ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
            (format_expr _ctx))
         es
   | ETupleAccess { e; index; _ } ->
+      (* Tuple access in Lean is .1, .2, etc (1-indexed) *)
       Format.fprintf fmt "(%a).%d" (format_expr _ctx) e (index + 1)
   | EInj { e; cons; _ } ->
-      Format.fprintf fmt "(Option.%s %a)"
-        (EnumConstructor.to_string cons)
-        (format_expr _ctx) e
+      (* Map Catala option constructors to Lean's Option type *)
+      let cons_name = EnumConstructor.to_string cons in
+      let lean_cons = 
+        if cons_name = "None_1" || cons_name = "None" then "none"
+        else if cons_name = "Some_1" || cons_name = "Some" then "some"
+        else cons_name  (* fallback to original name *)
+      in
+      Format.fprintf fmt "(Option.%s %a)" lean_cons (format_expr _ctx) e
   | EMatch { e; cases; _ } ->
       Format.fprintf fmt "(match %a with@," (format_expr _ctx) e;
       EnumConstructor.Map.iter
         (fun cons case_expr ->
-          Format.fprintf fmt "| Option.%s x => %a@,"
-            (EnumConstructor.to_string cons)
-            (format_expr _ctx) case_expr)
+          (* Match case expressions are wrapped in EAbs, unwrap them *)
+          match Mark.remove case_expr with
+          | EAbs { binder; _ } ->
+              let xs, body = Bindlib.unmbind binder in
+              (* Map Catala option constructors to Lean's Option type *)
+              let cons_name = EnumConstructor.to_string cons in
+              let lean_cons = 
+                if cons_name = "None_1" || cons_name = "None" then "none"
+                else if cons_name = "Some_1" || cons_name = "Some" then "some"
+                else cons_name
+              in
+              (* Option.none takes no args, Option.some takes args *)
+              if lean_cons = "none" then
+                Format.fprintf fmt "| Option.%s => %a@,"
+                  lean_cons
+                  (format_expr _ctx) body
+              else
+                Format.fprintf fmt "| Option.%s %a => %a@,"
+                  lean_cons
+                  (Format.pp_print_list
+                     ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
+                     format_var)
+                  (Array.to_list xs)
+                  (format_expr _ctx) body
+          | _ -> 
+              (* Fallback if not wrapped in lambda *)
+              let cons_name = EnumConstructor.to_string cons in
+              let lean_cons = 
+                if cons_name = "None_1" || cons_name = "None" then "none"
+                else if cons_name = "Some_1" || cons_name = "Some" then "some"
+                else cons_name
+              in
+              Format.fprintf fmt "| Option.%s x => %a@,"
+                lean_cons
+                (format_expr _ctx) case_expr)
         cases;
       Format.fprintf fmt ")"
   | EStruct { fields; _ } ->
-      Format.fprintf fmt "{ %a }"
-        (Format.pp_print_list
-           ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
-           (fun fmt (field, e) ->
-             Format.fprintf fmt "%s := %a"
-               (StructField.to_string field)
-               (format_expr _ctx) e))
-        (StructField.Map.bindings fields)
+      (* Check if this is a tuple-like struct (fields named elt_0, elt_1, ...) *)
+      let bindings = StructField.Map.bindings fields in
+      let is_tuple_struct = 
+        List.for_all (fun (field, _) ->
+          let name = StructField.to_string field in
+          String.starts_with ~prefix:"elt_" name
+        ) bindings
+      in
+      if is_tuple_struct then
+        (* Format as tuple *)
+        Format.fprintf fmt "(%a)"
+          (Format.pp_print_list
+             ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
+             (fun fmt (_, e) -> format_expr _ctx fmt e))
+          bindings
+      else
+        (* Format as struct *)
+        Format.fprintf fmt "{ %a }"
+          (Format.pp_print_list
+             ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
+             (fun fmt (field, e) ->
+               Format.fprintf fmt "%s := %a"
+                 (StructField.to_string field)
+                 (format_expr _ctx) e))
+          bindings
   | EStructAccess { e; field; _ } ->
-      Format.fprintf fmt "(%a).%s"
-        (format_expr _ctx) e
-        (StructField.to_string field)
+      (* Check if this is tuple element access (elt_0, elt_1, ...) *)
+      let field_name = StructField.to_string field in
+      if String.starts_with ~prefix:"elt_" field_name then
+        (* Extract the number and use tuple access (1-indexed in Lean) *)
+        let index_str = String.sub field_name 4 (String.length field_name - 4) in
+        let index = int_of_string index_str + 1 in  (* Convert to 1-indexed *)
+        Format.fprintf fmt "(%a).%d" (format_expr _ctx) e index
+      else
+        (* Regular struct field access *)
+        Format.fprintf fmt "(%a).%s" (format_expr _ctx) e field_name
   | EFatalError _ ->
       Format.fprintf fmt "(panic! \"Error\")"
   | EPos _ ->
@@ -135,7 +198,12 @@ let rec format_expr (_ctx : decl_ctx) (fmt : Format.formatter) (e : 'm expr) : u
       format_operator _ctx fmt op args
   | EAssert _ ->
       Format.pp_print_string fmt "()" (* Assertions - ignore for now *)
-  | _ -> Format.pp_print_string fmt "sorry -- unsupported expression"
+  | EExternal _ ->
+      Format.pp_print_string fmt "sorry -- EExternal"
+  | EArray _ ->
+      Format.pp_print_string fmt "sorry -- EArray"
+  | _ ->
+      Format.pp_print_string fmt "sorry -- unknown expression"
 
 (** Format operators - simplified *)
 and format_operator (_ctx : decl_ctx) (fmt : Format.formatter) (op : lcalc operator Mark.pos) (args : 'm expr list) : unit =
@@ -177,27 +245,54 @@ let format_scope_body_expr
   let last_e =
     BoundList.iter
       ~f:(fun scope_let_var scope_let ->
-        Format.fprintf fmt "let %a : %a := %a@,"
+        Format.fprintf fmt "  let %a : %a := %a@,"
           format_var scope_let_var
           format_typ scope_let.scope_let_typ
           (format_expr ctx) scope_let.scope_let_expr)
       scope_lets
   in
-  format_expr ctx fmt last_e
+  (* Output the return expression with proper indentation *)
+  Format.fprintf fmt "  %a" (format_expr ctx) last_e
+
+(** Format a simple struct declaration *)
+let format_simple_struct_decl (fmt : Format.formatter) (name : StructName.t) (ctx : decl_ctx) : unit =
+  try
+    let fields = StructName.Map.find name ctx.ctx_structs in
+    if StructField.Map.is_empty fields then
+      Format.fprintf fmt "structure %s where@.@." (StructName.to_string name)
+    else begin
+      Format.fprintf fmt "structure %s where@." (StructName.to_string name);
+      StructField.Map.iter
+        (fun field typ ->
+          Format.fprintf fmt "  %s : %a@."
+            (StructField.to_string field)
+            format_typ typ)
+        fields;
+      Format.fprintf fmt "@."
+    end
+  with Not_found -> ()
 
 (** Format entire program - simplified *)
 let format_program (fmt : Format.formatter) (p : 'm program) (_type_ordering : TypeIdent.t list) : unit =
   Format.fprintf fmt "-- Generated by Catala compiler (Lean 4 backend - minimal)@,";
   Format.fprintf fmt "-- Note: Only basic integer/boolean operations supported@,@,";
 
-  (* Just output code items without type declarations for now *)
+  (* Output code items *)
   ignore (BoundList.iter p.code_items ~f:(fun _var item ->
       match item with
       | ScopeDef (name, body) ->
+          (* Output input and output struct definitions *)
+          format_simple_struct_decl fmt body.scope_body_input_struct p.decl_ctx;
+          format_simple_struct_decl fmt body.scope_body_output_struct p.decl_ctx;
+          
+          (* Output scope function - use lowercase to avoid collision with struct *)
           let scope_input_var, scope_body_expr = Bindlib.unbind body.scope_body_expr in
-          Format.fprintf fmt "def %s (%a : Unit) : Unit :=@,"
-            (ScopeName.base name)
-            format_var scope_input_var;
+          let scope_func_name = String.uncapitalize_ascii (ScopeName.base name) in
+          Format.fprintf fmt "def %s (%a : %s) : %s :=@,"
+            scope_func_name
+            format_var scope_input_var
+            (StructName.to_string body.scope_body_input_struct)
+            (StructName.to_string body.scope_body_output_struct);
           Format.fprintf fmt "  @[<v>%a@]@,@,"
             (format_scope_body_expr p.decl_ctx) scope_body_expr
       | Topdef (name, typ, _vis, e) ->
