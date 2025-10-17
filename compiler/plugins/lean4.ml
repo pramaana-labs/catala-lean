@@ -57,13 +57,34 @@ let rec format_typ (fmt : Format.formatter) (ty : typ) : unit =
   | TLit TUnit -> Format.pp_print_string fmt "Unit"
   | TLit TBool -> Format.pp_print_string fmt "Bool"
   | TLit TInt -> Format.pp_print_string fmt "Int"
+  | TLit TRat -> Format.pp_print_string fmt "Rat"
+  | TLit TMoney -> Format.pp_print_string fmt "CatalaRuntime.Money"
+  | TLit TDate -> Format.pp_print_string fmt "CatalaRuntime.Date"
+  | TLit TDuration -> Format.pp_print_string fmt "CatalaRuntime.Duration"
+  | TLit TPos -> Format.pp_print_string fmt "CatalaRuntime.SourcePosition"
+  | TTuple [] -> Format.pp_print_string fmt "Unit"
+  | TTuple ts ->
+      Format.fprintf fmt "(%a)"
+        (Format.pp_print_list
+           ~pp_sep:(fun fmt () -> Format.fprintf fmt " × ")
+           format_typ)
+        ts
+  | TStruct s -> Format.pp_print_string fmt (StructName.to_string s)
+  | TEnum e -> Format.pp_print_string fmt (EnumName.to_string e)
+  | TOption t ->
+      Format.fprintf fmt "(Option %a)" format_typ t
   | TArrow (args, ret) ->
       Format.fprintf fmt "(%a)"
         (Format.pp_print_list
            ~pp_sep:(fun fmt () -> Format.fprintf fmt " → ")
            format_typ)
         (args @ [ret])
-  | _ -> Format.pp_print_string fmt "Unit -- unsupported type"
+  | TArray t ->
+      Format.fprintf fmt "(Array %a)" format_typ t
+  | TDefault t -> format_typ fmt t
+  | TVar _ | TForAll _ | TClosureEnv -> 
+      (* For now, output Unit for complex types we don't fully support *)
+      Format.pp_print_string fmt "Unit"
 
 (** Format expressions - simplified *)
 let rec format_expr (_ctx : decl_ctx) (fmt : Format.formatter) (e : 'm expr) : unit =
@@ -103,82 +124,91 @@ let rec format_expr (_ctx : decl_ctx) (fmt : Format.formatter) (e : 'm expr) : u
   | ETupleAccess { e; index; _ } ->
       (* Tuple access in Lean is .1, .2, etc (1-indexed) *)
       Format.fprintf fmt "(%a).%d" (format_expr _ctx) e (index + 1)
-  | EInj { e; cons; _ } ->
-      (* Map Catala option constructors to Lean's Option type *)
+  | EInj { e; cons; name } ->
+      (* Determine if constructor has a Unit payload; if so, omit argument *)
       let cons_name = EnumConstructor.to_string cons in
-      let lean_cons = 
-        if cons_name = "None_1" || cons_name = "None" then "none"
-        else if cons_name = "Some_1" || cons_name = "Some" then "some"
-        else cons_name  (* fallback to original name *)
+      let is_option = EnumName.equal name Expr.option_enum in
+      let enum_name = if is_option then "Option" else EnumName.to_string name in
+      let cons_typ_opt =
+        try
+          let cons_map = EnumName.Map.find name _ctx.ctx_enums in
+          Some (EnumConstructor.Map.find cons cons_map)
+        with Not_found -> None
       in
-      Format.fprintf fmt "(Option.%s %a)" lean_cons (format_expr _ctx) e
-  | EMatch { e; cases; _ } ->
+      let is_unit_payload =
+        match cons_typ_opt with
+        | Some t -> (match Mark.remove t with TLit TUnit -> true | _ -> false)
+        | None -> false
+      in
+      if is_option then
+        let lean_cons =
+          if cons_name = "None_1" || cons_name = "None" then "none"
+          else if cons_name = "Some_1" || cons_name = "Some" then "some"
+          else cons_name
+        in
+        if lean_cons = "none" || is_unit_payload then
+          Format.fprintf fmt "(%s.%s)" enum_name lean_cons
+        else
+          Format.fprintf fmt "(%s.%s %a)" enum_name lean_cons (format_expr _ctx) e
+      else if is_unit_payload then
+        Format.fprintf fmt "(%s.%s)" enum_name cons_name
+      else
+        Format.fprintf fmt "(%s.%s %a)" enum_name cons_name (format_expr _ctx) e
+  | EMatch { e; cases; name } ->
       Format.fprintf fmt "(match %a with@," (format_expr _ctx) e;
+      let is_option = EnumName.equal name Expr.option_enum in
+      let enum_name = if is_option then "Option" else EnumName.to_string name in
+      let cons_typ_map =
+        (try EnumName.Map.find name _ctx.ctx_enums with Not_found -> EnumConstructor.Map.empty)
+      in
       EnumConstructor.Map.iter
         (fun cons case_expr ->
+          let cons_name = EnumConstructor.to_string cons in
+          let lean_cons =
+            if is_option then
+              (if cons_name = "None_1" || cons_name = "None" then "none"
+               else if cons_name = "Some_1" || cons_name = "Some" then "some"
+               else cons_name)
+            else cons_name
+          in
+          let cons_typ_opt = try Some (EnumConstructor.Map.find cons cons_typ_map) with Not_found -> None in
+          let is_unit_payload =
+            match cons_typ_opt with
+            | Some t -> (match Mark.remove t with TLit TUnit -> true | _ -> false)
+            | None -> false
+          in
           (* Match case expressions are wrapped in EAbs, unwrap them *)
           match Mark.remove case_expr with
           | EAbs { binder; _ } ->
               let xs, body = Bindlib.unmbind binder in
-              (* Map Catala option constructors to Lean's Option type *)
-              let cons_name = EnumConstructor.to_string cons in
-              let lean_cons = 
-                if cons_name = "None_1" || cons_name = "None" then "none"
-                else if cons_name = "Some_1" || cons_name = "Some" then "some"
-                else cons_name
-              in
-              (* Option.none takes no args, Option.some takes args *)
-              if lean_cons = "none" then
-                Format.fprintf fmt "| Option.%s => %a@,"
-                  lean_cons
-                  (format_expr _ctx) body
+              if is_unit_payload then
+                Format.fprintf fmt "| %s.%s => %a@," enum_name lean_cons (format_expr _ctx) body
               else
-                Format.fprintf fmt "| Option.%s %a => %a@,"
-                  lean_cons
+                Format.fprintf fmt "| %s.%s %a => %a@,"
+                  enum_name lean_cons
                   (Format.pp_print_list
                      ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
                      format_var)
                   (Array.to_list xs)
                   (format_expr _ctx) body
           | _ -> 
-              (* Fallback if not wrapped in lambda *)
-              let cons_name = EnumConstructor.to_string cons in
-              let lean_cons = 
-                if cons_name = "None_1" || cons_name = "None" then "none"
-                else if cons_name = "Some_1" || cons_name = "Some" then "some"
-                else cons_name
-              in
-              Format.fprintf fmt "| Option.%s x => %a@,"
-                lean_cons
-                (format_expr _ctx) case_expr)
+              if is_unit_payload then
+                Format.fprintf fmt "| %s.%s => %a@," enum_name lean_cons (format_expr _ctx) case_expr
+              else
+                Format.fprintf fmt "| %s.%s x => %a@," enum_name lean_cons (format_expr _ctx) case_expr)
         cases;
       Format.fprintf fmt ")"
   | EStruct { fields; _ } ->
-      (* Check if this is a tuple-like struct (fields named elt_0, elt_1, ...) *)
+      (* Always format as struct literal with named fields *)
       let bindings = StructField.Map.bindings fields in
-      let is_tuple_struct = 
-        List.for_all (fun (field, _) ->
-          let name = StructField.to_string field in
-          String.starts_with ~prefix:"elt_" name
-        ) bindings
-      in
-      if is_tuple_struct then
-        (* Format as tuple *)
-        Format.fprintf fmt "(%a)"
-          (Format.pp_print_list
-             ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
-             (fun fmt (_, e) -> format_expr _ctx fmt e))
-          bindings
-      else
-        (* Format as struct *)
-        Format.fprintf fmt "{ %a }"
-          (Format.pp_print_list
-             ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
-             (fun fmt (field, e) ->
-               Format.fprintf fmt "%s := %a"
-                 (StructField.to_string field)
-                 (format_expr _ctx) e))
-          bindings
+      Format.fprintf fmt "{ %a }"
+        (Format.pp_print_list
+           ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
+           (fun fmt (field, e) ->
+             Format.fprintf fmt "%s := %a"
+               (StructField.to_string field)
+               (format_expr _ctx) e))
+        bindings
   | EStructAccess { e; field; _ } ->
       (* Check if this is tuple element access (elt_0, elt_1, ...) *)
       let field_name = StructField.to_string field in
@@ -254,8 +284,8 @@ let format_scope_body_expr
   (* Output the return expression with proper indentation *)
   Format.fprintf fmt "  %a" (format_expr ctx) last_e
 
-(** Format a simple struct declaration *)
-let format_simple_struct_decl (fmt : Format.formatter) (name : StructName.t) (ctx : decl_ctx) : unit =
+(** Format a struct declaration *)
+let format_struct_decl (fmt : Format.formatter) (name : StructName.t) (ctx : decl_ctx) : unit =
   try
     let fields = StructName.Map.find name ctx.ctx_structs in
     if StructField.Map.is_empty fields then
@@ -272,19 +302,50 @@ let format_simple_struct_decl (fmt : Format.formatter) (name : StructName.t) (ct
     end
   with Not_found -> ()
 
+(** Format an enum declaration *)
+let format_enum_decl (fmt : Format.formatter) (name : EnumName.t) (ctx : decl_ctx) : unit =
+  try
+    let constrs = EnumName.Map.find name ctx.ctx_enums in
+    Format.fprintf fmt "inductive %s where@." (EnumName.to_string name);
+    EnumConstructor.Map.iter
+      (fun cons typ ->
+        (* Handle the constructor - if type is Unit, no arguments *)
+        match Mark.remove typ with
+        | TLit TUnit ->
+            Format.fprintf fmt "  | %s : %s@."
+              (EnumConstructor.to_string cons)
+              (EnumName.to_string name)
+        | _ ->
+            Format.fprintf fmt "  | %s : %a → %s@."
+              (EnumConstructor.to_string cons)
+              format_typ typ
+              (EnumName.to_string name))
+      constrs;
+    Format.fprintf fmt "@."
+  with Not_found -> ()
+
 (** Format entire program - simplified *)
-let format_program (fmt : Format.formatter) (p : 'm program) (_type_ordering : TypeIdent.t list) : unit =
+let format_program (fmt : Format.formatter) (p : 'm program) (type_ordering : TypeIdent.t list) : unit =
   Format.fprintf fmt "-- Generated by Catala compiler (Lean 4 backend - minimal)@,";
   Format.fprintf fmt "-- Note: Only basic integer/boolean operations supported@,@,";
+  (* Import runtime for types like Money, Date, SourcePosition *)
+  Format.fprintf fmt "import CatalaRuntime@.@.";
+
+  (* First, output all type declarations in dependency order *)
+  List.iter
+    (fun type_id ->
+      match type_id with
+      | TypeIdent.Struct s -> format_struct_decl fmt s p.decl_ctx
+      | TypeIdent.Enum e -> 
+          (* Skip the built-in Option enum - Lean has its own *)
+          if not (EnumName.equal e Expr.option_enum) then
+            format_enum_decl fmt e p.decl_ctx)
+    type_ordering;
 
   (* Output code items *)
   ignore (BoundList.iter p.code_items ~f:(fun _var item ->
       match item with
       | ScopeDef (name, body) ->
-          (* Output input and output struct definitions *)
-          format_simple_struct_decl fmt body.scope_body_input_struct p.decl_ctx;
-          format_simple_struct_decl fmt body.scope_body_output_struct p.decl_ctx;
-          
           (* Output scope function - use lowercase to avoid collision with struct *)
           let scope_input_var, scope_body_expr = Bindlib.unbind body.scope_body_expr in
           let scope_func_name = String.uncapitalize_ascii (ScopeName.base name) in

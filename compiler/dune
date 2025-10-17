@@ -17,7 +17,7 @@
 (executable
  (name tests)
  (modules tests)
- (libraries catala.driver alcotest))
+ (libraries catala.driver lean4_desugared_test alcotest))
 
 (rule
  (target custom_linking.sexp)
