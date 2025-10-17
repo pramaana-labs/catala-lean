@@ -170,8 +170,41 @@ def mkRational (num den : Int) : Int :=
     num / den
 
 -- ============================================================================
--- Error Handling
+-- Error Handling and Default Calculus Monad
 -- ============================================================================
+
+/-- Errors from the default calculus -/
+inductive Err where
+  | conflict : Err
+  | empty : Err
+  deriving Repr, DecidableEq
+
+/-- Default calculus monad: D α = Except Err (Option α)
+    - .error .conflict: multiple conflicting definitions
+    - .error .empty: no definition and no default
+    - .ok none: no definition (but has default handling)
+    - .ok (some v): successful definition
+-/
+abbrev D (α : Type) := Except Err (Option α)
+
+/-- Process a list of exceptions, checking for conflicts.
+    Returns the first successful definition, or conflict if multiple succeed.
+-/
+def processExceptions {α : Type} (exceptions : List (D α)) : D α :=
+  exceptions.foldl
+    (fun acc ex =>
+      match acc with
+      | .error e => .error e  -- propagate errors
+      | .ok none =>
+          -- No value yet, use this exception if it has one
+          ex
+      | .ok (some _) =>
+          -- We already have a value, check for conflicts
+          match ex with
+          | .ok (some _) => .error .conflict  -- conflict!
+          | .ok none => acc  -- keep existing value
+          | .error e => .error e)  -- propagate error
+    (.ok none)
 
 /-- Handle exceptions by selecting the first non-none value -/
 def handleExceptions {α : Type} (options : List (Option (α × SourcePosition))) :
@@ -185,6 +218,135 @@ def divWithErr (pos : SourcePosition) (a b : Money) : Money :=
   else
     -- Simplified: return integer division for now
     ⟨a.cents / b.cents⟩
+
+-- ============================================================================
+-- Money Operations (Extended)
+-- ============================================================================
+
+namespace Money
+
+/-- Multiply Money by Float (for percentages, decimal operations) -/
+@[inline] def mulFloat (m : Money) (f : Float) : Money :=
+  ⟨(Float.toInt64 (Float.round (Float.ofInt m.cents * f))).toInt⟩
+
+/-- Greater than or equal -/
+@[inline] def ge (a b : Money) : Bool := a.cents ≥ b.cents
+
+/-- Greater than -/
+@[inline] def gt (a b : Money) : Bool := a.cents > b.cents
+
+/-- Less than or equal -/
+@[inline] def le (a b : Money) : Bool := a.cents ≤ b.cents
+
+/-- Less than -/
+@[inline] def lt (a b : Money) : Bool := a.cents < b.cents
+
+/-- Equality -/
+@[inline] def eq (a b : Money) : Bool := a.cents = b.cents
+
+end Money
+
+-- Float multiplication for Money
+instance : HMul Money Float Money where
+  hMul := Money.mulFloat
+
+-- ============================================================================
+-- Date Operations (Extended)
+-- ============================================================================
+
+namespace Date
+
+/-- Compare dates: less than -/
+def lt (d1 d2 : Date) : Bool :=
+  if d1.year < d2.year then true
+  else if d1.year > d2.year then false
+  else if d1.month < d2.month then true
+  else if d1.month > d2.month then false
+  else d1.day < d2.day
+
+/-- Compare dates: less than or equal -/
+def le (d1 d2 : Date) : Bool :=
+  lt d1 d2 || (d1.year = d2.year && d1.month = d2.month && d1.day = d2.day)
+
+/-- Compare dates: greater than -/
+def gt (d1 d2 : Date) : Bool := lt d2 d1
+
+/-- Compare dates: greater than or equal -/
+def ge (d1 d2 : Date) : Bool := le d2 d1
+
+/-- Compare dates: equal -/
+def eq (d1 d2 : Date) : Bool :=
+  d1.year = d2.year && d1.month = d2.month && d1.day = d2.day
+
+end Date
+
+-- ============================================================================
+-- D Monad Operations (Arithmetic and Comparison through D)
+-- ============================================================================
+
+namespace D
+
+/-- Add two D Money values -/
+def addMoney (m1 m2 : D Money) : D Money :=
+  match m1, m2 with
+  | .ok (some a), .ok (some b) => .ok (some (a + b))
+  | .ok none, _ => .ok none
+  | _, .ok none => .ok none
+  | .error e, _ => .error e
+  | _, .error e => .error e
+
+/-- Subtract two D Money values -/
+def subMoney (m1 m2 : D Money) : D Money :=
+  match m1, m2 with
+  | .ok (some a), .ok (some b) => .ok (some (a - b))
+  | .ok none, _ => .ok none
+  | _, .ok none => .ok none
+  | .error e, _ => .error e
+  | _, .error e => .error e
+
+/-- Multiply D Money by Float -/
+def mulMoneyFloat (m : D Money) (f : Float) : D Money :=
+  match m with
+  | .ok (some a) => .ok (some (a * f))
+  | .ok none => .ok none
+  | .error e => .error e
+
+/-- Compare D Money: less than -/
+def ltMoney (m1 m2 : D Money) : D Bool :=
+  match m1, m2 with
+  | .ok (some a), .ok (some b) => .ok (some (Money.lt a b))
+  | .ok none, _ => .ok none
+  | _, .ok none => .ok none
+  | .error e, _ => .error e
+  | _, .error e => .error e
+
+/-- Compare D Money: greater than or equal -/
+def geMoney (m1 m2 : D Money) : D Bool :=
+  match m1, m2 with
+  | .ok (some a), .ok (some b) => .ok (some (Money.ge a b))
+  | .ok none, _ => .ok none
+  | _, .ok none => .ok none
+  | .error e, _ => .error e
+  | _, .error e => .error e
+
+/-- Maximum of two D Money values (return larger, or first on tie) -/
+def maxMoney (m1 m2 : D Money) : D Money :=
+  match m1, m2 with
+  | .ok (some a), .ok (some b) => .ok (some (if Money.ge a b then a else b))
+  | .ok (some a), .ok none => .ok (some a)
+  | .ok none, .ok (some b) => .ok (some b)
+  | .ok none, .ok none => .ok none
+  | .error e, _ => .error e
+  | _, .error e => .error e
+
+end D
+
+-- Operator instances for D Money
+instance : HAdd (D Money) (D Money) (D Money) where
+  hAdd := D.addMoney
+
+instance : HSub (D Money) (D Money) (D Money) where
+  hSub := D.subMoney
 
 end CatalaRuntime
 
