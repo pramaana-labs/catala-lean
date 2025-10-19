@@ -64,7 +64,7 @@
  (name lean4_desugared_test)
  (synopsis "Tests for Lean4 desugared backend")
  (modules lean4_desugared_test)
- (libraries lean4_desugared catala.driver desugared alcotest))
+ (libraries lean4_desugared catala.driver desugared alcotest str))
 
 (alias
  (name plugins)
