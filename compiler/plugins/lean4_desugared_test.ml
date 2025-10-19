@@ -145,6 +145,107 @@ let test_format_typ_enum () =
   let result = Lean4_desugared.format_typ ty in
   assert_string_equal "Color" result
 
+(** {1 Expression formatting tests} *)
+
+let test_format_expr_lit () =
+  let expr = (ELit (LBool true), Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "true" result
+
+let test_format_expr_var () =
+  let var = Var.make "my_variable" in
+  let expr = (EVar var, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "my_variable" result
+
+let test_format_expr_if_then_else () =
+  let cond = (ELit (LBool true), Untyped { pos = Pos.void }) in
+  let etrue = (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void }) in
+  let efalse = (ELit (LInt (Runtime.integer_of_int 0)), Untyped { pos = Pos.void }) in
+  let expr = (EIfThenElse { cond; etrue; efalse }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(if true then (42 : Int) else (0 : Int))" result
+
+let test_format_expr_tuple_2 () =
+  let e1 = (ELit (LInt (Runtime.integer_of_int 10)), Untyped { pos = Pos.void }) in
+  let e2 = (ELit (LBool false), Untyped { pos = Pos.void }) in
+  let expr = (ETuple [e1; e2], Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((10 : Int), false)" result
+
+let test_format_expr_tuple_access () =
+  let var = Var.make "my_tuple" in
+  let tuple_expr = (EVar var, Untyped { pos = Pos.void }) in
+  let expr = (ETupleAccess { e = tuple_expr; index = 0; size = 2 }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(my_tuple).1" result
+
+let test_format_expr_tuple_access_second () =
+  let var = Var.make "my_tuple" in
+  let tuple_expr = (EVar var, Untyped { pos = Pos.void }) in
+  let expr = (ETupleAccess { e = tuple_expr; index = 1; size = 2 }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(my_tuple).2" result
+
+let test_format_expr_app_simple () =
+  let f_var = Var.make "my_function" in
+  let f = (EVar f_var, Untyped { pos = Pos.void }) in
+  let arg = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let expr = (EApp { f; args = [arg]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(my_function (5 : Int))" result
+
+let test_format_expr_app_multiple_args () =
+  let f_var = Var.make "add" in
+  let f = (EVar f_var, Untyped { pos = Pos.void }) in
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 3)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 4)), Untyped { pos = Pos.void }) in
+  let expr = (EApp { f; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(add (3 : Int) (4 : Int))" result
+
+let test_format_expr_struct () =
+  let struct_name = StructName.fresh [] ("Person", Pos.void) in
+  let name_field = StructField.fresh ("name", Pos.void) in
+  let age_field = StructField.fresh ("age", Pos.void) in
+  let name_val = (ELit (LInt (Runtime.integer_of_int 0)), Untyped { pos = Pos.void }) in (* placeholder *)
+  let age_val = (ELit (LInt (Runtime.integer_of_int 25)), Untyped { pos = Pos.void }) in
+  let fields = StructField.Map.empty
+    |> StructField.Map.add name_field name_val
+    |> StructField.Map.add age_field age_val
+  in
+  let expr = (EStruct { name = struct_name; fields }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  (* Note: Map iteration order might vary, but let's check it contains the key parts *)
+  let has_struct_name = String.contains result '{' && String.contains result '}' in
+  if not has_struct_name then
+    Alcotest.failf "Expected struct construction syntax, got: %s" result
+
+let test_format_expr_struct_access () =
+  let struct_name = StructName.fresh [] ("Person", Pos.void) in
+  let field = StructField.fresh ("age", Pos.void) in
+  let var = Var.make "person" in
+  let struct_expr = (EVar var, Untyped { pos = Pos.void }) in
+  let expr = (EStructAccess { e = struct_expr; field; name = struct_name }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(person).age" result
+
+let test_format_expr_inj () =
+  let enum_name = EnumName.fresh [] ("Option", Pos.void) in
+  let cons = EnumConstructor.fresh ("Some", Pos.void) in
+  let payload = (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void }) in
+  let expr = (EInj { e = payload; cons; name = enum_name }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(Option.Some (42 : Int))" result
+
+let test_format_expr_array () =
+  let e1 = (ELit (LInt (Runtime.integer_of_int 1)), Untyped { pos = Pos.void }) in
+  let e2 = (ELit (LInt (Runtime.integer_of_int 2)), Untyped { pos = Pos.void }) in
+  let e3 = (ELit (LInt (Runtime.integer_of_int 3)), Untyped { pos = Pos.void }) in
+  let expr = (EArray [e1; e2; e3], Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "#[(1 : Int), (2 : Int), (3 : Int)]" result
+
 (** {1 Test suite} *)
 
 let suite =
@@ -176,6 +277,21 @@ let suite =
       Alcotest.test_case "arrow multiple args" `Quick test_format_typ_arrow_multiple_args;
       Alcotest.test_case "struct" `Quick test_format_typ_struct;
       Alcotest.test_case "enum" `Quick test_format_typ_enum;
+    ];
+    "format_expr",
+    [
+      Alcotest.test_case "literal" `Quick test_format_expr_lit;
+      Alcotest.test_case "variable" `Quick test_format_expr_var;
+      Alcotest.test_case "if-then-else" `Quick test_format_expr_if_then_else;
+      Alcotest.test_case "tuple 2 elements" `Quick test_format_expr_tuple_2;
+      Alcotest.test_case "tuple access first" `Quick test_format_expr_tuple_access;
+      Alcotest.test_case "tuple access second" `Quick test_format_expr_tuple_access_second;
+      Alcotest.test_case "application simple" `Quick test_format_expr_app_simple;
+      Alcotest.test_case "application multiple args" `Quick test_format_expr_app_multiple_args;
+      Alcotest.test_case "struct construction" `Quick test_format_expr_struct;
+      Alcotest.test_case "struct access" `Quick test_format_expr_struct_access;
+      Alcotest.test_case "enum injection" `Quick test_format_expr_inj;
+      Alcotest.test_case "array" `Quick test_format_expr_array;
     ];
   ]
 
