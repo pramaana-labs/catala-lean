@@ -45,7 +45,7 @@
  (modules lean4)
  (libraries catala.driver))
 
-# TODO: Remove desugared_viz library after development.
+; TODO: Remove desugared_viz library after development.
 (library
  (name desugared_viz)
  (public_name catala.plugins.desugared_viz)

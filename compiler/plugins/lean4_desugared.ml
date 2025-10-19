@@ -15,6 +15,7 @@
 
 (** Lean4 backend from desugared AST *)
 
+open Catala_utils
 open Shared_ast
 
 module Runtime = Catala_runtime
@@ -44,4 +45,34 @@ let format_lit (l : lit) : string =
   | LDuration dur ->
       let y, m, d = Runtime.duration_to_years_months_days dur in
       Printf.sprintf "(CatalaRuntime.Duration.create %d %d %d)" y m d
+
+(** Format a type to Lean code *)
+let rec format_typ (ty : typ) : string =
+  match Mark.remove ty with
+  | TLit TUnit -> "Unit"
+  | TLit TBool -> "Bool"
+  | TLit TInt -> "Int"
+  | TLit TRat -> "Rat"
+  | TLit TMoney -> "CatalaRuntime.Money"
+  | TLit TDate -> "CatalaRuntime.Date"
+  | TLit TDuration -> "CatalaRuntime.Duration"
+  | TLit TPos -> "CatalaRuntime.SourcePosition"
+  | TTuple [] -> "Unit"
+  | TTuple ts ->
+      let formatted = List.map format_typ ts in
+      Printf.sprintf "(%s)" (String.concat " × " formatted)
+  | TStruct s -> StructName.to_string s
+  | TEnum e -> EnumName.to_string e
+  | TOption t ->
+      Printf.sprintf "(Option %s)" (format_typ t)
+  | TArrow (args, ret) ->
+      let all_types = args @ [ret] in
+      let formatted = List.map format_typ all_types in
+      Printf.sprintf "(%s)" (String.concat " → " formatted)
+  | TArray t ->
+      Printf.sprintf "(Array %s)" (format_typ t)
+  | TDefault t -> format_typ t
+  | TVar _ | TForAll _ | TClosureEnv ->
+      (* For now, output Unit for complex types we don't fully support *)
+      "Unit"
 
