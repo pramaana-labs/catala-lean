@@ -246,6 +246,128 @@ let test_format_expr_array () =
   let result = Lean4_desugared.format_expr expr in
   assert_string_equal "#[(1 : Int), (2 : Int), (3 : Int)]" result
 
+(** {1 Operator formatting tests} *)
+
+let test_format_operator_add_int () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 1)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 2)), Untyped { pos = Pos.void }) in
+  let op = (Op.Add, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((1 : Int) + (2 : Int))" result
+
+let test_format_operator_sub_int () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 10)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 3)), Untyped { pos = Pos.void }) in
+  let op = (Op.Sub, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((10 : Int) - (3 : Int))" result
+
+let test_format_operator_mult_int () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 3)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 4)), Untyped { pos = Pos.void }) in
+  let op = (Op.Mult, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((3 : Int) * (4 : Int))" result
+
+let test_format_operator_lt_int () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 10)), Untyped { pos = Pos.void }) in
+  let op = (Op.Lt, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((5 : Int) < (10 : Int))" result
+
+let test_format_operator_lte_int () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let op = (Op.Lte, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((5 : Int) ≤ (5 : Int))" result
+
+let test_format_operator_gt_int () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 10)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let op = (Op.Gt, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((10 : Int) > (5 : Int))" result
+
+let test_format_operator_gte_int () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 10)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 10)), Untyped { pos = Pos.void }) in
+  let op = (Op.Gte, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((10 : Int) ≥ (10 : Int))" result
+
+let test_format_operator_eq () =
+  let arg1 = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let op = (Op.Eq, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "((5 : Int) = (5 : Int))" result
+
+let test_format_operator_and () =
+  let arg1 = (ELit (LBool true), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LBool false), Untyped { pos = Pos.void }) in
+  let op = (Op.And, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(true ∧ false)" result
+
+let test_format_operator_or () =
+  let arg1 = (ELit (LBool true), Untyped { pos = Pos.void }) in
+  let arg2 = (ELit (LBool false), Untyped { pos = Pos.void }) in
+  let op = (Op.Or, Pos.void) in
+  let expr = (EAppOp { op; args = [arg1; arg2]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(true ∨ false)" result
+
+let test_format_operator_not () =
+  let arg = (ELit (LBool true), Untyped { pos = Pos.void }) in
+  let op = (Op.Not, Pos.void) in
+  let expr = (EAppOp { op; args = [arg]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(¬true)" result
+
+let test_format_operator_minus_int () =
+  let arg = (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void }) in
+  let op = (Op.Minus, Pos.void) in
+  let expr = (EAppOp { op; args = [arg]; tys = [] }, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "(-(5 : Int))" result
+
+(** {1 Struct declaration tests} *)
+
+let test_format_struct_decl_simple () =
+  let fields = StructField.Map.of_list [
+    ((StructField.fresh ("x", Pos.void)), Mark.add Pos.void (TLit TInt));
+    ((StructField.fresh ("y", Pos.void)), Mark.add Pos.void (TLit TBool));
+  ] in
+  let result = Lean4_desugared.format_struct_decl "MyStruct" fields in
+  assert_string_equal "structure MyStruct where\n  x : Int\n  y : Bool" result
+
+let test_format_struct_decl_single_field () =
+  let fields = StructField.Map.of_list [
+    ((StructField.fresh ("value", Pos.void)), Mark.add Pos.void (TLit TInt));
+  ] in
+  let result = Lean4_desugared.format_struct_decl "SingleField" fields in
+  assert_string_equal "structure SingleField where\n  value : Int" result
+
+let test_format_struct_decl_complex_types () =
+  let fields = StructField.Map.of_list [
+    ((StructField.fresh ("count", Pos.void)), Mark.add Pos.void (TLit TInt));
+    ((StructField.fresh ("amount", Pos.void)), Mark.add Pos.void (TLit TMoney));
+    ((StructField.fresh ("values", Pos.void)), Mark.add Pos.void (TArray (Mark.add Pos.void (TLit TInt))));
+  ] in
+  let result = Lean4_desugared.format_struct_decl "ComplexStruct" fields in
+  assert_string_equal "structure ComplexStruct where\n  count : Int\n  amount : CatalaRuntime.Money\n  values : (Array Int)" result
+
 (** {1 Test suite} *)
 
 let suite =
@@ -292,6 +414,27 @@ let suite =
       Alcotest.test_case "struct access" `Quick test_format_expr_struct_access;
       Alcotest.test_case "enum injection" `Quick test_format_expr_inj;
       Alcotest.test_case "array" `Quick test_format_expr_array;
+    ];
+    "format_operator",
+    [
+      Alcotest.test_case "add int" `Quick test_format_operator_add_int;
+      Alcotest.test_case "sub int" `Quick test_format_operator_sub_int;
+      Alcotest.test_case "mult int" `Quick test_format_operator_mult_int;
+      Alcotest.test_case "lt int" `Quick test_format_operator_lt_int;
+      Alcotest.test_case "lte int" `Quick test_format_operator_lte_int;
+      Alcotest.test_case "gt int" `Quick test_format_operator_gt_int;
+      Alcotest.test_case "gte int" `Quick test_format_operator_gte_int;
+      Alcotest.test_case "eq" `Quick test_format_operator_eq;
+      Alcotest.test_case "and" `Quick test_format_operator_and;
+      Alcotest.test_case "or" `Quick test_format_operator_or;
+      Alcotest.test_case "not" `Quick test_format_operator_not;
+      Alcotest.test_case "minus int" `Quick test_format_operator_minus_int;
+    ];
+    "format_struct_decl",
+    [
+      Alcotest.test_case "simple struct" `Quick test_format_struct_decl_simple;
+      Alcotest.test_case "single field" `Quick test_format_struct_decl_single_field;
+      Alcotest.test_case "complex types" `Quick test_format_struct_decl_complex_types;
     ];
   ]
 

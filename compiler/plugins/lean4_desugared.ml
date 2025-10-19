@@ -114,15 +114,14 @@ let rec format_expr (e : (desugared, untyped) gexpr) : string =
   | EArray es ->
       let formatted = List.map format_expr es in
       Printf.sprintf "#[%s]" (String.concat ", " formatted)
+  | EAppOp { op; args; tys = _ } ->
+      format_operator op args
   | EMatch _ ->
       (* Pattern matching - complex, will handle later *)
       "sorry -- match not yet implemented"
   | EAbs _ ->
       (* Lambda abstractions - will handle later *)
       "sorry -- lambda not yet implemented"
-  | EAppOp _ ->
-      (* Operators - will handle later *)
-      "sorry -- operator not yet implemented"
   | ELocation _ ->
       (* Variable references in desugared AST - will handle later *)
       "sorry -- location not yet implemented"
@@ -136,4 +135,77 @@ let rec format_expr (e : (desugared, untyped) gexpr) : string =
       "sorry -- struct amendment not yet implemented"
   | _ ->
       "sorry -- unsupported expression"
+
+(** Format an operator and its arguments to Lean code *)
+and format_operator (op : desugared operator Mark.pos) (args : (desugared, untyped) gexpr list) : string =
+  let open Op in
+  let binop sym =
+    match args with
+    | [arg1; arg2] ->
+        Printf.sprintf "(%s %s %s)"
+          (format_expr arg1) sym (format_expr arg2)
+    | _ -> "sorry -- wrong number of args for binop"
+  in
+  let unop sym =
+    match args with
+    | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr arg)
+    | _ -> "sorry -- wrong number of args for unop"
+  in
+  match Mark.remove op with
+  (* Overloaded operators in desugared AST *)
+  | Add -> binop "+"
+  | Sub -> binop "-"
+  | Mult -> binop "*"
+  | Div -> binop "/"
+  | Minus -> unop "-"
+  | Lt -> binop "<"
+  | Lte -> binop "≤"
+  | Gt -> binop ">"
+  | Gte -> binop "≥"
+  | Eq -> binop "="
+  (* Boolean operators *)
+  | And -> binop "∧"
+  | Or -> binop "∨"
+  | Xor -> binop "⊕"
+  | Not -> unop "¬"
+  (* Polymorphic operators *)
+  | Length ->
+      (match args with
+       | [arg] -> Printf.sprintf "(%s).size" (format_expr arg)
+       | _ -> "sorry -- wrong args for Length")
+  | Map | Filter | Fold | Reduce | Concat | Map2 ->
+      "sorry -- array operations not yet fully implemented"
+  (* Conversions *)
+  | ToInt ->
+      (match args with
+       | [arg] -> Printf.sprintf "(Int.ofRat %s)" (format_expr arg)
+       | _ -> "sorry -- wrong args for ToInt")
+  | ToRat ->
+      (match args with
+       | [arg] -> Printf.sprintf "(Rat.ofInt %s)" (format_expr arg)
+       | _ -> "sorry -- wrong args for ToRat")
+  | ToMoney ->
+      (match args with
+       | [arg] -> Printf.sprintf "(CatalaRuntime.Money.ofInt %s)" (format_expr arg)
+       | _ -> "sorry -- wrong args for ToMoney")
+  | Round ->
+      (match args with
+       | [arg] -> Printf.sprintf "(round %s)" (format_expr arg)
+       | _ -> "sorry -- wrong args for Round")
+  (* Other *)
+  | Log _ -> (match args with [arg] -> format_expr arg | _ -> "sorry -- log")
+  | ToClosureEnv | FromClosureEnv -> "sorry -- closure env"
+  | _ -> "sorry -- unsupported operator"
+
+(** Format a struct declaration to Lean code *)
+let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string =
+  let field_list = StructField.Map.bindings fields in
+  let formatted_fields = List.map (fun (field, ty) ->
+    Printf.sprintf "  %s : %s"
+      (StructField.to_string field)
+      (format_typ ty)
+  ) field_list in
+  Printf.sprintf "structure %s where\n%s"
+    name
+    (String.concat "\n" formatted_fields)
 
