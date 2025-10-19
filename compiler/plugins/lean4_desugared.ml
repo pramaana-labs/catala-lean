@@ -18,6 +18,8 @@
 open Catala_utils
 open Shared_ast
 
+module Ast = Desugared.Ast
+
 module Runtime = Catala_runtime
 
 (** {1 Formatting functions} *)
@@ -208,4 +210,90 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
   Printf.sprintf "structure %s where\n%s"
     name
     (String.concat "\n" formatted_fields)
+
+(** Generate Lean code for a scope *)
+let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
+  let scope_name_str = ScopeName.to_string scope_name in
+  
+  (* 1. Generate output struct *)
+  let output_fields = Ast.ScopeDef.Map.fold (fun scope_def def acc ->
+    let var, _kind = scope_def in
+    let var_name, _pos = var in
+    match Mark.remove def.Ast.scope_def_io.io_output with
+    | true ->
+        let field_name = StructField.fresh (ScopeVar.to_string var_name, Pos.void) in
+        let field_type = def.Ast.scope_def_typ in
+        StructField.Map.add field_name field_type acc
+    | false -> acc
+  ) scope_decl.Ast.scope_defs StructField.Map.empty in
+  
+  let struct_decl = format_struct_decl scope_name_str output_fields in
+  
+  (* 2. Generate scope function *)
+  let func_body_fields = Ast.ScopeDef.Map.fold (fun scope_def def acc ->
+    let var, _kind = scope_def in
+    let var_name, _pos = var in
+    match Mark.remove def.Ast.scope_def_io.io_output with
+    | true ->
+        (* Get the rule for this variable *)
+        let rules = def.Ast.scope_def_rules in
+        (* For now, assume there's exactly one rule with a base case *)
+        let _rule_id, rule = RuleName.Map.choose rules in
+        let cons_expr = Expr.unbox rule.Ast.rule_cons in
+        let field_assignment = Printf.sprintf "%s := %s"
+          (ScopeVar.to_string var_name)
+          (format_expr cons_expr) in
+        field_assignment :: acc
+    | false -> acc
+  ) scope_decl.Ast.scope_defs [] in
+  
+  let func_def = Printf.sprintf "def %s_func : %s :=\n  { %s }"
+    scope_name_str
+    scope_name_str
+    (String.concat ",\n    " (List.rev func_body_fields)) in
+  
+  Printf.sprintf "%s\n\n%s" struct_decl func_def
+
+(** Generate a complete Lean file from a desugared program *)
+let generate_lean_code (prgm : Ast.program) : string =
+  let header = "import CatalaRuntime\n\nopen CatalaRuntime\n" in
+  
+  (* Generate code for each scope in the program root *)
+  let scope_code = ScopeName.Map.fold (fun scope_name scope_decl acc ->
+    let code = format_scope scope_name scope_decl in
+    code :: acc
+  ) prgm.program_root.module_scopes [] in
+  
+  header ^ "\n" ^ (String.concat "\n\n" (List.rev scope_code))
+
+(** {1 Plugin registration} *)
+
+let run
+    includes
+    stdlib
+    output
+    options =
+  let open Driver.Commands in
+  let prg, _ctx =
+    Driver.Passes.desugared options ~includes ~stdlib
+  in
+
+  Message.debug "Generating Lean4 code from desugared AST...";
+  let lean_code = generate_lean_code prg in
+  
+  get_output_format options ~ext:"lean" output
+  @@ fun _file fmt -> Format.fprintf fmt "%s@." lean_code
+
+let term =
+  let open Cmdliner.Term in
+  const run
+  $ Cli.Flags.include_dirs
+  $ Cli.Flags.stdlib_dir
+  $ Cli.Flags.output
+
+let () =
+  Driver.Plugin.register "lean4-desugared" term
+    ~doc:
+      "Generates Lean4 code from the Catala desugared AST. This backend \
+       translates each scope into a Lean structure and function."
 
