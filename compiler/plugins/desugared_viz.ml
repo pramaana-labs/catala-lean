@@ -105,6 +105,31 @@ let rec typ_to_json (ty : typ) : json =
       ]
   | _ -> JString "Other"
 
+let operator_string (op : desugared operator Mark.pos) : string =
+  let open Op in
+  match Mark.remove op with
+  | Add -> "+"
+  | Sub -> "-"
+  | Mult -> "*"
+  | Div -> "/"
+  | Lt -> "<"
+  | Lte -> "≤"
+  | Gt -> ">"
+  | Gte -> "≥"
+  | Eq -> "="
+  | And -> "∧"
+  | Or -> "∨"
+  | Xor -> "⊕"
+  | Not -> "¬"
+  | Length -> "length"
+  | Map -> "map"
+  | Filter -> "filter"
+  | Fold -> "fold"
+  | Reduce -> "reduce"
+  | Concat -> "concat"
+  | Map2 -> "map2"
+  | _ -> "Other"
+
 (** Convert expression to JSON - for desugared *)
 let rec expr_to_json (e : expr) : json =
   match Mark.remove e with
@@ -259,7 +284,7 @@ let rec expr_to_json (e : expr) : json =
   | EAppOp { op; args; _ } ->
       JObject [
         ("node", JString "EAppOp");
-        ("operator", JString "operator");
+        ("operator", JString (operator_string op));
         ("args", JList (List.map expr_to_json args));
       ]
   | _ ->
