@@ -251,16 +251,34 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
     if RuleName.Map.is_empty rules then ()
     else
       let _rule_id, rule = RuleName.Map.choose rules in
+      let just_expr = Expr.unbox rule.Ast.rule_just in
       let cons_expr = Expr.unbox rule.Ast.rule_cons in
       let var_str = ScopeVar.to_string var_name in
+      
+      (* Check if justification is just 'true' (unconditional rule) *)
+      let is_unconditional = match Mark.remove just_expr with
+        | ELit (LBool true) -> true
+        | _ -> false
+      in
+      
+      let value_expr = 
+        if is_unconditional then
+          format_expr cons_expr
+        else
+          (* Conditional rule: wrap in if-then-else *)
+          Printf.sprintf "(if %s then %s else sorry \"undefined conditional value\")"
+            (format_expr just_expr)
+            (format_expr cons_expr)
+      in
+      
       match Mark.remove def.Ast.scope_def_io.io_output with
       | true ->
           (* Output variable: generate struct field assignment *)
-          let field_assignment = Printf.sprintf "%s := %s" var_str (format_expr cons_expr) in
+          let field_assignment = Printf.sprintf "%s := %s" var_str value_expr in
           output_fields := field_assignment :: !output_fields
       | false ->
           (* Internal variable: generate let binding *)
-          let let_binding = Printf.sprintf "let %s := %s" var_str (format_expr cons_expr) in
+          let let_binding = Printf.sprintf "let %s := %s" var_str value_expr in
           internal_vars := let_binding :: !internal_vars
   ) scope_decl.Ast.scope_defs;
   
