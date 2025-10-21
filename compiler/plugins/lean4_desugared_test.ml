@@ -342,6 +342,28 @@ let test_format_operator_minus_int () =
   let result = Lean4_desugared.format_expr expr in
   assert_string_equal "(-(5 : Int))" result
 
+(** {1 Location (variable reference) tests} *)
+
+let test_format_location_simple () =
+  let var = ScopeVar.fresh ("my_var", Pos.void) in
+  let loc = DesugaredScopeVar { name = (var, Pos.void); state = None } in
+  let result = Lean4_desugared.format_location loc in
+  assert_string_equal "my_var" result
+
+let test_format_location_with_state () =
+  let var = ScopeVar.fresh ("counter", Pos.void) in
+  let state = StateName.fresh ("before", Pos.void) in
+  let loc = DesugaredScopeVar { name = (var, Pos.void); state = Some state } in
+  let result = Lean4_desugared.format_location loc in
+  assert_string_equal "counter_before" result
+
+let test_format_expr_location () =
+  let var = ScopeVar.fresh ("x", Pos.void) in
+  let loc = DesugaredScopeVar { name = (var, Pos.void); state = None } in
+  let expr = (ELocation loc, Untyped { pos = Pos.void }) in
+  let result = Lean4_desugared.format_expr expr in
+  assert_string_equal "x" result
+
 (** {1 Struct declaration tests} *)
 
 (* Helper: check if string contains substring *)
@@ -450,6 +472,12 @@ let suite =
       Alcotest.test_case "or" `Quick test_format_operator_or;
       Alcotest.test_case "not" `Quick test_format_operator_not;
       Alcotest.test_case "minus int" `Quick test_format_operator_minus_int;
+    ];
+    "format_location",
+    [
+      Alcotest.test_case "simple variable" `Quick test_format_location_simple;
+      Alcotest.test_case "variable with state" `Quick test_format_location_with_state;
+      Alcotest.test_case "location in expression" `Quick test_format_expr_location;
     ];
     "format_struct_decl",
     [

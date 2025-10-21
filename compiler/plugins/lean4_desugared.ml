@@ -78,6 +78,18 @@ let rec format_typ (ty : typ) : string =
       (* For now, output Unit for complex types we don't fully support *)
       "Unit"
 
+(** Format a location (variable reference) to Lean code *)
+let format_location (loc : desugared glocation) : string =
+  match loc with
+  | DesugaredScopeVar { name; state } ->
+      let var_name = ScopeVar.to_string (Mark.remove name) in
+      (match state with
+       | None -> var_name
+       | Some state_name -> 
+           Printf.sprintf "%s_%s" var_name (StateName.to_string state_name))
+  | ToplevelVar { name; _ } ->
+      TopdefName.to_string (Mark.remove name)
+
 (** Format an expression to Lean code *)
 let rec format_expr (e : (desugared, untyped) gexpr) : string =
   match Mark.remove e with
@@ -120,23 +132,22 @@ let rec format_expr (e : (desugared, untyped) gexpr) : string =
       format_operator op args
   | EMatch _ ->
       (* Pattern matching - complex, will handle later *)
-      "sorry -- match not yet implemented"
+      "sorry -- match not yet implemented\n"
   | EAbs _ ->
       (* Lambda abstractions - will handle later *)
-      "sorry -- lambda not yet implemented"
-  | ELocation _ ->
-      (* Variable references in desugared AST - will handle later *)
-      "sorry -- location not yet implemented"
+      "sorry -- lambda not yet implemented\n"
+  | ELocation loc ->
+      format_location loc
   | EScopeCall _ ->
       (* Scope calls - will handle later *)
-      "sorry -- scope call not yet implemented"
+      "sorry -- scope call not yet implemented\n"
   | EDefault _ | EPureDefault _ | EEmpty | EErrorOnEmpty _ ->
       (* Default logic - will handle later *)
-      "sorry -- default logic not yet implemented"
+      "sorry -- default logic not yet implemented\n"
   | EDStructAmend _ ->
-      "sorry -- struct amendment not yet implemented"
+      "sorry -- struct amendment not yet implemented\n"
   | _ ->
-      "sorry -- unsupported expression"
+      "sorry -- unsupported expression\n"
 
 (** Format an operator and its arguments to Lean code *)
 and format_operator (op : desugared operator Mark.pos) (args : (desugared, untyped) gexpr list) : string =
@@ -229,28 +240,48 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   
   let struct_decl = format_struct_decl scope_name_str output_fields in
   
-  (* 2. Generate scope function *)
-  let func_body_fields = Ast.ScopeDef.Map.fold (fun scope_def def acc ->
+  (* 2. Separate internal variables and output variables *)
+  let internal_vars = ref [] in
+  let output_fields = ref [] in
+  
+  Ast.ScopeDef.Map.iter (fun scope_def def ->
     let var, _kind = scope_def in
     let var_name, _pos = var in
-    match Mark.remove def.Ast.scope_def_io.io_output with
-    | true ->
-        (* Get the rule for this variable *)
-        let rules = def.Ast.scope_def_rules in
-        (* For now, assume there's exactly one rule with a base case *)
-        let _rule_id, rule = RuleName.Map.choose rules in
-        let cons_expr = Expr.unbox rule.Ast.rule_cons in
-        let field_assignment = Printf.sprintf "%s := %s"
-          (ScopeVar.to_string var_name)
-          (format_expr cons_expr) in
-        field_assignment :: acc
-    | false -> acc
-  ) scope_decl.Ast.scope_defs [] in
+    let rules = def.Ast.scope_def_rules in
+    if RuleName.Map.is_empty rules then ()
+    else
+      let _rule_id, rule = RuleName.Map.choose rules in
+      let cons_expr = Expr.unbox rule.Ast.rule_cons in
+      let var_str = ScopeVar.to_string var_name in
+      match Mark.remove def.Ast.scope_def_io.io_output with
+      | true ->
+          (* Output variable: generate struct field assignment *)
+          let field_assignment = Printf.sprintf "%s := %s" var_str (format_expr cons_expr) in
+          output_fields := field_assignment :: !output_fields
+      | false ->
+          (* Internal variable: generate let binding *)
+          let let_binding = Printf.sprintf "let %s := %s" var_str (format_expr cons_expr) in
+          internal_vars := let_binding :: !internal_vars
+  ) scope_decl.Ast.scope_defs;
   
-  let func_def = Printf.sprintf "def %s_func : %s :=\n  { %s }"
-    scope_name_str
-    scope_name_str
-    (String.concat ",\n    " (List.rev func_body_fields)) in
+  (* 3. Generate scope function with let bindings for internal vars *)
+  let func_def = 
+    if !internal_vars = [] then
+      (* No internal variables, just struct construction *)
+      Printf.sprintf "def %s_func : %s :=\n  { %s }"
+        scope_name_str
+        scope_name_str
+        (String.concat ",\n    " (List.rev !output_fields))
+    else
+      (* Has internal variables, use let...in structure *)
+      let lets = String.concat "\n  " (List.rev !internal_vars) in
+      let struct_body = String.concat ",\n    " (List.rev !output_fields) in
+      Printf.sprintf "def %s_func : %s :=\n  %s in\n  { %s }"
+        scope_name_str
+        scope_name_str
+        lets
+        struct_body
+  in
   
   Printf.sprintf "%s\n\n%s" struct_decl func_def
 
