@@ -1,7 +1,7 @@
 # Lean4 Backend - Incomplete Features & TODO List
 
 ## Current Status
-✅ **Working**: Basic scope translation, literals, types, expressions, operators, struct declarations
+✅ **Working**: Basic scope translation, literals, types, expressions, operators, struct declarations, variable references (ELocation), rule justifications, internal variables
 ❌ **Not Working Yet**: Listed below
 
 ---
@@ -32,12 +32,11 @@
   definition doubled equals list map (fun x -> x * 2) input_list
   ```
 
-#### 1.3 Location References (`ELocation`)
-- **Status**: `sorry -- location not yet implemented`
+#### 1.3 Location References (`ELocation`) ✅ COMPLETED
+- **Status**: ✅ Implemented - Handles DesugaredScopeVar and ToplevelVar
 - **Impact**: HIGH - Used for variable references in desugared AST
 - **Complexity**: Low
-- **Required for**: Internal variable references, state tracking
-- **Notes**: Desugared AST uses `ELocation` to refer to scope variables
+- **Completed**: Can reference scope variables with optional state, top-level definitions
 
 #### 1.4 Scope Calls (`EScopeCall`)
 - **Status**: `sorry -- scope call not yet implemented`
@@ -74,7 +73,46 @@
 - **Complexity**: Medium
 - **Required for**: Handling undefined values, error propagation
 
-### 3. Rule-to-Function Conversion (Pending in TODO)
+### 3. Rule-to-Function Conversion & Code Architecture
+
+#### 3.0 Method-per-Variable Refactoring (MAJOR ARCHITECTURAL CHANGE) 🔥
+- **Status**: Planned - Will supersede current inline approach
+- **Impact**: CRITICAL - Cleaner, more modular Lean code
+- **Complexity**: High
+- **Priority**: HIGH - Should be done before adding more features
+- **Goal**: Each variable (internal/output) gets its own Lean method
+- **Design**:
+  - Each rule becomes a separate method: `{ScopeName}_{VarName}_{Label}`
+  - All methods return `D Type` (monadic type for default calculus)
+  - Methods take input struct + required internal variables as parameters
+  - Base methods use `processExceptions` to combine exception methods
+  - Main scope function becomes simple orchestration calling variable methods
+- **Example**:
+  ```lean
+  -- Input struct
+  structure MyScope_Input where
+    x : Int
+    y : Bool
+  
+  -- Internal variable method
+  def MyScope_temp_base (inputs : MyScope_Input) : D Int :=
+    .ok (some (inputs.x + 10))
+  
+  -- Output variable method (depends on internal var)
+  def MyScope_result_base (inputs : MyScope_Input) (temp : Int) : D Money :=
+    .ok (some (Money.mk temp 0))
+  
+  -- Main scope function
+  def MyScope_func (inputs : MyScope_Input) : D MyScope :=
+    match MyScope_temp_base inputs with
+    | .ok (some temp) =>
+        match MyScope_result_base inputs temp with
+        | .ok (some result) => .ok (some { result := result })
+        | e => e
+    | e => e
+  ```
+- **Dependencies**: Will naturally implement TODOs #3, #4, #7
+- **Requires**: Dependency analysis to determine which internal vars each output var needs
 
 #### 3.1 Multiple Rules per Variable
 - **Status**: Currently assumes ONE rule per variable (line 241: `RuleName.Map.choose`)
@@ -94,12 +132,12 @@
 - **Required for**: Rule priorities, exception handling
 - **Strategy**: Build exception graph, use `processExceptions` for each level
 
-#### 3.3 Rule Justifications (`rule_just`)
-- **Status**: Ignored (line 242 only uses `rule_cons`)
+#### 3.3 Rule Justifications (`rule_just`) ✅ COMPLETED
+- **Status**: ✅ Implemented - Wraps consequence in if-then-else
 - **Impact**: HIGH - Conditional rules
 - **Complexity**: Medium
-- **Required for**: Rules with conditions
-- **Translation**: `if justification then consequence else none`
+- **Completed**: Unconditional rules (just=true) are optimized without if-wrapper
+- **Translation**: `if justification then consequence else sorry "undefined"`
 
 #### 3.4 Rule Labels and Exceptions
 - **Status**: Not handled
@@ -225,14 +263,15 @@
 
 ## Immediate Next Steps (Prioritized)
 
-1. **ELocation support** - Required for variable references (LOW COMPLEXITY, HIGH IMPACT)
-2. **Rule justifications** - Handle conditional rules (MEDIUM COMPLEXITY, HIGH IMPACT)
-3. **Multiple rules + exception hierarchy** - Core Catala feature (HIGH COMPLEXITY, CRITICAL IMPACT)
-4. **EDefault/EPureDefault** - Translate to D monad (HIGH COMPLEXITY, CRITICAL IMPACT)
-5. **Pattern matching (EMatch)** - Required for enums (MEDIUM COMPLEXITY, HIGH IMPACT)
-6. **Scope inputs** - Make scopes parametric (MEDIUM COMPLEXITY, HIGH IMPACT)
-7. **EScopeCall** - Subscope invocation (MEDIUM COMPLEXITY, HIGH IMPACT)
-8. **Lambda abstractions (EAbs)** - For higher-order functions (MEDIUM COMPLEXITY, MEDIUM IMPACT)
+1. ✅ ~~**ELocation support**~~ - COMPLETED
+2. ✅ ~~**Rule justifications**~~ - COMPLETED
+3. 🔥 **Method-per-variable refactoring** - Major architectural improvement (HIGH COMPLEXITY, CRITICAL IMPACT) - DO THIS FIRST before adding more features
+4. **Multiple rules + exception hierarchy** - Core Catala feature (HIGH COMPLEXITY, CRITICAL IMPACT) - Will be implemented as part of #3
+5. **EDefault/EPureDefault** - Translate to D monad (HIGH COMPLEXITY, CRITICAL IMPACT)
+6. **Pattern matching (EMatch)** - Required for enums (MEDIUM COMPLEXITY, HIGH IMPACT)
+7. **Scope inputs** - Make scopes parametric (MEDIUM COMPLEXITY, HIGH IMPACT) - Will be implemented as part of #3
+8. **EScopeCall** - Subscope invocation (MEDIUM COMPLEXITY, HIGH IMPACT)
+9. **Lambda abstractions (EAbs)** - For higher-order functions (MEDIUM COMPLEXITY, MEDIUM IMPACT)
 
 ---
 
