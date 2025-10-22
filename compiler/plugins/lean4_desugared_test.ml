@@ -615,6 +615,137 @@ let test_format_struct_decl_complex_types () =
   if not (has_count && has_amount && has_values && has_struct_decl) then
     Alcotest.fail (Printf.sprintf "Expected struct with count, amount, and values fields, got:\n%s" result)
 
+(** {1 Phase 0 - Scopelang function exports} *)
+
+(** Test that we can call scope_to_exception_graphs on a simple scope *)
+let test_scopelang_exception_graphs () =
+  (* Create a simple scope with one variable and one rule *)
+  let scope_name_t = ScopeName.fresh [] ("TestScope", Pos.void) in
+  let var = ScopeVar.fresh ("x", Pos.void) in
+  
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_x", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  let scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule.rule_id rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_def_key = ((var, Pos.void), Desugared.Ast.ScopeDef.Var None) in
+  let scope_defs = Desugared.Ast.ScopeDef.Map.singleton scope_def_key scope_def in
+  
+  let scope_decl = {
+    Desugared.Ast.scope_vars = ScopeVar.Map.singleton var Desugared.Ast.WholeVar;
+    scope_sub_scopes = ScopeVar.Map.empty;
+    scope_uid = scope_name_t;
+    scope_defs = scope_defs;
+    scope_assertions = Desugared.Ast.AssertionName.Map.empty;
+    scope_options = [];
+    scope_meta_assertions = [];
+    scope_visibility = Public;
+  } in
+  
+  (* Call the exported function *)
+  let exc_graphs = Scopelang.From_desugared.scope_to_exception_graphs scope_decl in
+  
+  (* Verify we got an exception graph for our variable *)
+  let has_graph = Desugared.Ast.ScopeDef.Map.mem scope_def_key exc_graphs in
+  Alcotest.(check bool) "exception graph exists for variable" true has_graph
+
+(** Test that we can call def_map_to_tree and get a rule tree *)
+let test_scopelang_def_to_tree () =
+  (* Create a simple rule *)
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_test", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 100)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  let rules = RuleName.Map.singleton rule.rule_id rule in
+  
+  (* Build a trivial exception graph (no exceptions) *)
+  let var = ScopeVar.fresh ("test_var", Pos.void) in
+  let scope_def_key = ((var, Pos.void), Desugared.Ast.ScopeDef.Var None) in
+  let scope_name_t = ScopeName.fresh [] ("TestScope", Pos.void) in
+  
+  let scope_def = {
+    Desugared.Ast.scope_def_rules = rules;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_defs = Desugared.Ast.ScopeDef.Map.singleton scope_def_key scope_def in
+  
+  let scope_decl = {
+    Desugared.Ast.scope_vars = ScopeVar.Map.singleton var Desugared.Ast.WholeVar;
+    scope_sub_scopes = ScopeVar.Map.empty;
+    scope_uid = scope_name_t;
+    scope_defs = scope_defs;
+    scope_assertions = Desugared.Ast.AssertionName.Map.empty;
+    scope_options = [];
+    scope_meta_assertions = [];
+    scope_visibility = Public;
+  } in
+  
+  let exc_graphs = Scopelang.From_desugared.scope_to_exception_graphs scope_decl in
+  let exc_graph = Desugared.Ast.ScopeDef.Map.find scope_def_key exc_graphs in
+  
+  (* Call def_map_to_tree *)
+  let rule_trees = Scopelang.From_desugared.def_map_to_tree rules exc_graph in
+  
+  (* Verify we got a non-empty list of rule trees *)
+  let has_trees = List.length rule_trees > 0 in
+  Alcotest.(check bool) "rule trees generated" true has_trees;
+  
+  (* Verify it's a Leaf (no exceptions) *)
+  match List.hd rule_trees with
+  | Scopelang.From_desugared.Leaf _ -> ()
+  | Scopelang.From_desugared.Node _ -> 
+      Alcotest.fail "Expected Leaf node for rule with no exceptions"
+
+(** Test that rule_tree pattern matching works *)
+let test_scopelang_rule_tree_type () =
+  (* This test verifies the rule_tree type is accessible and usable *)
+  let rule1 = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule1", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 1)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  (* Create a Leaf manually *)
+  let leaf = Scopelang.From_desugared.Leaf [rule1] in
+  
+  (* Pattern match on it *)
+  let rule_count = match leaf with
+    | Scopelang.From_desugared.Leaf rules -> List.length rules
+    | Scopelang.From_desugared.Node (_, rules) -> List.length rules
+  in
+  
+  Alcotest.(check int) "leaf contains one rule" 1 rule_count
+
 (** {1 Test suite} *)
 
 let suite =
@@ -695,6 +826,12 @@ let suite =
       Alcotest.test_case "simple struct" `Quick test_format_struct_decl_simple;
       Alcotest.test_case "single field" `Quick test_format_struct_decl_single_field;
       Alcotest.test_case "complex types" `Quick test_format_struct_decl_complex_types;
+    ];
+    "phase0_scopelang_exports",
+    [
+      Alcotest.test_case "exception graphs" `Quick test_scopelang_exception_graphs;
+      Alcotest.test_case "def to tree" `Quick test_scopelang_def_to_tree;
+      Alcotest.test_case "rule tree type" `Quick test_scopelang_rule_tree_type;
     ];
   ]
 
