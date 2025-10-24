@@ -58,18 +58,32 @@ let generate_inter_scope_deps includes stdlib output options =
   Format.fprintf fmt "%s@." (Yojson.Safe.pretty_to_string json)
 
 (** Generate type dependency graph JSON *)
-let generate_type_deps includes stdlib output options =
+let generate_at_custom_checkpoint includes stdlib output ex_scope options =
   let open Driver.Commands in
-  let prg = Driver.Passes.scopelang options ~includes ~stdlib in
-  Message.debug "Building type dependency graph...";
-  let type_graph = Scopelang.Dependency.build_type_graph 
-    prg.program_ctx.ctx_structs 
-    prg.program_ctx.ctx_enums in
-  Message.debug "Converting to JSON...";
-  let json = Scopelang.Dependency.type_dependencies_graph_to_json type_graph in
-  get_output_format options ~ext:"json" output
-  @@ fun _filename fmt ->
-  Format.fprintf fmt "%s@." (Yojson.Safe.pretty_to_string json)
+  let prg, _ = Driver.Passes.desugared options ~includes ~stdlib in
+  Message.debug "Building custom checkpoint...";
+  let scope_uid = get_scope_uid prg.program_ctx ex_scope in
+  let scope_opt = ScopeName.Map.find_opt scope_uid prg.program_root.module_scopes in
+  match scope_opt with
+  | Some scope ->
+    let var_list, input_list = Lean4_desugared.collect_var_info_ordered scope in
+    Message.debug "Variables: %d" (List.length var_list);
+    Message.debug "Inputs: %d" (List.length input_list);
+    get_output_format options ~ext:"txt" output
+    @@ fun _filename fmt ->
+    Format.fprintf fmt "Variables:@.";
+    List.iter (fun (var: Lean4_desugared.var_def_info) ->
+      Format.fprintf fmt "%s@." (ScopeVar.to_string var.var_name);
+      let deps = ScopeVar.Set.of_list (ScopeVar.Map.keys var.dependencies) in
+      let s = ScopeVar.Set.fold (fun sv acc -> (ScopeVar.to_string sv) ^ "; " ^ acc) deps "" in
+      Format.fprintf fmt "--Dependencies: %s@.\n" s;
+    ) var_list;
+    Format.fprintf fmt "\n\n -------------------------------------- \n\nInputs:@.";
+    List.iter (fun (input: Lean4_desugared.input_info) ->
+      Format.fprintf fmt "%s@." (ScopeVar.to_string input.var_name);
+    ) input_list;   
+  | None ->
+    Message.error "Scope %s not found" (ScopeName.to_string scope_uid);
 
 (** CLI Terms *)
 open Cmdliner
@@ -91,12 +105,13 @@ let inter_scope_deps_term =
   $ Cli.Flags.output
   
 (* Type dependency graph command *)
-let type_deps_term =
+let custom_checkpoint_term =
   let open Term in
-  const generate_type_deps
+  const generate_at_custom_checkpoint
   $ Cli.Flags.include_dirs
   $ Cli.Flags.stdlib_dir
   $ Cli.Flags.output
+  $ Cli.Flags.ex_scope
   
 (** Register plugin commands *)
 let () =
@@ -104,6 +119,6 @@ let () =
     ~doc:"Generate scope dependency graphs (within each scope)";
   Driver.Plugin.register "inter-scope-deps" inter_scope_deps_term
     ~doc:"Generate inter-scope dependency graph (between scopes)";
-  Driver.Plugin.register "type-deps" type_deps_term
+  Driver.Plugin.register "custom-checkpoint" custom_checkpoint_term
     ~doc:"Generate type dependency graph"
 
