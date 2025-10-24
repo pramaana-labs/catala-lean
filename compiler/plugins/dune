@@ -67,17 +67,11 @@
  (libraries lean4_desugared catala.driver desugared alcotest str))
 
 (library
- (name lean4_desugared_integration_test)
- (synopsis "Integration tests for Lean4 desugared backend using real Catala programs")
- (modules lean4_desugared_integration_test)
- (libraries lean4_desugared catala.driver desugared surface alcotest))
-
-(library
  (name dependency_graph)
  (public_name catala.plugins.dependency_graph)
  (synopsis "Catala plugin that generates dependency graphs as JSON")
  (modules dependency_graph)
- (libraries catala.driver catala.scopelang desugared yojson))
+ (libraries lean4_desugared catala.driver catala.scopelang desugared yojson))
 
 (alias
  (name plugins)

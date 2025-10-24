@@ -615,6 +615,744 @@ let test_format_struct_decl_complex_types () =
   if not (has_count && has_amount && has_values && has_struct_decl) then
     Alcotest.fail (Printf.sprintf "Expected struct with count, amount, and values fields, got:\n%s" result)
 
+(** {1 Phase 1 - Variable collection and dependency analysis} *)
+
+(** Test collect_inputs on a scope with no inputs *)
+let test_collect_inputs_none () =
+  let scope_name_t = ScopeName.fresh [] ("TestScope", Pos.void) in
+  let var = ScopeVar.fresh ("x", Pos.void) in
+  
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_x", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  let scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule.rule_id rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_def_key = ((var, Pos.void), Desugared.Ast.ScopeDef.Var None) in
+  let scope_defs = Desugared.Ast.ScopeDef.Map.singleton scope_def_key scope_def in
+  
+  let scope_decl = {
+    Desugared.Ast.scope_vars = ScopeVar.Map.singleton var Desugared.Ast.WholeVar;
+    scope_sub_scopes = ScopeVar.Map.empty;
+    scope_uid = scope_name_t;
+    scope_defs = scope_defs;
+    scope_assertions = Desugared.Ast.AssertionName.Map.empty;
+    scope_options = [];
+    scope_meta_assertions = [];
+    scope_visibility = Public;
+  } in
+  
+  let inputs = Lean4_desugared.collect_inputs scope_decl in
+  Alcotest.(check int) "no input variables" 0 (List.length inputs)
+
+(** Test collect_inputs on a scope with one input *)
+let test_collect_inputs_one () =
+  let scope_name_t = ScopeName.fresh [] ("TestScope", Pos.void) in
+  let input_var = ScopeVar.fresh ("input_x", Pos.void) in
+  
+  let scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.empty;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void false;
+      io_input = Mark.add Pos.void Runtime.OnlyInput;
+    };
+  } in
+  
+  let scope_def_key = ((input_var, Pos.void), Desugared.Ast.ScopeDef.Var None) in
+  let scope_defs = Desugared.Ast.ScopeDef.Map.singleton scope_def_key scope_def in
+  
+  let scope_decl = {
+    Desugared.Ast.scope_vars = ScopeVar.Map.singleton input_var Desugared.Ast.WholeVar;
+    scope_sub_scopes = ScopeVar.Map.empty;
+    scope_uid = scope_name_t;
+    scope_defs = scope_defs;
+    scope_assertions = Desugared.Ast.AssertionName.Map.empty;
+    scope_options = [];
+    scope_meta_assertions = [];
+    scope_visibility = Public;
+  } in
+  
+  let inputs = Lean4_desugared.collect_inputs scope_decl in
+  Alcotest.(check int) "one input variable" 1 (List.length inputs)
+
+(** Test collect_var_info_ordered on simple scope *)
+let test_collect_var_info_simple () =
+  let scope_name_t = ScopeName.fresh [] ("SimpleScope", Pos.void) in
+  let var = ScopeVar.fresh ("result", Pos.void) in
+  
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_result", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  let scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule.rule_id rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_def_key = ((var, Pos.void), Desugared.Ast.ScopeDef.Var None) in
+  let scope_defs = Desugared.Ast.ScopeDef.Map.singleton scope_def_key scope_def in
+  
+  let scope_decl = {
+    Desugared.Ast.scope_vars = ScopeVar.Map.singleton var Desugared.Ast.WholeVar;
+    scope_sub_scopes = ScopeVar.Map.empty;
+    scope_uid = scope_name_t;
+    scope_defs = scope_defs;
+    scope_assertions = Desugared.Ast.AssertionName.Map.empty;
+    scope_options = [];
+    scope_meta_assertions = [];
+    scope_visibility = Public;
+  } in
+  
+  let (var_defs, inputs) = Lean4_desugared.collect_var_info_ordered scope_decl in
+  
+  (* Check counts *)
+  Alcotest.(check int) "one variable" 1 (List.length var_defs);
+  Alcotest.(check int) "no inputs" 0 (List.length inputs);
+  
+  (* Check the actual var_def_info structure *)
+  let var_def = List.hd var_defs in
+  Alcotest.(check bool) "variable is output" true var_def.is_output;
+  Alcotest.(check int) "no dependencies" 0 
+    (ScopeVar.Map.cardinal var_def.dependencies);
+  
+  (* Check variable name matches *)
+  Alcotest.(check bool) "variable name is 'result'" true 
+    (ScopeVar.equal var_def.var_name var);
+  
+  (* Check type is Int *)
+  let (typ, _) = var_def.var_type in
+  let is_int_type = match typ with TLit TInt -> true | _ -> false in
+  Alcotest.(check bool) "variable type is Int" true is_int_type;
+  
+  (* Check that rules map is not empty *)
+  Alcotest.(check bool) "has at least one rule" true 
+    (not (RuleName.Map.is_empty var_def.rules))
+
+(** Test dependency extraction - variable depends on another *)
+let test_collect_var_info_with_dependency () =
+  let scope_name_t = ScopeName.fresh [] ("DepScope", Pos.void) in
+  let var_x = ScopeVar.fresh ("x", Pos.void) in
+  let var_y = ScopeVar.fresh ("y", Pos.void) in
+  
+  (* x = 10 *)
+  let rule_x = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_x", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 10)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  (* y = x + 5 *)
+  let x_loc = DesugaredScopeVar { name = (var_x, Pos.void); state = None } in
+  let rule_y = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_y", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (
+      EAppOp {
+        op = (Op.Add, Pos.void);
+        args = [
+          (ELocation x_loc, Untyped { pos = Pos.void });
+          (ELit (LInt (Runtime.integer_of_int 5)), Untyped { pos = Pos.void })
+        ];
+        tys = []
+      },
+      Untyped { pos = Pos.void }
+    );
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  let scope_def_x = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule_x.rule_id rule_x;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void false;  (* internal *)
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_def_y = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule_y.rule_id rule_y;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;  (* output *)
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_defs = 
+    Desugared.Ast.ScopeDef.Map.empty
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((var_x, Pos.void), Desugared.Ast.ScopeDef.Var None) scope_def_x
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((var_y, Pos.void), Desugared.Ast.ScopeDef.Var None) scope_def_y
+  in
+  
+  let scope_vars = 
+    ScopeVar.Map.empty
+    |> ScopeVar.Map.add var_x Desugared.Ast.WholeVar
+    |> ScopeVar.Map.add var_y Desugared.Ast.WholeVar
+  in
+  
+  let scope_decl = {
+    Desugared.Ast.scope_vars = scope_vars;
+    scope_sub_scopes = ScopeVar.Map.empty;
+    scope_uid = scope_name_t;
+    scope_defs = scope_defs;
+    scope_assertions = Desugared.Ast.AssertionName.Map.empty;
+    scope_options = [];
+    scope_meta_assertions = [];
+    scope_visibility = Public;
+  } in
+  
+  let (var_defs, inputs) = Lean4_desugared.collect_var_info_ordered scope_decl in
+  
+  (* Check counts *)
+  Alcotest.(check int) "two variables" 2 (List.length var_defs);
+  Alcotest.(check int) "no inputs" 0 (List.length inputs);
+  
+  (* Variables should be in dependency order: x before y *)
+  let first_var = List.hd var_defs in
+  let second_var = List.hd (List.tl var_defs) in
+  
+  (* Check first variable (x) *)
+  Alcotest.(check bool) "first variable is x (internal)" false first_var.is_output;
+  Alcotest.(check bool) "first variable name is x" true 
+    (ScopeVar.equal first_var.var_name var_x);
+  Alcotest.(check int) "x has no dependencies" 0 
+    (ScopeVar.Map.cardinal first_var.dependencies);
+  
+  (* Check first variable type *)
+  let (typ_x, _) = first_var.var_type in
+  let is_int_type_x = match typ_x with TLit TInt -> true | _ -> false in
+  Alcotest.(check bool) "x type is Int" true is_int_type_x;
+  
+  (* Check second variable (y) *)
+  Alcotest.(check bool) "second variable is y (output)" true second_var.is_output;
+  Alcotest.(check bool) "second variable name is y" true 
+    (ScopeVar.equal second_var.var_name var_y);
+  
+  (* Check second variable type *)
+  let (typ_y, _) = second_var.var_type in
+  let is_int_type_y = match typ_y with TLit TInt -> true | _ -> false in
+  Alcotest.(check bool) "y type is Int" true is_int_type_y;
+  
+  (* y should depend on x *)
+  let y_depends_on_x = ScopeVar.Map.mem var_x second_var.dependencies in
+  Alcotest.(check bool) "y depends on x" true y_depends_on_x;
+  Alcotest.(check int) "y has exactly one dependency" 1 
+    (ScopeVar.Map.cardinal second_var.dependencies);
+  
+  (* Check that both have rules *)
+  Alcotest.(check bool) "x has rules" true (not (RuleName.Map.is_empty first_var.rules));
+  Alcotest.(check bool) "y has rules" true (not (RuleName.Map.is_empty second_var.rules))
+
+(** {1 Phase 2: Lean code generation for method-per-variable} *)
+
+(** Test format_rule_body with unconditional rule *)
+let test_format_rule_body_unconditional () =
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("my_rule", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  let body = Lean4_desugared.format_rule_body rule in
+  
+  (* Expected: .ok (some (42)) *)
+  Alcotest.(check string) "unconditional body" ".ok (some ((42 : Int)))" body
+
+(** Test format_rule_body with conditional rule *)
+let test_format_rule_body_conditional () =
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("my_rule", Pos.void);
+    rule_just = Expr.box (ELit (LBool false), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 100)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.Unlabeled;
+  } in
+  
+  let body = Lean4_desugared.format_rule_body rule in
+  
+  (* Expected: if false then .ok (some (100)) else .ok none *)
+  Alcotest.(check string) "conditional body" 
+    "if false then .ok (some ((100 : Int))) else .ok none" body
+
+(** {1 Phase 2.5: Tree-based method generation (NEW APPROACH)} *)
+
+(** Test format_var_methods with a simple variable (one Leaf) *)
+let test_tree_methods_simple_var () =
+  (* Expected Lean output:
+  
+     def TestScope_value_base  : D Int :=
+       .ok (some ((42 : Int)))
+  
+     This generates a single leaf method that directly returns the value.
+  *)
+  
+  let var = ScopeVar.fresh ("value", Pos.void) in
+  
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule1", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.ExplicitlyLabeled (LabelName.fresh ("base", Pos.void), Pos.void);
+  } in
+  
+  let tree = Scopelang.From_desugared.Leaf [rule] in
+  
+  let scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule.rule_id rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_def_key = ((var, Pos.void), Desugared.Ast.ScopeDef.Var None) in
+  let scope_defs = Desugared.Ast.ScopeDef.Map.singleton scope_def_key scope_def in
+  
+  let var_def = {
+    Lean4_desugared.var_name = var;
+    var_type = Mark.add Pos.void (TLit TInt);
+    is_output = true;
+    rules = RuleName.Map.singleton rule.rule_id rule;
+    dependencies = ScopeVar.Map.empty;
+    exception_graph = Desugared.Dependency.ExceptionsDependencies.empty;
+    rule_trees = [tree];
+  } in
+  
+  let methods = Lean4_desugared.format_var_methods 
+    "TestScope" var_def [] scope_defs in
+  
+  Alcotest.(check int) "generates one method" 1 (List.length methods);
+  
+  let method_str = List.hd methods in
+  let expected = "def TestScope_value_base  : D Int :=\n  .ok (some ((42 : Int)))\n" in
+  Alcotest.(check string) "exact method output" expected method_str
+
+(** Test format_var_methods with exception hierarchy *)
+let test_tree_methods_with_exception () =
+  (* Expected Lean output (2 methods generated):
+  
+     -- Exception method (leaf):
+     def TestScope_rate_article_3  : D Int :=
+       .ok (some ((15 : Int)))
+     
+     -- Base method (node) that calls the exception:
+     def TestScope_rate_article_2  : D Int :=
+       match processExceptions [TestScope_rate_article_3 ] with
+       | .ok none => .ok (some ((20 : Int)))
+       | .ok (some r) => .ok (some r)
+       | .error e => .error e
+  
+     This demonstrates:
+     1. Exception methods are generated first (children before parents)
+     2. Base method calls processExceptions with exception method
+     3. Local default (20) is used when exception returns none
+     4. Exception value (15) is propagated when it succeeds
+  *)
+  
+  let var = ScopeVar.fresh ("rate", Pos.void) in
+  
+  let base_rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_base", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 20)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.ExplicitlyLabeled (LabelName.fresh ("article_2", Pos.void), Pos.void);
+  } in
+  let exception_rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule_exc", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (ELit (LInt (Runtime.integer_of_int 15)), Untyped { pos = Pos.void });
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.ExceptionToRule (base_rule.rule_id, Pos.void);
+    rule_label = Desugared.Ast.ExplicitlyLabeled (LabelName.fresh ("article_3", Pos.void), Pos.void);
+  } in
+
+  let exception_tree = Scopelang.From_desugared.Leaf [exception_rule] in
+  let tree = Scopelang.From_desugared.Node ([exception_tree], [base_rule]) in
+  
+  let scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.empty
+      |> RuleName.Map.add exception_rule.rule_id exception_rule
+      |> RuleName.Map.add base_rule.rule_id base_rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_def_key = ((var, Pos.void), Desugared.Ast.ScopeDef.Var None) in
+  let scope_defs = Desugared.Ast.ScopeDef.Map.singleton scope_def_key scope_def in
+  
+  let var_def = {
+    Lean4_desugared.var_name = var;
+    var_type = Mark.add Pos.void (TLit TInt);
+    is_output = true;
+    rules = RuleName.Map.empty
+      |> RuleName.Map.add exception_rule.rule_id exception_rule
+      |> RuleName.Map.add base_rule.rule_id base_rule;
+    dependencies = ScopeVar.Map.empty;
+    exception_graph = Desugared.Dependency.ExceptionsDependencies.empty;
+    rule_trees = [tree];
+  } in
+  
+  let methods = Lean4_desugared.format_var_methods 
+    "TestScope" var_def [] scope_defs in
+  
+  Alcotest.(check int) "generates two methods" 2 (List.length methods);
+  
+  let exception_method = List.nth methods 0 in
+  let base_method = List.nth methods 1 in
+  
+  (* Check exception method - exact match *)
+  let expected_exc = "def TestScope_rate_article_3  : D Int :=\n  .ok (some ((15 : Int)))\n" in
+  Alcotest.(check string) "exception method exact" expected_exc exception_method;
+  
+  (* Check base method - exact match *)
+  let expected_base = "def TestScope_rate_article_2  : D Int :=\n  match processExceptions [TestScope_rate_article_3 ] with\n    | .ok none => .ok (some ((20 : Int)))\n    | .ok (some r) => .ok (some r)\n    | .error e => .error e\n" in
+  Alcotest.(check string) "base method exact" expected_base base_method
+
+(** Test method generation with input variable dependency *)
+let test_tree_methods_with_input_dependency () =
+  (* Expected Lean output:
+  
+     def TestScope_output_base (input : TestScope_Input) : D Int :=
+       .ok (some (input.x))
+  
+     This tests that when a rule uses an input variable, the method
+     includes the input struct parameter and references it correctly.
+  *)
+  
+  let input_var = ScopeVar.fresh ("x", Pos.void) in
+  let output_var = ScopeVar.fresh ("output", Pos.void) in
+  
+  (* Rule that references the input variable *)
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule1", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (
+      ELocation (DesugaredScopeVar { 
+        name = (input_var, Pos.void); 
+        state = None 
+      }), 
+      Untyped { pos = Pos.void }
+    );
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.ExplicitlyLabeled (LabelName.fresh ("base", Pos.void), Pos.void);
+  } in
+  
+  let tree = Scopelang.From_desugared.Leaf [rule] in
+  
+  (* Set up scope_defs for type inference *)
+  let input_scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.empty;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void false;
+      io_input = Mark.add Pos.void Runtime.OnlyInput;
+    };
+  } in
+  
+  let output_scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule.rule_id rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_defs = Desugared.Ast.ScopeDef.Map.empty
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((input_var, Pos.void), Desugared.Ast.ScopeDef.Var None) 
+        input_scope_def
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((output_var, Pos.void), Desugared.Ast.ScopeDef.Var None) 
+        output_scope_def in
+  
+  let var_def = {
+    Lean4_desugared.var_name = output_var;
+    var_type = Mark.add Pos.void (TLit TInt);
+    is_output = true;
+    rules = RuleName.Map.singleton rule.rule_id rule;
+    dependencies = ScopeVar.Map.empty;
+    exception_graph = Desugared.Dependency.ExceptionsDependencies.empty;
+    rule_trees = [tree];
+  } in
+  
+  let inputs = [{
+    Lean4_desugared.var_name = input_var;
+    var_type = Mark.add Pos.void (TLit TInt);
+    io_input = Mark.add Pos.void Runtime.OnlyInput;
+  }] in
+  
+  let methods = Lean4_desugared.format_var_methods 
+    "TestScope" var_def inputs scope_defs in
+  
+  Alcotest.(check int) "generates one method" 1 (List.length methods);
+  
+  let method_str = List.hd methods in
+  let expected = "def TestScope_output_base (input : TestScope_Input) : D Int :=\n  .ok (some (input.x))\n" in
+  Alcotest.(check string) "exact method with input dependency" expected method_str
+
+(** Test method generation with internal variable dependency *)
+let test_tree_methods_with_internal_dependency () =
+  (* Expected Lean output:
+  
+     def TestScope_result_base (tax_rate : Int) : D Int :=
+       .ok (some ((tax_rate * (2 : Int))))
+  
+     This tests that when a rule uses an internal variable, the method
+     includes that variable as a typed parameter (not wrapped in D).
+  *)
+  
+  let internal_var = ScopeVar.fresh ("tax_rate", Pos.void) in
+  let output_var = ScopeVar.fresh ("result", Pos.void) in
+  
+  (* Rule that references the internal variable and multiplies by 2 *)
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule1", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (
+      EAppOp {
+        op = (Op.Mult, Pos.void);
+        tys = [];
+        args = [
+          (ELocation (DesugaredScopeVar { 
+            name = (internal_var, Pos.void); 
+            state = None 
+          }), Untyped { pos = Pos.void });
+          (ELit (LInt (Runtime.integer_of_int 2)), Untyped { pos = Pos.void });
+        ];
+      },
+      Untyped { pos = Pos.void }
+    );
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.ExplicitlyLabeled (LabelName.fresh ("base", Pos.void), Pos.void);
+  } in
+  
+  let tree = Scopelang.From_desugared.Leaf [rule] in
+  
+  (* Set up scope_defs for type inference *)
+  let internal_scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.empty;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void false;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let output_scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule.rule_id rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_defs = Desugared.Ast.ScopeDef.Map.empty
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((internal_var, Pos.void), Desugared.Ast.ScopeDef.Var None) 
+        internal_scope_def
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((output_var, Pos.void), Desugared.Ast.ScopeDef.Var None) 
+        output_scope_def in
+  
+  let var_def = {
+    Lean4_desugared.var_name = output_var;
+    var_type = Mark.add Pos.void (TLit TInt);
+    is_output = true;
+    rules = RuleName.Map.singleton rule.rule_id rule;
+    dependencies = ScopeVar.Map.empty;
+    exception_graph = Desugared.Dependency.ExceptionsDependencies.empty;
+    rule_trees = [tree];
+  } in
+  
+  let methods = Lean4_desugared.format_var_methods 
+    "TestScope" var_def [] scope_defs in
+  
+  Alcotest.(check int) "generates one method" 1 (List.length methods);
+  
+  let method_str = List.hd methods in
+  let expected = "def TestScope_result_base (tax_rate : Int) : D Int :=\n  .ok (some ((tax_rate * (2 : Int))))\n" in
+  Alcotest.(check string) "exact method with internal dependency" expected method_str
+
+(** Test method generation with multiple dependencies (input + internal) *)
+let test_tree_methods_with_multiple_dependencies () =
+  (* Expected Lean output:
+  
+     def TestScope_total_base (input : TestScope_Input) (rate : Int) : D Int :=
+       .ok (some ((input.amount * rate)))
+  
+     This tests that when a rule uses both input and internal variables,
+     the method includes both the input struct and internal variable parameters.
+  *)
+  
+  let input_var = ScopeVar.fresh ("amount", Pos.void) in
+  let internal_var = ScopeVar.fresh ("rate", Pos.void) in
+  let output_var = ScopeVar.fresh ("total", Pos.void) in
+  
+  (* Rule that references both input and internal variables *)
+  let rule = {
+    Desugared.Ast.rule_id = RuleName.fresh ("rule1", Pos.void);
+    rule_just = Expr.box (ELit (LBool true), Untyped { pos = Pos.void });
+    rule_cons = Expr.box (
+      EAppOp {
+        op = (Op.Mult, Pos.void);
+        tys = [];
+        args = [
+          (ELocation (DesugaredScopeVar { 
+            name = (input_var, Pos.void); 
+            state = None 
+          }), Untyped { pos = Pos.void });
+          (ELocation (DesugaredScopeVar { 
+            name = (internal_var, Pos.void); 
+            state = None 
+          }), Untyped { pos = Pos.void });
+        ];
+      },
+      Untyped { pos = Pos.void }
+    );
+    rule_parameter = None;
+    rule_exception = Desugared.Ast.BaseCase;
+    rule_label = Desugared.Ast.ExplicitlyLabeled (LabelName.fresh ("base", Pos.void), Pos.void);
+  } in
+  
+  let tree = Scopelang.From_desugared.Leaf [rule] in
+  
+  (* Set up scope_defs for type inference *)
+  let input_scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.empty;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void false;
+      io_input = Mark.add Pos.void Runtime.OnlyInput;
+    };
+  } in
+  
+  let internal_scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.empty;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void false;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let output_scope_def = {
+    Desugared.Ast.scope_def_rules = RuleName.Map.singleton rule.rule_id rule;
+    scope_def_typ = Mark.add Pos.void (TLit TInt);
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void true;
+      io_input = Mark.add Pos.void Runtime.NoInput;
+    };
+  } in
+  
+  let scope_defs = Desugared.Ast.ScopeDef.Map.empty
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((input_var, Pos.void), Desugared.Ast.ScopeDef.Var None) 
+        input_scope_def
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((internal_var, Pos.void), Desugared.Ast.ScopeDef.Var None) 
+        internal_scope_def
+    |> Desugared.Ast.ScopeDef.Map.add 
+        ((output_var, Pos.void), Desugared.Ast.ScopeDef.Var None) 
+        output_scope_def in
+  
+  let var_def = {
+    Lean4_desugared.var_name = output_var;
+    var_type = Mark.add Pos.void (TLit TInt);
+    is_output = true;
+    rules = RuleName.Map.singleton rule.rule_id rule;
+    dependencies = ScopeVar.Map.empty;
+    exception_graph = Desugared.Dependency.ExceptionsDependencies.empty;
+    rule_trees = [tree];
+  } in
+  
+  let inputs = [{
+    Lean4_desugared.var_name = input_var;
+    var_type = Mark.add Pos.void (TLit TInt);
+    io_input = Mark.add Pos.void Runtime.OnlyInput;
+  }] in
+  
+  let methods = Lean4_desugared.format_var_methods 
+    "TestScope" var_def inputs scope_defs in
+  
+  Alcotest.(check int) "generates one method" 1 (List.length methods);
+  
+  let method_str = List.hd methods in
+  let expected = "def TestScope_total_base (input : TestScope_Input) (rate : Int) : D Int :=\n  .ok (some ((input.amount * rate)))\n" in
+  Alcotest.(check string) "exact method with multiple dependencies" expected method_str
+
 (** {1 Phase 0 - Scopelang function exports} *)
 
 (** Test that we can call scope_to_exception_graphs on a simple scope *)
@@ -832,6 +1570,30 @@ let suite =
       Alcotest.test_case "exception graphs" `Quick test_scopelang_exception_graphs;
       Alcotest.test_case "def to tree" `Quick test_scopelang_def_to_tree;
       Alcotest.test_case "rule tree type" `Quick test_scopelang_rule_tree_type;
+    ];
+    "phase1_collect_inputs",
+    [
+      Alcotest.test_case "no inputs" `Quick test_collect_inputs_none;
+      Alcotest.test_case "one input" `Quick test_collect_inputs_one;
+    ];
+    "phase1_collect_var_info",
+    [
+      Alcotest.test_case "simple scope" `Quick test_collect_var_info_simple;
+      Alcotest.test_case "with dependency" `Quick test_collect_var_info_with_dependency;
+    ];
+    "phase2_format_rule_helpers",
+    [
+      Alcotest.test_case "rule body unconditional" `Quick test_format_rule_body_unconditional;
+      Alcotest.test_case "rule body conditional" `Quick test_format_rule_body_conditional;
+    ];
+    "phase2_tree_methods",
+    [
+      (* NEW approach: one method per rule tree node *)
+      Alcotest.test_case "simple variable" `Quick test_tree_methods_simple_var;
+      Alcotest.test_case "with exception" `Quick test_tree_methods_with_exception;
+      Alcotest.test_case "with input dependency" `Quick test_tree_methods_with_input_dependency;
+      Alcotest.test_case "with internal dependency" `Quick test_tree_methods_with_internal_dependency;
+      Alcotest.test_case "with multiple dependencies" `Quick test_tree_methods_with_multiple_dependencies;
     ];
   ]
 
