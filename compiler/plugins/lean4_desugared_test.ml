@@ -364,6 +364,166 @@ let test_format_expr_location () =
   let result = Lean4_desugared.format_expr expr in
   assert_string_equal "x" result
 
+(** {1 Lambda abstraction (EAbs) tests} *)
+
+(** Test lambda with single integer parameter *)
+let test_format_eabs_single_param () =
+  (* Expected Lean output:
+     fun (x : Int) => (x + (1 : Int))
+  *)
+  
+  let x_var = Var.make "x" in
+  let x_expr = Expr.evar x_var (Untyped { pos = Pos.void }) in
+  let one = (ELit (LInt (Runtime.integer_of_int 1)), Untyped { pos = Pos.void }) in
+  let body = (
+    EAppOp {
+      op = (Op.Add, Pos.void);
+      args = [Expr.unbox x_expr; one];
+      tys = []
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let binder = Expr.bind [| x_var |] (Expr.box body) in
+  let lambda = (
+    EAbs {
+      binder = Bindlib.unbox binder;
+      tys = [Mark.add Pos.void (TLit TInt)];
+      pos = [Pos.void];
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let result = Lean4_desugared.format_expr lambda in
+  let expected = "fun (x : Int) => (x + (1 : Int))" in
+  assert_string_equal expected result
+
+(** Test lambda with multiple parameters *)
+let test_format_eabs_multiple_params () =
+  (* Expected Lean output:
+     fun (x : Int) (y : Int) => (x + y)
+  *)
+  
+  let x_var = Var.make "x" in
+  let y_var = Var.make "y" in
+  let x_expr = Expr.evar x_var (Untyped { pos = Pos.void }) in
+  let y_expr = Expr.evar y_var (Untyped { pos = Pos.void }) in
+  let body = (
+    EAppOp {
+      op = (Op.Add, Pos.void);
+      args = [Expr.unbox x_expr; Expr.unbox y_expr];
+      tys = []
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let binder = Expr.bind [| x_var; y_var |] (Expr.box body) in
+  let lambda = (
+    EAbs {
+      binder = Bindlib.unbox binder;
+      tys = [Mark.add Pos.void (TLit TInt); Mark.add Pos.void (TLit TInt)];
+      pos = [Pos.void];
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let result = Lean4_desugared.format_expr lambda in
+  let expected = "fun (x : Int) (y : Int) => (x + y)" in
+  assert_string_equal expected result
+
+(** Test lambda with unit parameter *)
+let test_format_eabs_unit_param () =
+  (* Expected Lean output: fun () => (42 : Int) *)
+  
+  let unit_var = Var.make "_" in
+  let body = (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void }) in
+  
+  let binder = Expr.bind [| unit_var |] (Expr.box body) in
+  let lambda = (
+    EAbs {
+      binder = Bindlib.unbox binder;
+      tys = [Mark.add Pos.void (TLit TUnit)];
+      pos = [Pos.void];
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let result = Lean4_desugared.format_expr lambda in
+  let expected = "fun () => (42 : Int)" in
+  assert_string_equal expected result
+
+(** Test lambda with conditional body *)
+let test_format_eabs_conditional_body () =
+  (* Expected Lean output:
+     fun (x : Int) => (if (x > (0 : Int)) then x else (-x))
+  *)
+  
+  let x_var = Var.make "x" in
+  let x_expr = Expr.evar x_var (Untyped { pos = Pos.void }) in
+  let zero = (ELit (LInt (Runtime.integer_of_int 0)), Untyped { pos = Pos.void }) in
+  
+  let cond = (
+    EAppOp {
+      op = (Op.Gt, Pos.void);
+      args = [Expr.unbox x_expr; zero];
+      tys = []
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let neg_x = (
+    EAppOp {
+      op = (Op.Minus, Pos.void);
+      args = [Expr.unbox x_expr];
+      tys = []
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let body = (
+    EIfThenElse {
+      cond = cond;
+      etrue = Expr.unbox x_expr;
+      efalse = neg_x;
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let binder = Expr.bind [| x_var |] (Expr.box body) in
+  let lambda = (
+    EAbs {
+      binder = Bindlib.unbox binder;
+      tys = [Mark.add Pos.void (TLit TInt)];
+      pos = [Pos.void];
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let result = Lean4_desugared.format_expr lambda in
+  let expected = "fun (x : Int) => (if (x > (0 : Int)) then x else (-x))" in
+  assert_string_equal expected result
+
+(** Test lambda with boolean parameter *)
+let test_format_eabs_bool_param () =
+  (* Expected Lean output: fun (flag : Bool) => flag *)
+  
+  let flag_var = Var.make "flag" in
+  let flag_expr = Expr.evar flag_var (Untyped { pos = Pos.void }) in
+  
+  let binder = Expr.bind [| flag_var |] flag_expr in
+  let lambda = (
+    EAbs {
+      binder = Bindlib.unbox binder;
+      tys = [Mark.add Pos.void (TLit TBool)];
+      pos = [Pos.void];
+    },
+    Untyped { pos = Pos.void }
+  ) in
+  
+  let result = Lean4_desugared.format_expr lambda in
+  let expected = "fun (flag : Bool) => flag" in
+  assert_string_equal expected result
+
 (** {1 Scope generation with rule justifications tests} *)
 
 (* Helper: check if string contains substring *)
@@ -1530,6 +1690,14 @@ let suite =
       Alcotest.test_case "struct access" `Quick test_format_expr_struct_access;
       Alcotest.test_case "enum injection" `Quick test_format_expr_inj;
       Alcotest.test_case "array" `Quick test_format_expr_array;
+    ];
+    "format_eabs",
+    [
+      Alcotest.test_case "single param" `Quick test_format_eabs_single_param;
+      Alcotest.test_case "multiple params" `Quick test_format_eabs_multiple_params;
+      Alcotest.test_case "unit param" `Quick test_format_eabs_unit_param;
+      Alcotest.test_case "conditional body" `Quick test_format_eabs_conditional_body;
+      Alcotest.test_case "bool param" `Quick test_format_eabs_bool_param;
     ];
     "format_operator",
     [

@@ -261,9 +261,24 @@ let rec format_expr
   | EMatch _ ->
       (* Pattern matching - complex, will handle later *)
       "sorry -- match not yet implemented\n"
-  | EAbs _ ->
-      (* Lambda abstractions - will handle later *)
-      "sorry -- lambda not yet implemented\n"
+  | EAbs { binder; tys; _ } ->
+      (* Lambda abstraction: fun (x : T) (y : U) => body *)
+      let vars, body = Bindlib.unmbind binder in
+      let params = Array.to_list vars in
+      let param_strs = List.map2 (fun var ty ->
+        match Mark.remove ty with
+        | TLit TUnit -> 
+            (* Unit parameter: fun () => body *)
+            "()"
+        | _ ->
+            (* Typed parameter: fun (x : Type) => body *)
+            Printf.sprintf "(%s : %s)" 
+              (Bindlib.name_of var) 
+              (format_typ ty)
+      ) params tys in
+      Printf.sprintf "fun %s => %s"
+        (String.concat " " param_strs)
+        (format_expr ~scope_defs body)
   | ELocation loc ->
       format_location ~scope_defs loc
   | EScopeCall _ ->
