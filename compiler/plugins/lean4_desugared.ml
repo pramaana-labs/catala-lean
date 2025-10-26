@@ -459,7 +459,7 @@ let rec format_rule_tree_method
     (tree : Scopelang.From_desugared.rule_tree)
     (index : int)
     (scope_defs : Ast.scope_def Ast.ScopeDef.Map.t)
-    : string list =  (* Returns list: child methods + this method *)
+    : string list * Ast.LocationSet.t =  (* Returns list: child methods + this method *)
   
   match tree with
   | Scopelang.From_desugared.Leaf base_rules ->
@@ -480,21 +480,24 @@ let rec format_rule_tree_method
       
       let method_def = Printf.sprintf "def %s %s : %s :=\n  %s\n" 
         method_name params return_type body in
-      [method_def]
+      [method_def], dependencies
       
   | Scopelang.From_desugared.Node (exception_trees, base_rules) ->
       (* Node: generate methods for exceptions, then this node's method *)
       
       (* Recursively generate exception methods *)
       let exception_methods = List.mapi (fun i exc_tree ->
-        format_rule_tree_method scope_name var_name var_type inputs exc_tree (index * 10 + i) scope_defs
+        let methods, _dependencies = format_rule_tree_method scope_name var_name var_type inputs exc_tree (index * 10 + i) scope_defs in
+        methods, _dependencies
       ) exception_trees in
-      let all_exception_methods = List.concat exception_methods in
+      let all_exception_methods = List.concat (List.map fst exception_methods) in
+      let all_dependencies = List.fold_left (
+        fun acc (_, dependencies) -> Ast.LocationSet.union acc dependencies
+        ) Ast.LocationSet.empty exception_methods in
       
       (* Generate this node's method *)
       let method_name = format_tree_method_name scope_name var_name tree index in
-      let dependencies = rules_locations_used base_rules in
-      let params = format_method_params inputs scope_name dependencies scope_defs in
+      let params = format_method_params inputs scope_name all_dependencies scope_defs in
       let return_type = Printf.sprintf "D %s" (format_typ var_type) in
       
       (* Build local default from base rules *)
@@ -514,12 +517,53 @@ let rec format_rule_tree_method
               (String.concat ", " rule_bodies)
       in
       
-      (* Call exception methods *)
-      let exception_calls = List.mapi (fun i exc_tree ->
-        let exc_method_name = format_tree_method_name scope_name var_name exc_tree (index * 10 + i) in
-        Printf.sprintf "%s %s" exc_method_name 
-          (if params = "" then "" else "input")  (* Pass same params *)
-      ) exception_trees in
+      (* Call exception methods - need to pass all their dependencies *)
+      let exception_calls = List.mapi (fun i (exc_methods, exc_deps) ->
+        let exc_method_name = format_tree_method_name scope_name var_name (List.nth exception_trees i) (index * 10 + i) in
+        let exc_params = format_method_params inputs scope_name exc_deps scope_defs in
+        (* Extract just the parameter names from the formatted params *)
+        let param_names = 
+          if exc_params = "" then ""
+          else
+            (* Parse params like "(input : Type)" to extract "input" *)
+            let rec extract_params str acc =
+              let len = String.length str in
+              (* Find the next opening paren *)
+              let rec find_paren pos =
+                if pos >= len then None
+                else if str.[pos] = '(' then Some pos
+                else find_paren (pos + 1)
+              in
+              match find_paren 0 with
+              | None -> List.rev acc
+              | Some start ->
+                  (* Find the closing paren *)
+                  let rec find_close pos =
+                    if pos >= len then len
+                    else if str.[pos] = ')' then pos
+                    else find_close (pos + 1)
+                  in
+                  let close = find_close (start + 1) in
+                  (* Extract content between parens *)
+                  let content = String.sub str (start + 1) (close - start - 1) in
+                  (* Find colon to separate name from type *)
+                  let rec find_colon pos =
+                    if pos >= String.length content then String.length content
+                    else if content.[pos] = ':' then pos
+                    else find_colon (pos + 1)
+                  in
+                  let colon_pos = find_colon 0 in
+                  let name = String.trim (String.sub content 0 colon_pos) in
+                  (* Continue with the rest of the string *)
+                  let rest_start = min (close + 1) len in
+                  let rest = String.sub str rest_start (len - rest_start) in
+                  extract_params rest (name :: acc)
+            in
+            let names = extract_params exc_params [] in
+            String.concat " " names
+        in
+        Printf.sprintf "%s %s" exc_method_name param_names
+      ) exception_methods in
       
       let body = 
         if exception_calls = [] then
@@ -535,7 +579,7 @@ let rec format_rule_tree_method
         method_name params return_type body in
       
       (* Return all exception methods plus this method *)
-      all_exception_methods @ [method_def]
+      all_exception_methods @ [method_def], all_dependencies
 
 (** Generate all methods for a variable's rule trees *)
 let format_var_methods
@@ -546,7 +590,8 @@ let format_var_methods
     : string list =
   let var_name_str = ScopeVar.to_string var_def.var_name in
   List.concat (List.mapi (fun i tree ->
-    format_rule_tree_method scope_name var_name_str var_def.var_type inputs tree i scope_defs
+    let methods, _deps = format_rule_tree_method scope_name var_name_str var_def.var_type inputs tree i scope_defs in
+    methods
   ) var_def.rule_trees)
 
 (** Generate input struct for a scope *)

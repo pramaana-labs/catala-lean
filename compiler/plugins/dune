@@ -58,7 +58,7 @@
  (public_name catala.plugins.lean4_desugared)
  (synopsis "Catala plugin that generates Lean 4 code from desugared AST")
  (modules lean4_desugared)
- (libraries catala.driver desugared))
+ (libraries catala.driver desugared scopelang))
 
 (library
  (name lean4_desugared_test)
