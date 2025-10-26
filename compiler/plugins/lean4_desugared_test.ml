@@ -534,7 +534,7 @@ let string_contains s sub =
     true
   with Not_found -> false
 
-(* Helper: create a scope with a single variable and rule *)
+(* Helper: create a scope with a single variable and rule, plus dependent variables *)
 let make_test_scope scope_name var_name var_type is_output just_expr cons_expr =
   let open Desugared.Ast in
   let scope_name_t = ScopeName.fresh [] (scope_name, Pos.void) in
@@ -576,16 +576,47 @@ let make_test_scope scope_name var_name var_type is_output just_expr cons_expr =
   
   (scope_name_t, scope_decl)
 
+(* Helper: add a dependency variable (input) to a scope *)
+let add_dep_var_to_scope (scope_name_t, scope_decl) dep_var dep_type =
+  let open Desugared.Ast in
+  (* Create empty scope def for the dependency (it's an input/external variable) *)
+  let dep_scope_def = {
+    scope_def_rules = RuleName.Map.empty;
+    scope_def_typ = dep_type;
+    scope_def_parameters = None;
+    scope_def_is_condition = false;
+    scope_def_io = {
+      io_output = Mark.add Pos.void false;
+      io_input = Mark.add Pos.void Runtime.OnlyInput;  (* Mark as input *)
+    };
+  } in
+  
+  let dep_scope_def_key = ((dep_var, Pos.void), ScopeDef.Var None) in
+  let new_scope_defs = ScopeDef.Map.add dep_scope_def_key dep_scope_def scope_decl.scope_defs in
+  let new_scope_vars = ScopeVar.Map.add dep_var WholeVar scope_decl.scope_vars in
+  
+  let new_scope_decl = {
+    scope_decl with
+    scope_defs = new_scope_defs;
+    scope_vars = new_scope_vars;
+  } in
+  
+  (scope_name_t, new_scope_decl)
+
 let test_scope_unconditional_rule () =
-  (* Test: Unconditional rule should NOT have "if" wrapper 
+  (* Test: Unconditional rule in new method-per-rule architecture
      
      Expected Lean code:
+     
+     def TestUnconditional_result_leaf_0  : D Int :=
+       .ok (some ((42 : Int)))
      
      structure TestUnconditional where
        result : Int
      
-     def TestUnconditional_func : TestUnconditional :=
-       { result := (42 : Int) }
+     def TestUnconditional  : TestUnconditional :=
+       let result := match TestUnconditional_result_leaf_0  with | .ok (some val) => val | _ => sorry "error: result" in
+       { result := result }
   *)
   let just = (ELit (LBool true), Untyped { pos = Pos.void }) in
   let cons = (ELit (LInt (Runtime.integer_of_int 42)), Untyped { pos = Pos.void }) in
@@ -594,28 +625,39 @@ let test_scope_unconditional_rule () =
   let (scope_name, scope_decl) = make_test_scope "TestUnconditional" "result" int_type true just cons in
   let generated = Lean4_desugared.format_scope scope_name scope_decl in
   
-  (* Verify the complete struct declaration and function *)
+  (* Verify the method definition, struct declaration, and main function *)
+  let expected_method = "def TestUnconditional_result_leaf_0" in
+  let expected_method_body = ".ok (some ((42 : Int)))" in
   let expected_struct = "structure TestUnconditional where\n  result : Int" in
-  let expected_func = "def TestUnconditional_func : TestUnconditional :=\n  { result := (42 : Int) }" in
+  let expected_main_func = "def TestUnconditional" in
+  let expected_let_binding = "let result := match TestUnconditional_result_leaf_0" in
   
+  let has_method = string_contains generated expected_method in
+  let has_method_body = string_contains generated expected_method_body in
   let has_struct = string_contains generated expected_struct in
-  let has_func = string_contains generated expected_func in
-  let has_if = string_contains generated "if" in
+  let has_main_func = string_contains generated expected_main_func in
+  let has_let_binding = string_contains generated expected_let_binding in
   
+  Alcotest.(check bool) "contains method definition" true has_method;
+  Alcotest.(check bool) "contains method body without if" true has_method_body;
   Alcotest.(check bool) "contains complete struct declaration" true has_struct;
-  Alcotest.(check bool) "contains complete function definition" true has_func;
-  Alcotest.(check bool) "should not contain if" false has_if
+  Alcotest.(check bool) "contains main function" true has_main_func;
+  Alcotest.(check bool) "contains let binding" true has_let_binding
 
 let test_scope_simple_conditional () =
-  (* Test: Conditional rule should generate if-then-else 
+  (* Test: Conditional rule in new method-per-rule architecture
      
      Expected Lean code:
+     
+     def TestConditional_result_leaf_0 (input : TestConditional_Input) : D Int :=
+       if (input.x > (0 : Int)) then .ok (some ((100 : Int))) else .ok none
      
      structure TestConditional where
        result : Int
      
-     def TestConditional_func : TestConditional :=
-       { result := (if (x > (0 : Int)) then (100 : Int) else sorry "undefined conditional value") }
+     def TestConditional (input : TestConditional_Input) : TestConditional :=
+       let result := match TestConditional_result_leaf_0 input with | .ok (some val) => val | _ => sorry "error: result" in
+       { result := result }
   *)
   let x_var = ScopeVar.fresh ("x", Pos.void) in
   let x_loc = DesugaredScopeVar { name = (x_var, Pos.void); state = None } in
@@ -632,32 +674,37 @@ let test_scope_simple_conditional () =
   let cons = (ELit (LInt (Runtime.integer_of_int 100)), Untyped { pos = Pos.void }) in
   let int_type = Mark.add Pos.void (TLit TInt) in
   
-  let (scope_name, scope_decl) = make_test_scope "TestConditional" "result" int_type true just cons in
+  let scope = make_test_scope "TestConditional" "result" int_type true just cons in
+  let (scope_name, scope_decl) = add_dep_var_to_scope scope x_var int_type in
   let generated = Lean4_desugared.format_scope scope_name scope_decl in
   
-  (* Verify the complete expression with conditional *)
+  (* Verify the method with conditional in D monad *)
+  let expected_method = "def TestConditional_result_leaf_0" in
+  let expected_condition_in_method = "if (input.x > (0 : Int)) then .ok (some ((100 : Int))) else .ok none" in
   let expected_struct = "structure TestConditional where\n  result : Int" in
-  let expected_condition = "if (x > (0 : Int)) then (100 : Int) else sorry \"undefined conditional value\"" in
-  let expected_field = "result := (" ^ expected_condition ^ ")" in
   
+  let has_method = string_contains generated expected_method in
+  let has_condition = string_contains generated expected_condition_in_method in
   let has_struct = string_contains generated expected_struct in
-  let has_condition = string_contains generated expected_condition in
-  let has_field = string_contains generated expected_field in
   
-  Alcotest.(check bool) "contains complete struct declaration" true has_struct;
-  Alcotest.(check bool) "contains complete conditional expression" true has_condition;
-  Alcotest.(check bool) "contains complete field assignment" true has_field
+  Alcotest.(check bool) "contains method definition" true has_method;
+  Alcotest.(check bool) "contains conditional in D monad" true has_condition;
+  Alcotest.(check bool) "contains complete struct declaration" true has_struct
 
 let test_scope_complex_condition () =
-  (* Test: Complex AND condition 
+  (* Test: Complex AND condition in new method-per-rule architecture
      
      Expected Lean code:
+     
+     def TestComplexCond_result_leaf_0  : D Int :=
+       if ((x > (0 : Int)) ∧ (y < (10 : Int))) then .ok (some ((77 : Int))) else .ok none
      
      structure TestComplexCond where
        result : Int
      
-     def TestComplexCond_func : TestComplexCond :=
-       { result := (if ((x > (0 : Int)) ∧ (y < (10 : Int))) then (77 : Int) else sorry "undefined conditional value") }
+     def TestComplexCond  : TestComplexCond :=
+       let result := match TestComplexCond_result_leaf_0  with | .ok (some val) => val | _ => sorry "error: result" in
+       { result := result }
   *)
   let x_var = ScopeVar.fresh ("x", Pos.void) in
   let y_var = ScopeVar.fresh ("y", Pos.void) in
@@ -691,31 +738,39 @@ let test_scope_complex_condition () =
   let cons = (ELit (LInt (Runtime.integer_of_int 77)), Untyped { pos = Pos.void }) in
   let int_type = Mark.add Pos.void (TLit TInt) in
   
-  let (scope_name, scope_decl) = make_test_scope "TestComplexCond" "result" int_type true just cons in
+  let scope = make_test_scope "TestComplexCond" "result" int_type true just cons in
+  let scope = add_dep_var_to_scope scope x_var int_type in
+  let (scope_name, scope_decl) = add_dep_var_to_scope scope y_var int_type in
   let generated = Lean4_desugared.format_scope scope_name scope_decl in
   
-  (* Verify the complete complex conditional expression *)
+  (* Verify the method with complex conditional in D monad *)
+  let expected_method = "def TestComplexCond_result_leaf_0" in
+  let expected_condition = "((input.x > (0 : Int)) ∧ (input.y < (10 : Int)))" in
+  let expected_method_body = "if " ^ expected_condition ^ " then .ok (some ((77 : Int))) else .ok none" in
   let expected_struct = "structure TestComplexCond where\n  result : Int" in
-  let expected_condition = "((x > (0 : Int)) ∧ (y < (10 : Int)))" in
-  let expected_if_expr = "if " ^ expected_condition ^ " then (77 : Int) else sorry \"undefined conditional value\"" in
   
-  let has_struct = string_contains generated expected_struct in
+  let has_method = string_contains generated expected_method in
   let has_condition = string_contains generated expected_condition in
-  let has_if_expr = string_contains generated expected_if_expr in
+  let has_method_body = string_contains generated expected_method_body in
+  let has_struct = string_contains generated expected_struct in
   
-  Alcotest.(check bool) "contains complete struct declaration" true has_struct;
+  Alcotest.(check bool) "contains method definition" true has_method;
   Alcotest.(check bool) "contains complete AND condition" true has_condition;
-  Alcotest.(check bool) "contains complete if expression" true has_if_expr
+  Alcotest.(check bool) "contains conditional in D monad" true has_method_body;
+  Alcotest.(check bool) "contains complete struct declaration" true has_struct
 
 let test_scope_internal_var_conditional () =
-  (* Test: Internal variable with conditional rule 
+  (* Test: Internal variable with conditional rule in new method-per-rule architecture
      
      Expected Lean code:
      
+     def TestInternal_temp_leaf_0  : D Int :=
+       if flag then .ok (some ((999 : Int))) else .ok none
+     
      structure TestInternal where
      
-     def TestInternal_func : TestInternal :=
-       let temp := (if flag then (999 : Int) else sorry "undefined conditional value") in
+     def TestInternal  : TestInternal :=
+       let temp := match TestInternal_temp_leaf_0  with | .ok (some val) => val | _ => sorry "error: temp" in
        { }
   *)
   let x_var = ScopeVar.fresh ("flag", Pos.void) in
@@ -724,17 +779,25 @@ let test_scope_internal_var_conditional () =
   let just = (ELocation x_loc, Untyped { pos = Pos.void }) in
   let cons = (ELit (LInt (Runtime.integer_of_int 999)), Untyped { pos = Pos.void }) in
   let int_type = Mark.add Pos.void (TLit TInt) in
+  let bool_type = Mark.add Pos.void (TLit TBool) in
   
   (* Make it internal (not output) *)
-  let (scope_name, scope_decl) = make_test_scope "TestInternal" "temp" int_type false just cons in
+  let scope = make_test_scope "TestInternal" "temp" int_type false just cons in
+  let (scope_name, scope_decl) = add_dep_var_to_scope scope x_var bool_type in
   let generated = Lean4_desugared.format_scope scope_name scope_decl in
   
-  (* Internal variable should generate complete let binding with conditional expression *)
-  let expected_let_binding = "let temp := (if flag then (999 : Int) else sorry \"undefined conditional value\")" in
+  (* Internal variable should generate method and let binding *)
+  let expected_method = "def TestInternal_temp_leaf_0" in
+  let expected_method_body = "if input.flag then .ok (some ((999 : Int))) else .ok none" in
+  let expected_let_binding = "let temp := match TestInternal_temp_leaf_0" in
   
+  let has_method = string_contains generated expected_method in
+  let has_method_body = string_contains generated expected_method_body in
   let has_let_binding = string_contains generated expected_let_binding in
   
-  Alcotest.(check bool) "contains complete let binding with conditional" true has_let_binding
+  Alcotest.(check bool) "contains method definition" true has_method;
+  Alcotest.(check bool) "contains conditional in D monad" true has_method_body;
+  Alcotest.(check bool) "contains let binding with match" true has_let_binding
 
 (** {1 Struct declaration tests} *)
 

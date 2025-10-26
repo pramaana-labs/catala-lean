@@ -420,10 +420,6 @@ let format_method_params
     if inputs = [] then []
     else [Printf.sprintf "(input : %s_Input)" scope_name]
   in
-  let var_type (scope_def_key : Ast.ScopeDef.t): typ =
-    (match Ast.ScopeDef.Map.find_opt scope_def_key scope_defs with
-    | None -> raise (Invalid_argument "Scope definition not found")
-    | Some scope_def -> scope_def.Ast.scope_def_typ) in
   
   (* Extract variable dependencies from locations, excluding input variables *)
   let dep_params = Ast.LocationSet.fold (fun (loc, _pos) acc ->
@@ -553,6 +549,19 @@ let format_var_methods
     format_rule_tree_method scope_name var_name_str var_def.var_type inputs tree i scope_defs
   ) var_def.rule_trees)
 
+(** Generate input struct for a scope *)
+let format_input_struct (scope_name : string) (inputs : input_info list) : string =
+  if inputs = [] then ""
+  else
+    let formatted_fields = List.map (fun (input : input_info) ->
+      Printf.sprintf "  %s : %s"
+        (ScopeVar.to_string input.var_name)
+        (format_typ input.var_type)
+    ) inputs in
+    Printf.sprintf "structure %s_Input where\n%s\n"
+      scope_name
+      (String.concat "\n" formatted_fields)
+
 (** Format a struct declaration to Lean code *)
 let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string =
   let field_list = StructField.Map.bindings fields in
@@ -565,86 +574,90 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
     name
     (String.concat "\n" formatted_fields)
 
-(** Generate Lean code for a scope *)
+(** Generate Lean code for a scope using method-per-rule architecture *)
 let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   let scope_name_str = ScopeName.to_string scope_name in
   
-  (* 1. Generate output struct *)
-  let output_fields = Ast.ScopeDef.Map.fold (fun scope_def def acc ->
-    let var, _kind = scope_def in
-    let var_name, _pos = var in
-    match Mark.remove def.Ast.scope_def_io.io_output with
-    | true ->
-        let field_name = StructField.fresh (ScopeVar.to_string var_name, Pos.void) in
-        let field_type = def.Ast.scope_def_typ in
-        StructField.Map.add field_name field_type acc
-    | false -> acc
-  ) scope_decl.Ast.scope_defs StructField.Map.empty in
+  (* 1. Collect variable information in dependency order *)
+  let var_defs, inputs = collect_var_info_ordered scope_decl in
   
-  let struct_decl = format_struct_decl scope_name_str output_fields in
+  (* 2. Generate input struct (if any inputs) *)
+  let input_struct = format_input_struct scope_name_str inputs in
   
-  (* 2. Separate internal variables and output variables *)
-  let internal_vars = ref [] in
-  let output_fields = ref [] in
+  (* 3. Generate all methods for all variables *)
+  let all_methods = List.concat (List.map (fun var_def ->
+    format_var_methods scope_name_str var_def inputs scope_decl.Ast.scope_defs
+  ) var_defs) in
   
-  Ast.ScopeDef.Map.iter (fun scope_def def ->
-    let var, _kind = scope_def in
-    let var_name, _pos = var in
-    let rules = def.Ast.scope_def_rules in
-    if RuleName.Map.is_empty rules then ()
-    else
-      let _rule_id, rule = RuleName.Map.choose rules in
-      let just_expr = Expr.unbox rule.Ast.rule_just in
-      let cons_expr = Expr.unbox rule.Ast.rule_cons in
-      let var_str = ScopeVar.to_string var_name in
-      
-      (* Check if justification is just 'true' (unconditional rule) *)
-      let is_unconditional = match Mark.remove just_expr with
-        | ELit (LBool true) -> true
-        | _ -> false
-      in
-      
-      let value_expr = 
-        if is_unconditional then
-          format_expr cons_expr
-        else
-          (* Conditional rule: wrap in if-then-else *)
-          Printf.sprintf "(if %s then %s else sorry \"undefined conditional value\")"
-            (format_expr just_expr)
-            (format_expr cons_expr)
-      in
-      
-      match Mark.remove def.Ast.scope_def_io.io_output with
-      | true ->
-          (* Output variable: generate struct field assignment *)
-          let field_assignment = Printf.sprintf "%s := %s" var_str value_expr in
-          output_fields := field_assignment :: !output_fields
-      | false ->
-          (* Internal variable: generate let binding *)
-          let let_binding = Printf.sprintf "let %s := %s" var_str value_expr in
-          internal_vars := let_binding :: !internal_vars
-  ) scope_decl.Ast.scope_defs;
+  (* 4. Generate output struct *)
+  let output_vars = List.filter (fun v -> v.is_output) var_defs in
+  let output_fields = List.fold_left (fun acc var_def ->
+    let field_name = StructField.fresh (ScopeVar.to_string var_def.var_name, Pos.void) in
+    StructField.Map.add field_name var_def.var_type acc
+  ) StructField.Map.empty output_vars in
   
-  (* 3. Generate scope function with let bindings for internal vars *)
-  let func_def = 
-    if !internal_vars = [] then
-      (* No internal variables, just struct construction *)
-      Printf.sprintf "def %s_func : %s :=\n  { %s }"
-        scope_name_str
-        scope_name_str
-        (String.concat ",\n    " (List.rev !output_fields))
-    else
-      (* Has internal variables, use let...in structure *)
-      let lets = String.concat "\n  " (List.rev !internal_vars) in
-      let struct_body = String.concat ",\n    " (List.rev !output_fields) in
-      Printf.sprintf "def %s_func : %s :=\n  %s in\n  { %s }"
-        scope_name_str
-        scope_name_str
-        lets
-        struct_body
+  let output_struct = format_struct_decl scope_name_str output_fields in
+  
+  (* 5. Generate main scope function that calls methods *)
+  let has_input = inputs <> [] in
+  let input_param = if has_input then Printf.sprintf "(input : %s_Input)" scope_name_str else "" in
+  
+  (* Helper to get method call for a variable *)
+  let get_method_call var_def =
+    let var_name = ScopeVar.to_string var_def.var_name in
+    let method_name = match var_def.rule_trees with
+      | tree :: _ -> format_tree_method_name scope_name_str var_name tree 0
+      | [] -> var_name ^ "_undefined"
+    in
+    (* Pass input and required internal vars as dependencies *)
+    let dep_params = ScopeVar.Map.fold (fun dep_var _dep_ty acc ->
+      let dep_name = ScopeVar.to_string dep_var in
+      dep_name :: acc
+    ) var_def.dependencies [] in
+    let all_params = (if has_input then ["input"] else []) @ List.rev dep_params in
+    Printf.sprintf "%s %s" method_name (String.concat " " all_params)
   in
   
-  Printf.sprintf "%s\n\n%s" struct_decl func_def
+  (* Build let bindings for ALL variables in dependency order *)
+  let all_bindings = List.map (fun var_def ->
+    let var_name = ScopeVar.to_string var_def.var_name in
+    let call = get_method_call var_def in
+    Printf.sprintf "let %s := match %s with | .ok (some val) => val | _ => sorry \"error: %s\" in"
+      var_name call var_name
+  ) var_defs in
+  
+  (* Build output struct field assignments by just referencing the variables *)
+  let output_assignments = List.map (fun var_def ->
+    let var_name = ScopeVar.to_string var_def.var_name in
+    Printf.sprintf "%s := %s" var_name var_name
+  ) output_vars in
+  
+  (* Assemble the main function *)
+  let func_def =
+    if all_bindings = [] then
+      (* No variables at all (shouldn't happen, but handle it) *)
+      Printf.sprintf "def %s %s : %s :=\n  { }"
+        scope_name_str
+        input_param
+        scope_name_str
+    else
+      (* Generate let bindings for all variables, then construct struct *)
+      Printf.sprintf "def %s %s : %s :=\n  %s\n  { %s }"
+        scope_name_str
+        input_param
+        scope_name_str
+        (String.concat "\n  " all_bindings)
+        (String.concat ",\n    " output_assignments)
+  in
+  
+  (* 6. Assemble all parts *)
+  let parts = List.filter (fun s -> s <> "") [
+    input_struct;
+    String.concat "\n" all_methods;
+    output_struct;
+    func_def
+  ] in
+  String.concat "\n" parts
 
 (** Generate a complete Lean file from a desugared program *)
 let generate_lean_code (prgm : Ast.program) : string =
