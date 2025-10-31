@@ -28,6 +28,7 @@ RUN eval $(opam env) && \
 
 # Copy remaining source files needed to build the lean4-desugared plugin
 # We need: compiler source, stdlib, deps, runtimes, and syntax_highlighting
+# Fix ownership immediately after COPY to ensure we can write to /app
 COPY compiler/ compiler/
 COPY stdlib/ stdlib/
 COPY deps/ deps/
@@ -36,6 +37,9 @@ COPY syntax_highlighting/ syntax_highlighting/
 COPY Makefile ./
 COPY runtimes/python/pyproject.toml runtimes/python/pyproject.toml
 COPY deps/dates-calc/lib_python/pyproject.toml deps/dates-calc/lib_python/pyproject.toml
+
+# Fix ownership of /app to current user so we can write _build directory
+RUN sudo chown -R $(id -u):$(id -g) /app
 
 # Install Python dependencies needed for syntax highlighting
 # (required by literate module which is a dependency)
@@ -49,8 +53,8 @@ RUN eval $(opam env) && \
 # Build catala compiler and the lean4-desugared plugin
 # Building from source ensures compatibility with container's architecture and libraries
 # Use opam exec to ensure dune from OPAM is used
-# Ensure /app has write permissions (Docker builds may have permission issues)
-RUN chmod -R 777 /app || true && \
+# Ensure ownership is correct before building (Python install may have created files)
+RUN sudo chown -R $(id -u):$(id -g) /app && \
     eval $(opam env) && \
     opam exec -- dune build @catala && \
     opam exec -- dune build compiler/plugins/lean4_desugared.cmxs
