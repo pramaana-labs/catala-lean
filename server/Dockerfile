@@ -40,15 +40,18 @@ COPY deps/dates-calc/lib_python/pyproject.toml deps/dates-calc/lib_python/pyproj
 # Install Python dependencies needed for syntax highlighting
 # (required by literate module which is a dependency)
 # The lexer.py files need to be accessible, installing pygments packages makes them available
+# Using --break-system-packages flag is safe in Docker containers
 RUN eval $(opam env) && \
-    python3 -m pip install -U pip && \
-    python3 -m pip install -e syntax_highlighting/en/pygments -e syntax_highlighting/fr/pygments -e syntax_highlighting/pl/pygments && \
+    python3 -m pip install -U pip --break-system-packages && \
+    python3 -m pip install --break-system-packages -e syntax_highlighting/en/pygments -e syntax_highlighting/fr/pygments -e syntax_highlighting/pl/pygments && \
     opam exec -- make dependencies-python pygments || true
 
 # Build catala compiler and the lean4-desugared plugin
 # Building from source ensures compatibility with container's architecture and libraries
 # Use opam exec to ensure dune from OPAM is used
-RUN eval $(opam env) && \
+# Ensure /app has write permissions (Docker builds may have permission issues)
+RUN chmod -R 777 /app || true && \
+    eval $(opam env) && \
     opam exec -- dune build @catala && \
     opam exec -- dune build compiler/plugins/lean4_desugared.cmxs
 
