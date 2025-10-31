@@ -1,0 +1,42 @@
+# Cloud Build configuration for Catala to Lean4 API Server
+# Builds the Docker image, pushes to Artifact Registry, then deploys to Cloud Run
+# Note: This file is in server/ directory. Cloud Build trigger must be configured
+# to use this file path: server/cloudbuild.yaml
+
+options:
+  logging: CLOUD_LOGGING_ONLY  
+
+
+
+
+substitutions:
+  _REGION: us-central1
+  _REPO: catala-lean-repo
+  _IMAGE: catala-api
+
+steps:
+
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-f'
+    - 'server/Dockerfile'
+    - '-t'
+    - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'
+    - '.'
+
+- name: gcr.io/cloud-builders/docker
+args: [
+  'push',
+  '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'
+]
+
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  entrypoint: gcloud
+  args: [
+    'run','deploy','pramaanalabs-claude',
+    '--image','${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest',
+    '--region','us-central1',
+    '--platform','managed',
+    '--allow-unauthenticated',
+  ]
