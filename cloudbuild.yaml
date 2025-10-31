@@ -1,21 +1,16 @@
-steps:
-- name: 'gcr.io/cloud-builders/gcloud'
-  entrypoint: 'bash'
-  args:
-  - '-c'
-  - |
-    for d in */; do
-      config="${d}cloudbuild.yaml"
-      if [[ ! -f "${config}" ]]; then
-        continue
-      fi
+# Root Cloud Build configuration
+# This triggers the server/cloudbuild.yaml to build and deploy the API server
 
-      echo "Building $d ... "
-      (
-        gcloud builds submit $d --config=${config}
-      ) &
-    done
-    wait
+steps:
+  # Trigger the server build configuration
+  # The build context is the repo root (.) and config is in server/cloudbuild.yaml
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Triggering server build..."
+        gcloud builds submit . --config=server/cloudbuild.yaml
 
 options:
   default_logs_bucket_behavior: 'REGIONAL_USER_OWNED_BUCKET'
