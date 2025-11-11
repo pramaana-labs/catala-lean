@@ -342,6 +342,65 @@ let test_format_operator_minus_int () =
   let result = Lean4_desugared.format_expr expr in
   assert_string_equal "(-(5 : Int))" result
 
+let test_format_operator_map () =
+  (* pretend we have vars f and a in scope *)
+  let f = (EVar (Var.make "f"), Untyped { pos = Pos.void }) in
+  let a = (EVar (Var.make "a"), Untyped { pos = Pos.void }) in
+  let got =
+    Lean4_desugared.format_operator
+      ~scope_defs:None
+      (Mark.add Pos.void Op.Map)
+      [f; a]
+  in
+  let want =
+    Printf.sprintf
+      "(List.map (%s) %s)"
+      (Lean4_desugared.format_expr ~scope_defs:None f)
+      (Lean4_desugared.format_expr ~scope_defs:None a)
+  in
+  assert_string_equal want got
+
+
+let test_format_operator_filter () =
+  let p = (EVar (Var.make "p"), Untyped { pos = Pos.void }) in
+  let a = (EVar (Var.make "a"), Untyped { pos = Pos.void }) in
+  let got =
+    Lean4_desugared.format_operator
+      ~scope_defs:None
+      (Mark.add Pos.void Op.Filter)
+      [p; a]
+  in
+  let want =
+    Printf.sprintf
+      "(List.filter (%s) %s)"
+      (Lean4_desugared.format_expr ~scope_defs:None p)
+      (Lean4_desugared.format_expr ~scope_defs:None a)
+  in
+  assert_string_equal want got
+
+let test_format_operator_fold () =
+  let fn = (EVar (Shared_ast.Var.make "f"), Untyped { pos = Pos.void }) in
+  let init =
+    ( ELit (LInt (Runtime.integer_of_int 0)),
+      Untyped { pos = Pos.void } )
+  in
+  let arr = (EVar (Shared_ast.Var.make "a"), Untyped { pos = Pos.void }) in
+  let got =
+    Lean4_desugared.format_operator
+      ~scope_defs:None
+      (Mark.add Pos.void Op.Fold)
+      [fn; init; arr]
+  in
+  let want =
+    Printf.sprintf
+      "(List.foldl (%s) %s %s)"
+      (Lean4_desugared.format_expr ~scope_defs:None fn)
+      (Lean4_desugared.format_expr ~scope_defs:None init)
+      (Lean4_desugared.format_expr ~scope_defs:None arr)
+  in
+  assert_string_equal want got
+  
+
 (** {1 Location (variable reference) tests} *)
 
 let test_format_location_simple () =
@@ -1776,6 +1835,11 @@ let suite =
       Alcotest.test_case "or" `Quick test_format_operator_or;
       Alcotest.test_case "not" `Quick test_format_operator_not;
       Alcotest.test_case "minus int" `Quick test_format_operator_minus_int;
+      Alcotest.test_case "map" `Quick test_format_operator_map;
+      Alcotest.test_case "filter" `Quick test_format_operator_filter;
+      Alcotest.test_case "fold" `Quick test_format_operator_fold;
+
+
     ];
     "format_location",
     [

@@ -333,7 +333,30 @@ and format_operator
       (match args with
        | [arg] -> Printf.sprintf "(%s).size" (format_expr ~scope_defs arg)
        | _ -> "sorry -- wrong args for Length")
-  | Map | Filter | Fold | Reduce | Concat | Map2 ->
+  | Map ->
+      (match args with
+        | [func; arr] ->
+            Printf.sprintf "(List.map (%s) %s)"
+              (format_expr ~scope_defs func)
+              (format_expr ~scope_defs arr)
+        | _ -> "sorry -- wrong args for Map")
+  | Filter ->
+      (match args with
+        | [pred; arr] ->
+            Printf.sprintf "(List.filter (%s) %s)"
+              (format_expr ~scope_defs pred)
+              (format_expr ~scope_defs arr)
+        | _ -> "sorry -- wrong args for Filter")
+  | Fold ->
+      (match args with
+        | [fn; init; arr] ->
+            Printf.sprintf "(List.foldl (%s) %s %s)"
+              (format_expr ~scope_defs fn)
+              (format_expr ~scope_defs init)
+              (format_expr ~scope_defs arr)
+        | _ -> "sorry -- wrong args for Fold")
+
+  | Reduce | Concat | Map2 ->
       "sorry -- array operations not yet fully implemented"
   (* Conversions *)
   | ToInt ->
