@@ -80,22 +80,33 @@ type var_def_info = {
   dependencies: typ ScopeVar.Map.t;  (* Variables this depends on *)
   exception_graph: Desugared.Dependency.ExceptionsDependencies.t;
   rule_trees: Scopelang.From_desugared.rule_tree list;
+  is_sub_scope: bool;  (* True if this is a sub-scope variable *)
+  sub_scope_name: ScopeName.t option;  (* The scope this variable calls, if is_sub_scope *)
 }
 
 (** Collect all input variables from a scope *)
 let collect_inputs (scope_decl : Ast.scope) : input_info list =
+  (* Build set of sub-scope variables to exclude from inputs *)
+  let sub_scope_vars = ScopeVar.Map.fold (fun var _scope acc ->
+    ScopeVar.Set.add var acc
+  ) scope_decl.Ast.scope_sub_scopes ScopeVar.Set.empty in
+  
   Ast.ScopeDef.Map.fold (fun scope_def def acc ->
     let var, _kind = scope_def in
     let var_name, _pos = var in
-    match Mark.remove def.Ast.scope_def_io.io_input with
-    | Runtime.NoInput -> acc
-    | _ ->
-        let input = {
-          var_name = var_name;
-          var_type = def.Ast.scope_def_typ;
-          io_input = def.Ast.scope_def_io.io_input;
-        } in
-        input :: acc
+    (* Skip sub-scope variables - they are not inputs *)
+    if ScopeVar.Set.mem var_name sub_scope_vars then
+      acc
+    else
+      match Mark.remove def.Ast.scope_def_io.io_input with
+      | Runtime.NoInput -> acc
+      | _ ->
+          let input = {
+            var_name = var_name;
+            var_type = def.Ast.scope_def_typ;
+            io_input = def.Ast.scope_def_io.io_input;
+          } in
+          input :: acc
   ) scope_decl.Ast.scope_defs []
 
 let var_type (scope_def_key : Ast.ScopeDef.t) (scope_decl : Ast.scope) : typ =
@@ -104,7 +115,9 @@ let var_type (scope_def_key : Ast.ScopeDef.t) (scope_decl : Ast.scope) : typ =
   | Some scope_def -> scope_def.Ast.scope_def_typ
 
 (** Collect variable information in dependency order using existing analysis *)
-let collect_var_info_ordered (scope_decl : Ast.scope)
+let collect_var_info_ordered 
+    ?(program_ctx : Shared_ast.decl_ctx option = None)
+    (scope_decl : Ast.scope)
     : (var_def_info list * input_info list) =
   
   (* 1. Get dependency-ordered list of variables *)
@@ -129,39 +142,110 @@ let collect_var_info_ordered (scope_decl : Ast.scope)
   (* 4. Process variables in dependency order *)
   let var_defs = List.filter_map (function
     | Desugared.Dependency.Vertex.Var (var, state) ->
-        let scope_def_key = ((var, Pos.void), Ast.ScopeDef.Var state) in
-        (match Ast.ScopeDef.Map.find_opt scope_def_key scope_decl.Ast.scope_defs with
-         | None -> None
-         | Some scope_def ->
-             if RuleName.Map.is_empty scope_def.Ast.scope_def_rules then None
-             else
-               (* Get dependencies using existing function *)
-               let all_deps = Desugared.Ast.free_variables scope_def.Ast.scope_def_rules in
-               
-               (* Filter to only variable dependencies *)
-               let var_deps = Ast.ScopeDef.Map.fold (fun def_key _pos acc ->
-                 match def_key with
-                 | (v, _), Ast.ScopeDef.Var _ -> ScopeVar.Map.add v (var_type def_key) acc
-                 | _ -> acc
-               ) all_deps ScopeVar.Map.empty in
-               
-               (* Remove input variables from dependencies (they're parameters) *)
-               let internal_deps = ScopeVar.Map.filter (fun _v _t -> not (ScopeVar.Set.mem _v input_vars)) var_deps in
-               
-               (* Get exception graph and build rule trees *)
-               let exc_graph = Ast.ScopeDef.Map.find scope_def_key exc_graphs in
-               let rule_trees = Scopelang.From_desugared.def_map_to_tree 
-                 scope_def.Ast.scope_def_rules exc_graph in
-               
-               Some {
-                 var_name = var;
-                 var_type = scope_def.Ast.scope_def_typ;
-                 is_output = Mark.remove scope_def.Ast.scope_def_io.io_output;
-                 rules = scope_def.Ast.scope_def_rules;
-                 dependencies = internal_deps;
-                 exception_graph = exc_graph;
-                 rule_trees = rule_trees;
-               })
+        (* Check if this is a sub-scope variable *)
+        (match ScopeVar.Map.find_opt var scope_decl.Ast.scope_sub_scopes with
+        | Some sub_scope_name ->
+            (* This is a sub-scope variable - collect its input dependencies *)
+            (* We need to include both:
+               1. Dependencies of the SubScopeInput definitions (what they depend on)
+               2. The SubScopeInput variables themselves (they need to be computed first) *)
+            let sub_scope_input_deps = Ast.ScopeDef.Map.fold (fun def_key scope_def acc ->
+              match def_key with
+              | (v, _), Ast.ScopeDef.SubScopeInput { name; var_within_origin_scope = _ } ->
+                  if ScopeVar.equal var v && ScopeName.equal name sub_scope_name then
+                    (* This is an input to our sub-scope *)
+                    (* First, add this SubScopeInput variable itself as a dependency *)
+                    let acc = ScopeVar.Map.add v scope_def.Ast.scope_def_typ acc in
+                    (* Then, collect dependencies from the rules that define this input *)
+                    let all_deps = Desugared.Ast.free_variables scope_def.Ast.scope_def_rules in
+                    let var_deps = Ast.ScopeDef.Map.fold (fun def_key _pos acc ->
+                      match def_key with
+                      | (v, _), Ast.ScopeDef.Var _ -> ScopeVar.Map.add v (var_type def_key) acc
+                      | _ -> acc
+                    ) all_deps acc in
+                    var_deps
+                  else acc
+              | _ -> acc
+            ) scope_decl.Ast.scope_defs ScopeVar.Map.empty in
+            
+            (* Remove input variables from dependencies (they're parameters) *)
+            let internal_deps = ScopeVar.Map.filter (fun _v _t -> not (ScopeVar.Set.mem _v input_vars)) sub_scope_input_deps in
+            
+            (* Get the output type from the sub-scope's output struct *)
+            (* The type should be the output struct type - try to get it from program context first *)
+            let sub_scope_output_type = 
+              match program_ctx with
+              | Some ctx ->
+                  (match ScopeName.Map.find_opt sub_scope_name ctx.ctx_scopes with
+                  | Some scope_info -> Mark.add Pos.void (TStruct scope_info.out_struct_name)
+                  | None -> 
+                      (* Fallback: try scope_defs *)
+                      (match Ast.ScopeDef.Map.find_opt ((var, Pos.void), Ast.ScopeDef.Var state) scope_decl.Ast.scope_defs with
+                      | Some scope_def -> scope_def.Ast.scope_def_typ
+                      | None ->
+                          (* Last resort: construct struct name from scope name *)
+                          let struct_name_str = sanitize_name (ScopeName.to_string sub_scope_name) in
+                          Mark.add Pos.void (TStruct (StructName.fresh [] (struct_name_str, Pos.void)))))
+              | None ->
+                  (* No program context - try scope_defs *)
+                  (match Ast.ScopeDef.Map.find_opt ((var, Pos.void), Ast.ScopeDef.Var state) scope_decl.Ast.scope_defs with
+                  | Some scope_def -> scope_def.Ast.scope_def_typ
+                  | None ->
+                      (* Last resort: construct struct name from scope name *)
+                      let struct_name_str = sanitize_name (ScopeName.to_string sub_scope_name) in
+                      Mark.add Pos.void (TStruct (StructName.fresh [] (struct_name_str, Pos.void))))
+            in
+            
+            Some {
+              var_name = var;
+              var_type = sub_scope_output_type;
+              is_output = (match Ast.ScopeDef.Map.find_opt ((var, Pos.void), Ast.ScopeDef.Var state) scope_decl.Ast.scope_defs with
+                | Some scope_def -> Mark.remove scope_def.Ast.scope_def_io.io_output
+                | None -> false);
+              rules = RuleName.Map.empty;  (* Sub-scope variables don't have rules *)
+              dependencies = internal_deps;
+              exception_graph = Desugared.Dependency.ExceptionsDependencies.empty;
+              rule_trees = [];  (* Sub-scope variables don't have rule trees *)
+              is_sub_scope = true;
+              sub_scope_name = Some sub_scope_name;
+            }
+        | None ->
+            (* Regular variable *)
+            let scope_def_key = ((var, Pos.void), Ast.ScopeDef.Var state) in
+            (match Ast.ScopeDef.Map.find_opt scope_def_key scope_decl.Ast.scope_defs with
+             | None -> None
+             | Some scope_def ->
+                 if RuleName.Map.is_empty scope_def.Ast.scope_def_rules then None
+                 else
+                   (* Get dependencies using existing function *)
+                   let all_deps = Desugared.Ast.free_variables scope_def.Ast.scope_def_rules in
+                   
+                   (* Filter to only variable dependencies *)
+                   let var_deps = Ast.ScopeDef.Map.fold (fun def_key _pos acc ->
+                     match def_key with
+                     | (v, _), Ast.ScopeDef.Var _ -> ScopeVar.Map.add v (var_type def_key) acc
+                     | _ -> acc
+                   ) all_deps ScopeVar.Map.empty in
+                   
+                   (* Remove input variables from dependencies (they're parameters) *)
+                   let internal_deps = ScopeVar.Map.filter (fun _v _t -> not (ScopeVar.Set.mem _v input_vars)) var_deps in
+                   
+                   (* Get exception graph and build rule trees *)
+                   let exc_graph = Ast.ScopeDef.Map.find scope_def_key exc_graphs in
+                   let rule_trees = Scopelang.From_desugared.def_map_to_tree 
+                     scope_def.Ast.scope_def_rules exc_graph in
+                   
+                   Some {
+                     var_name = var;
+                     var_type = scope_def.Ast.scope_def_typ;
+                     is_output = Mark.remove scope_def.Ast.scope_def_io.io_output;
+                     rules = scope_def.Ast.scope_def_rules;
+                     dependencies = internal_deps;
+                     exception_graph = exc_graph;
+                     rule_trees = rule_trees;
+                     is_sub_scope = false;
+                     sub_scope_name = None;
+                   }))
     | _ -> None
   ) scope_ordering in
   
@@ -706,11 +790,15 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
     (String.concat "\n" formatted_fields)
 
 (** Generate Lean code for a scope using method-per-rule architecture *)
-let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
+let format_scope 
+    ?(program_ctx : Shared_ast.decl_ctx option = None)
+    (scope_name : ScopeName.t) 
+    (scope_decl : Ast.scope) 
+    : string =
   let scope_name_str = sanitize_name (ScopeName.to_string scope_name) in
   
   (* 1. Collect variable information in dependency order *)
-  let var_defs, inputs = collect_var_info_ordered scope_decl in
+  let var_defs, inputs = collect_var_info_ordered ~program_ctx scope_decl in
   
   (* 2. Generate input struct (if any inputs) *)
   let input_struct = format_input_struct scope_name_str inputs in
@@ -737,26 +825,73 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   
   (* Helper to get method call for a variable *)
   let get_method_call var_def =
-    let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
-    let method_name = match var_def.rule_trees with
-      | tree :: _ -> format_tree_method_name scope_name_str var_name tree 0
-      | [] -> var_name ^ "_undefined"
-    in
-    (* Pass input and required internal vars as dependencies *)
-    let dep_params = ScopeVar.Map.fold (fun dep_var _dep_ty acc ->
-      let dep_name = sanitize_name (ScopeVar.to_string dep_var) in
-      dep_name :: acc
-    ) var_def.dependencies [] in
-    let all_params = (if has_input then ["input"] else []) @ List.rev dep_params in
-    Printf.sprintf "%s %s" method_name (String.concat " " all_params)
+    if var_def.is_sub_scope then
+      (* Sub-scope variable: call the sub-scope function *)
+      (match var_def.sub_scope_name with
+      | Some sub_scope_name ->
+          let sub_scope_name_str = sanitize_name (ScopeName.to_string sub_scope_name) in
+          let func_name = sanitize_name (String.uncapitalize_ascii sub_scope_name_str) in
+          
+          (* Collect sub-scope input arguments from SubScopeInput definitions *)
+          let sub_scope_inputs = Ast.ScopeDef.Map.fold (fun def_key scope_def acc ->
+            match def_key with
+            | (v, _), Ast.ScopeDef.SubScopeInput { name; var_within_origin_scope } ->
+                if ScopeVar.equal var_def.var_name v && ScopeName.equal name sub_scope_name then
+                  (* Check if this is actually an input (not an output) *)
+                  match Mark.remove scope_def.Ast.scope_def_io.io_input with
+                  | Runtime.NoInput -> acc  (* Skip outputs *)
+                  | _ ->
+                      (* This is an input to our sub-scope - get its value from the rule *)
+                      let input_var_name = sanitize_name (ScopeVar.to_string var_within_origin_scope) in
+                      (* Get the value from the SubScopeInput definition's rules *)
+                      let input_value = 
+                        (* The SubScopeInput definition has rules that define the value *)
+                        if RuleName.Map.is_empty scope_def.Ast.scope_def_rules then
+                          (* No rules - this shouldn't happen for inputs, but handle it *)
+                          "sorry -- no rule for sub-scope input"
+                        else
+                          (* Get the first rule and format its consequence *)
+                          let rule = snd (RuleName.Map.choose scope_def.Ast.scope_def_rules) in
+                          let cons_expr = Expr.unbox rule.Ast.rule_cons in
+                          format_expr ~scope_defs:(Some scope_decl.Ast.scope_defs) cons_expr
+                      in
+                      Printf.sprintf "%s := %s" input_var_name input_value :: acc
+                else acc
+            | _ -> acc
+          ) scope_decl.Ast.scope_defs [] in
+          
+          if sub_scope_inputs = [] then
+            Printf.sprintf "%s { }" func_name
+          else
+            Printf.sprintf "%s { %s }" func_name (String.concat ", " (List.rev sub_scope_inputs))
+      | None -> "sorry -- sub-scope name missing")
+    else
+      (* Regular variable: call the method *)
+      let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
+      let method_name = match var_def.rule_trees with
+        | tree :: _ -> format_tree_method_name scope_name_str var_name tree 0
+        | [] -> var_name ^ "_undefined"
+      in
+      (* Pass input and required internal vars as dependencies *)
+      let dep_params = ScopeVar.Map.fold (fun dep_var _dep_ty acc ->
+        let dep_name = sanitize_name (ScopeVar.to_string dep_var) in
+        dep_name :: acc
+      ) var_def.dependencies [] in
+      let all_params = (if has_input then ["input"] else []) @ List.rev dep_params in
+      Printf.sprintf "%s %s" method_name (String.concat " " all_params)
   in
   
   (* Build let bindings for ALL variables in dependency order *)
   let all_bindings = List.map (fun var_def ->
     let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
     let call = get_method_call var_def in
-    Printf.sprintf "let %s := match %s with | .ok (some val) => val | _ => sorry "
-      var_name call
+    if var_def.is_sub_scope then
+      (* Sub-scope variables return the struct directly, no D monad *)
+      Printf.sprintf "let %s := %s" var_name call
+    else
+      (* Regular variables return D monad *)
+      Printf.sprintf "let %s := match %s with | .ok (some val) => val | _ => sorry "
+        var_name call
   ) var_defs in
   
   (* Build output struct field assignments by just referencing the variables *)
@@ -816,7 +951,7 @@ let generate_lean_code (prgm : Ast.program) : string =
   
   (* Generate code for each scope in the program root *)
   let scope_code = ScopeName.Map.fold (fun scope_name scope_decl acc ->
-    let code = format_scope scope_name scope_decl in
+    let code = format_scope ~program_ctx:(Some prgm.program_ctx) scope_name scope_decl in
     code :: acc
   ) prgm.program_root.module_scopes [] in
   
