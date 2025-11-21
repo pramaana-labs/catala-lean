@@ -22,6 +22,46 @@ module Ast = Desugared.Ast
 
 module Runtime = Catala_runtime
 
+(** {1 Keyword handling} *)
+
+(** Lean 4 reserved keywords *)
+let lean_keywords =
+  [
+    "def"; "theorem"; "axiom"; "inductive"; "structure"; "class";
+    "instance"; "let"; "in"; "fun"; "match"; "if"; "then"; "else";
+    "do"; "return"; "import"; "where"; "deriving"; "namespace"; "end";
+    "section"; "variable"; "universe"; "open"; "export"; "private";
+    "protected"; "noncomputable"; "unsafe"; "partial"; "mutual";
+    "attribute"; "infix"; "infixl"; "infixr"; "prefix"; "postfix";
+    "notation"; "macro"; "syntax"; "elab"; "command"; "builtin_initialize";
+    "initialize"; "builtin_finalize"; "finalize"; "builtin_eval"; "eval";
+    "check"; "check_failure"; "run_cmd"; "compile"; "compile_inductive";
+    "compile_def"; "compile_axiom"; "compile_structure"; "compile_inductive";
+    "all_goals"; "any_goals"; "focus"; "rotate_left"; "rotate_right";
+    "repeat"; "try"; "first"; "solve1"; "trace"; "trace_state";
+    "trace_message"; "assumption"; "contradiction"; "constructor"; "cases";
+    "case"; "next"; "skip"; "sorry"; "admit"; "exact"; "apply"; "refine";
+    "rw"; "simp"; "dsimp"; "unfold"; "fold"; "change"; "convert"; "congr";
+    "ac_refl"; "cc"; "linarith"; "omega"; "finish"; "safe"; "norm_num";
+    "norm_cast"; "push_cast"; "ring"; "ring_exp"; "abel"; "field_simp";
+    "cancel_denoms"; "cancel_denoms"; "field"; "interval_cases"; "by_contra";
+    "by_contradiction"; "by_cases"; "trivial"; "dec_trivial"; "tauto";
+    "propext"; "ext"; "funext"; "use"; "exists"; "existsi"; "choose"; "obtain"; "from"; "have";
+    "suffices"; "show"; "by"; "calc"; "trans"; "symm"; "congr_arg";
+    "congr_fun"; "congr"; "refl"; "rfl"; 
+  ]
+
+(** Create a set of keywords for fast lookup *)
+let lean_keywords_set = 
+  List.fold_left (fun acc kw -> String.Set.add kw acc) String.Set.empty lean_keywords
+
+(** Sanitize a name to avoid Lean keyword conflicts *)
+let sanitize_name (name : string) : string =
+  if String.Set.mem name lean_keywords_set then
+    "_" ^ name 
+  else
+    name
+
 (** {1 Phase 1: Variable collection and dependency analysis} *)
 
 (** Information about a scope input variable *)
@@ -168,8 +208,8 @@ let rec format_typ (ty : typ) : string =
   | TTuple ts ->
       let formatted = List.map format_typ ts in
       Printf.sprintf "(%s)" (String.concat " × " formatted)
-  | TStruct s -> StructName.to_string s
-  | TEnum e -> EnumName.to_string e
+  | TStruct s -> sanitize_name (StructName.to_string s)
+  | TEnum e -> sanitize_name (EnumName.to_string e)
   | TOption t ->
       Printf.sprintf "(Option %s)" (format_typ t)
   | TArrow (args, ret) ->
@@ -190,11 +230,11 @@ let format_location
     : string =
   match loc with
   | DesugaredScopeVar { name; state } ->
-      let var_name = ScopeVar.to_string (Mark.remove name) in
+      let var_name = sanitize_name (ScopeVar.to_string (Mark.remove name)) in
       let base_name = match state with
         | None -> var_name
         | Some state_name -> 
-            Printf.sprintf "%s_%s" var_name (StateName.to_string state_name)
+            Printf.sprintf "%s_%s" var_name (sanitize_name (StateName.to_string state_name))
       in
       (* Check if this is an input variable that should be prefixed with "input." *)
       (match scope_defs with
@@ -213,7 +253,7 @@ let format_location
               else
                 base_name))
   | ToplevelVar { name; _ } ->
-      TopdefName.to_string (Mark.remove name)
+      sanitize_name (TopdefName.to_string (Mark.remove name))
 
 (** Format an expression to Lean code *)
 let rec format_expr 
@@ -222,7 +262,7 @@ let rec format_expr
     : string =
   match Mark.remove e with
   | ELit l -> format_lit l
-  | EVar v -> Bindlib.name_of v
+  | EVar v -> sanitize_name (Bindlib.name_of v)
   | EIfThenElse { cond; etrue; efalse } ->
       Printf.sprintf "(if %s then %s else %s)"
         (format_expr ~scope_defs cond)
@@ -242,16 +282,16 @@ let rec format_expr
       let bindings = StructField.Map.bindings fields in
       let formatted_fields = List.map (fun (field, e) ->
         Printf.sprintf "%s := %s"
-          (StructField.to_string field)
+          (sanitize_name (StructField.to_string field))
           (format_expr ~scope_defs e)
       ) bindings in
       Printf.sprintf "{ %s }" (String.concat ", " formatted_fields)
   | EStructAccess { e; field; name = _ } ->
-      Printf.sprintf "(%s).%s" (format_expr ~scope_defs e) (StructField.to_string field)
+      Printf.sprintf "(%s).%s" (format_expr ~scope_defs e) (sanitize_name (StructField.to_string field))
   | EInj { e; cons; name } ->
       Printf.sprintf "(%s.%s %s)"
-        (EnumName.to_string name)
-        (EnumConstructor.to_string cons)
+        (sanitize_name (EnumName.to_string name))
+        (sanitize_name (EnumConstructor.to_string cons))
         (format_expr ~scope_defs e)
   | EArray es ->
       let formatted = List.map (format_expr ~scope_defs) es in
@@ -273,7 +313,7 @@ let rec format_expr
         | _ ->
             (* Typed parameter: fun (x : Type) => body *)
             Printf.sprintf "(%s : %s)" 
-              (Bindlib.name_of var) 
+              (sanitize_name (Bindlib.name_of var)) 
               (format_typ ty)
       ) params tys in
       Printf.sprintf "fun %s => %s"
@@ -443,7 +483,7 @@ let format_tree_method_name
   let format_rule_method_name (rule : Ast.rule) : string =
     (match rule.Ast.rule_label with
     | Ast.ExplicitlyLabeled (label, _) ->
-        Printf.sprintf "%s_%s_%s" scope_name var_name (LabelName.to_string label)
+        Printf.sprintf "%s_%s_%s" scope_name var_name (sanitize_name (LabelName.to_string label))
     | Ast.Unlabeled ->
         Printf.sprintf "%s_%s_leaf_%d" scope_name var_name index) in
   match tree with
@@ -484,7 +524,7 @@ let format_method_params
               acc  (* Input variables are accessed via input struct, not separate params *)
             else
               let type_name = format_typ scope_def.Ast.scope_def_typ in
-              let var_name = ScopeVar.to_string (Mark.remove name) in
+              let var_name = sanitize_name (ScopeVar.to_string (Mark.remove name)) in
               Printf.sprintf "(%s : %s)" var_name type_name :: acc)
     | ToplevelVar _ -> acc  (* Skip toplevel vars for now *)
   ) dependencies [] in
@@ -564,7 +604,7 @@ let rec format_rule_tree_method
       in
       
       (* Call exception methods - need to pass all their dependencies *)
-      let exception_calls = List.mapi (fun i (exc_methods, exc_deps) ->
+      let exception_calls = List.mapi (fun i (_exc_methods, exc_deps) ->
         let exc_method_name = format_tree_method_name scope_name var_name (List.nth exception_trees i) (index * 10 + i) in
         let exc_params = format_method_params inputs scope_name exc_deps scope_defs in
         (* Extract just the parameter names from the formatted params *)
@@ -634,7 +674,7 @@ let format_var_methods
     (inputs : input_info list)
     (scope_defs : Ast.scope_def Ast.ScopeDef.Map.t)
     : string list =
-  let var_name_str = ScopeVar.to_string var_def.var_name in
+  let var_name_str = sanitize_name (ScopeVar.to_string var_def.var_name) in
   List.concat (List.mapi (fun i tree ->
     let methods, _deps = format_rule_tree_method scope_name var_name_str var_def.var_type inputs tree i scope_defs in
     methods
@@ -646,7 +686,7 @@ let format_input_struct (scope_name : string) (inputs : input_info list) : strin
   else
     let formatted_fields = List.map (fun (input : input_info) ->
       Printf.sprintf "  %s : %s"
-        (ScopeVar.to_string input.var_name)
+        (sanitize_name (ScopeVar.to_string input.var_name))
         (format_typ input.var_type)
     ) inputs in
     Printf.sprintf "structure %s_Input where\n%s\n"
@@ -658,7 +698,7 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
   let field_list = StructField.Map.bindings fields in
   let formatted_fields = List.map (fun (field, ty) ->
     Printf.sprintf "  %s : %s"
-      (StructField.to_string field)
+      (sanitize_name (StructField.to_string field))
       (format_typ ty)
   ) field_list in
   Printf.sprintf "structure %s where\n%s"
@@ -667,7 +707,7 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
 
 (** Generate Lean code for a scope using method-per-rule architecture *)
 let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
-  let scope_name_str = ScopeName.to_string scope_name in
+  let scope_name_str = sanitize_name (ScopeName.to_string scope_name) in
   
   (* 1. Collect variable information in dependency order *)
   let var_defs, inputs = collect_var_info_ordered scope_decl in
@@ -683,7 +723,7 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   (* 4. Generate output struct *)
   let output_vars = List.filter (fun v -> v.is_output) var_defs in
   let output_fields = List.fold_left (fun acc var_def ->
-    let field_name = StructField.fresh (ScopeVar.to_string var_def.var_name, Pos.void) in
+    let field_name = StructField.fresh (sanitize_name (ScopeVar.to_string var_def.var_name), Pos.void) in
     StructField.Map.add field_name var_def.var_type acc
   ) StructField.Map.empty output_vars in
   
@@ -691,20 +731,20 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   
   (* 5. Generate main scope function that calls methods *)
   (* Use lowercase for function name to avoid conflict with struct name *)
-  let scope_func_name = String.uncapitalize_ascii scope_name_str in
+  let scope_func_name = sanitize_name (String.uncapitalize_ascii scope_name_str) in
   let has_input = inputs <> [] in
   let input_param = if has_input then Printf.sprintf "(input : %s_Input)" scope_name_str else "" in
   
   (* Helper to get method call for a variable *)
   let get_method_call var_def =
-    let var_name = ScopeVar.to_string var_def.var_name in
+    let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
     let method_name = match var_def.rule_trees with
       | tree :: _ -> format_tree_method_name scope_name_str var_name tree 0
       | [] -> var_name ^ "_undefined"
     in
     (* Pass input and required internal vars as dependencies *)
     let dep_params = ScopeVar.Map.fold (fun dep_var _dep_ty acc ->
-      let dep_name = ScopeVar.to_string dep_var in
+      let dep_name = sanitize_name (ScopeVar.to_string dep_var) in
       dep_name :: acc
     ) var_def.dependencies [] in
     let all_params = (if has_input then ["input"] else []) @ List.rev dep_params in
@@ -713,7 +753,7 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   
   (* Build let bindings for ALL variables in dependency order *)
   let all_bindings = List.map (fun var_def ->
-    let var_name = ScopeVar.to_string var_def.var_name in
+    let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
     let call = get_method_call var_def in
     Printf.sprintf "let %s := match %s with | .ok (some val) => val | _ => sorry "
       var_name call
@@ -721,7 +761,7 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   
   (* Build output struct field assignments by just referencing the variables *)
   let output_assignments = List.map (fun var_def ->
-    let var_name = ScopeVar.to_string var_def.var_name in
+    let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
     Printf.sprintf "%s := %s" var_name var_name
   ) output_vars in
   
@@ -770,7 +810,7 @@ let generate_lean_code (prgm : Ast.program) : string =
     if StructName.Set.mem struct_name scope_structs then
       acc
     else
-      let code = format_struct_decl (StructName.to_string struct_name) fields in
+      let code = format_struct_decl (sanitize_name (StructName.to_string struct_name)) fields in
       code :: acc
   ) prgm.program_ctx.ctx_structs [] in
   
