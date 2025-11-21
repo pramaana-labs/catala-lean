@@ -177,7 +177,7 @@ let rec format_typ (ty : typ) : string =
       let formatted = List.map format_typ all_types in
       Printf.sprintf "(%s)" (String.concat " → " formatted)
   | TArray t ->
-      Printf.sprintf "(Array %s)" (format_typ t)
+      Printf.sprintf "(List %s)" (format_typ t)
   | TDefault t -> format_typ t
   | TVar _ | TForAll _ | TClosureEnv ->
       (* For now, output Unit for complex types we don't fully support *)
@@ -255,7 +255,7 @@ let rec format_expr
         (format_expr ~scope_defs e)
   | EArray es ->
       let formatted = List.map (format_expr ~scope_defs) es in
-      Printf.sprintf "#[%s]" (String.concat ", " formatted)
+      Printf.sprintf "[%s]" (String.concat ", " formatted)
   | EAppOp { op; args; tys = _ } ->
       format_operator ~scope_defs op args
   | EMatch _ ->
@@ -667,6 +667,8 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   let output_struct = format_struct_decl scope_name_str output_fields in
   
   (* 5. Generate main scope function that calls methods *)
+  (* Use lowercase for function name to avoid conflict with struct name *)
+  let scope_func_name = String.uncapitalize_ascii scope_name_str in
   let has_input = inputs <> [] in
   let input_param = if has_input then Printf.sprintf "(input : %s_Input)" scope_name_str else "" in
   
@@ -690,8 +692,8 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
   let all_bindings = List.map (fun var_def ->
     let var_name = ScopeVar.to_string var_def.var_name in
     let call = get_method_call var_def in
-    Printf.sprintf "let %s := match %s with | .ok (some val) => val | _ => sorry \"error: %s\" in"
-      var_name call var_name
+    Printf.sprintf "let %s := match %s with | .ok (some val) => val | _ => sorry "
+      var_name call
   ) var_defs in
   
   (* Build output struct field assignments by just referencing the variables *)
@@ -705,13 +707,13 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
     if all_bindings = [] then
       (* No variables at all (shouldn't happen, but handle it) *)
       Printf.sprintf "def %s %s : %s :=\n  { }"
-        scope_name_str
+        scope_func_name
         input_param
         scope_name_str
     else
       (* Generate let bindings for all variables, then construct struct *)
       Printf.sprintf "def %s %s : %s :=\n  %s\n  { %s }"
-        scope_name_str
+        scope_func_name
         input_param
         scope_name_str
         (String.concat "\n  " all_bindings)
@@ -731,13 +733,37 @@ let format_scope (scope_name : ScopeName.t) (scope_decl : Ast.scope) : string =
 let generate_lean_code (prgm : Ast.program) : string =
   let header = "import CatalaRuntime\n\nopen CatalaRuntime\n" in
   
+  (* Collect scope input and output struct names to avoid generating them twice *)
+  (* (they're generated in format_scope) *)
+  let scope_structs = ScopeName.Map.fold (fun _scope_name scope_info acc ->
+    acc
+    |> StructName.Set.add scope_info.in_struct_name
+    |> StructName.Set.add scope_info.out_struct_name
+  ) prgm.program_ctx.ctx_scopes StructName.Set.empty in
+  
+  (* Generate all struct declarations from the context, excluding scope structs *)
+  let struct_code = StructName.Map.fold (fun struct_name fields acc ->
+    (* Skip scope input/output structs - they're generated separately in format_scope *)
+    if StructName.Set.mem struct_name scope_structs then
+      acc
+    else
+      let code = format_struct_decl (StructName.to_string struct_name) fields in
+      code :: acc
+  ) prgm.program_ctx.ctx_structs [] in
+  
   (* Generate code for each scope in the program root *)
   let scope_code = ScopeName.Map.fold (fun scope_name scope_decl acc ->
     let code = format_scope scope_name scope_decl in
     code :: acc
   ) prgm.program_root.module_scopes [] in
   
-  header ^ "\n" ^ (String.concat "\n\n" (List.rev scope_code))
+  (* Combine: header, structs, then scopes *)
+  let all_parts = List.filter (fun s -> s <> "") [
+    header;
+    String.concat "\n\n" (List.rev struct_code);
+    String.concat "\n\n" (List.rev scope_code)
+  ] in
+  String.concat "\n\n" all_parts
 
 (** {1 Plugin registration} *)
 
