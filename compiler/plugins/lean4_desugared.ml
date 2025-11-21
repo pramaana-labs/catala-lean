@@ -315,7 +315,15 @@ and format_operator
   (* Overloaded operators in desugared AST *)
   | Add -> binop "+"
   | Sub -> binop "-"
-  | Mult -> binop "*"
+  | Mult ->
+      (* Use CatalaRuntime.multiply which handles all type combinations *)
+      (match args with
+      | [arg1; arg2] ->
+          let arg1_str = format_expr ~scope_defs arg1 in
+          let arg2_str = format_expr ~scope_defs arg2 in
+          Printf.sprintf "(CatalaRuntime.multiply %s %s)"
+            arg1_str arg2_str
+      | _ -> "sorry -- wrong number of args for Mult")
   | Div -> binop "/"
   | Minus -> unop "-"
   | Lt -> binop "<"
@@ -355,9 +363,24 @@ and format_operator
               (format_expr ~scope_defs init)
               (format_expr ~scope_defs arr)
         | _ -> "sorry -- wrong args for Fold")
-
-  | Reduce | Concat | Map2 ->
-      "sorry -- array operations not yet fully implemented"
+  | Concat ->
+      (match args with
+        | [arr1; arr2] ->
+            Printf.sprintf "(%s ++ %s)"
+              (format_expr ~scope_defs arr1)
+              (format_expr ~scope_defs arr2)
+        | _ -> "sorry -- wrong args for Concat")
+  | Reduce ->
+      (match args with
+        | [fn; default; arr] ->
+            (* Reduce: if array is empty, call default(); otherwise fold starting with first element *)
+            Printf.sprintf "(match %s with | [] => %s () | x0 :: xn => List.foldl %s x0 xn)"
+              (format_expr ~scope_defs arr)
+              (format_expr ~scope_defs default)
+              (format_expr ~scope_defs fn)
+        | _ -> "sorry -- wrong args for Reduce")
+  | Map2 ->
+      "sorry -- map2 not yet implemented\n"
   (* Conversions *)
   | ToInt ->
       (match args with

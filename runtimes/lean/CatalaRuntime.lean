@@ -163,7 +163,7 @@ instance : HMul Duration Int Duration where
 
 /-- Create rational from numerator and denominator -/
 -- Note: Simplified implementation - just does integer division for now
-def mkRational (num den : Int) : Int :=
+def mkRational (num den : Int) : Rat :=
   if den = 0 then
     panic! "Rational denominator cannot be zero"
   else
@@ -229,6 +229,11 @@ namespace Money
 @[inline] def mulFloat (m : Money) (f : Float) : Money :=
   ⟨(Float.toInt64 (Float.round (Float.ofInt m.cents * f))).toInt⟩
 
+/-- Multiply Money by Rat (rational number) -/
+@[inline] def mulRat (m : Money) (r : Rat) : Money :=
+  let rat_float := (Float.ofInt (Rat.num r)) / (Float.ofInt (Rat.den r))
+  mulFloat m rat_float
+
 /-- Greater than or equal -/
 @[inline] def ge (a b : Money) : Bool := a.cents ≥ b.cents
 
@@ -249,6 +254,62 @@ end Money
 -- Float multiplication for Money
 instance : HMul Money Float Money where
   hMul := Money.mulFloat
+
+-- ============================================================================
+-- Generic Multiplication Function
+-- ============================================================================
+
+/-- Type class for Catala multiplication -/
+class CatalaMul (α : Type) (β : Type) (γ : Type) where
+  multiply : α → β → γ
+
+/-- Money * Rat -> Money -/
+instance : CatalaMul Money Rat Money where
+  multiply := Money.mulRat
+
+/-- Rat * Money -> Money -/
+instance : CatalaMul Rat Money Money where
+  multiply r m := Money.mulRat m r
+
+/-- Money * Int -> Money -/
+instance : CatalaMul Money Int Money where
+  multiply := Money.mulInt
+
+/-- Int * Money -> Money -/
+instance : CatalaMul Int Money Money where
+  multiply i m := Money.mulInt m i
+
+/-- Money * Float -> Money -/
+instance : CatalaMul Money Float Money where
+  multiply := Money.mulFloat
+
+/-- Float * Money -> Money -/
+instance : CatalaMul Float Money Money where
+  multiply f m := Money.mulFloat m f
+
+/-- Duration * Int -> Duration -/
+instance : CatalaMul Duration Int Duration where
+  multiply := Duration.mulInt
+
+/-- Int * Duration -> Duration -/
+instance : CatalaMul Int Duration Duration where
+  multiply i d := Duration.mulInt d i
+
+/-- Int * Int -> Int -/
+instance : CatalaMul Int Int Int where
+  multiply := (· * ·)
+
+/-- Rat * Rat -> Rat -/
+instance : CatalaMul Rat Rat Rat where
+  multiply := (· * ·)
+
+/-- Float * Float -> Float -/
+instance : CatalaMul Float Float Float where
+  multiply := (· * ·)
+
+/-- Generic multiplication function -/
+def multiply {α β γ : Type} [CatalaMul α β γ] (a : α) (b : β) : γ :=
+  CatalaMul.multiply a b
 
 -- ============================================================================
 -- Date Operations (Extended)
