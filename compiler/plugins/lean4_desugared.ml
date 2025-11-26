@@ -22,6 +22,7 @@ module Ast = Desugared.Ast
 
 module Runtime = Catala_runtime
 
+
 (** {1 Keyword handling} *)
 
 (** Lean 4 reserved keywords *)
@@ -48,7 +49,7 @@ let lean_keywords =
     "by_contradiction"; "by_cases"; "trivial"; "dec_trivial"; "tauto";
     "propext"; "ext"; "funext"; "use"; "exists"; "existsi"; "choose"; "obtain"; "from"; "have";
     "suffices"; "show"; "by"; "calc"; "trans"; "symm"; "congr_arg";
-    "congr_fun"; "congr"; "refl"; "rfl"; 
+    "congr_fun"; "congr"; "refl"; "rfl"; "example"
   ]
 
 (** Create a set of keywords for fast lookup *)
@@ -295,7 +296,7 @@ let rec format_typ (ty : typ) : string =
   | TStruct s -> sanitize_name (StructName.to_string s)
   | TEnum e -> sanitize_name (EnumName.to_string e)
   | TOption t ->
-      Printf.sprintf "(Option %s)" (format_typ t)
+      Printf.sprintf "(Optional %s)" (format_typ t)
   | TArrow (args, ret) ->
       let all_types = args @ [ret] in
       let formatted = List.map format_typ all_types in
@@ -303,9 +304,9 @@ let rec format_typ (ty : typ) : string =
   | TArray t ->
       Printf.sprintf "(List %s)" (format_typ t)
   | TDefault t -> format_typ t
-  | TVar _ | TForAll _ | TClosureEnv ->
-      (* For now, output Unit for complex types we don't fully support *)
-      "Unit"
+  | TForAll _ -> "TForall"
+  | TVar _  | TClosureEnv -> "Unit"
+    (* For now, output Unit for complex types we don't fully support *)
 
 (** Format a location (variable reference) to Lean code *)
 let format_location 
@@ -400,14 +401,22 @@ let rec format_expr
               (sanitize_name (Bindlib.name_of var)) 
               (format_typ ty)
       ) params tys in
-      Printf.sprintf "fun %s => %s"
+      Printf.sprintf "(fun %s => %s)"
         (String.concat " " param_strs)
         (format_expr ~scope_defs body)
   | ELocation loc ->
       format_location ~scope_defs loc
-  | EScopeCall _ ->
-      (* Scope calls - will handle later *)
-      "sorry -- scope call not yet implemented\n"
+  | EScopeCall { scope; args } ->
+     let function_name = sanitize_name (String.uncapitalize_ascii (ScopeName.to_string scope)) in 
+    let args_values_list = ScopeVar.Map.fold
+    (fun scope_var (pos, gexpr) acc ->
+       let s = format_expr gexpr in
+       ((ScopeVar.to_string scope_var) ^ ":=" ^ s)  :: acc
+    ) args []
+    in 
+    let args_string = String.concat "," args_values_list in
+    "(" ^ function_name ^ " " ^ "{" ^ args_string ^ "}" ^ ")" 
+    (* Scope calls handled, but not completely *)
   | EDefault _ | EPureDefault _ | EEmpty | EErrorOnEmpty _ ->
       (* Default logic - will handle later *)
       "sorry -- default logic not yet implemented\n"
@@ -556,6 +565,7 @@ let rules_locations_used (rules : Ast.rule list) : Ast.LocationSet.t =
     Ast.LocationSet.union acc (Ast.LocationSet.union just_locs cons_locs)
   ) Ast.LocationSet.empty rules
 
+
 (** Generate a unique method name for a rule tree node *)
 
 let format_tree_method_name 
@@ -569,7 +579,12 @@ let format_tree_method_name
     | Ast.ExplicitlyLabeled (label, _) ->
         Printf.sprintf "%s_%s_%s" scope_name var_name (sanitize_name (LabelName.to_string label))
     | Ast.Unlabeled ->
-        Printf.sprintf "%s_%s_leaf_%d" scope_name var_name index) in
+        (match tree with 
+        | Scopelang.From_desugared.Leaf base_rules ->
+          Printf.sprintf "%s_%s_leaf_%d" scope_name var_name index 
+        | Scopelang.From_desugared.Node (_,base_rules) ->
+          Printf.sprintf "%s_%s_node_%d" scope_name var_name index)
+        ) in 
   match tree with
   | Scopelang.From_desugared.Leaf base_rules ->
       (* Use label from first rule if available *)
@@ -789,6 +804,41 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
     name
     (String.concat "\n" formatted_fields)
 
+(* Format a enum declaration to lean code *)
+(* TODO: Remove redundant unit declarations *)
+let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string = 
+  let constructor_list = EnumConstructor.Map.bindings fields in 
+  let num_forall_ty = List.fold_left (fun acc (field, ty) ->
+    match Mark.remove ty with 
+    | TForAll _ -> acc + 1
+    | _ -> acc
+    ) 0 constructor_list
+    in 
+    if num_forall_ty = 0 then 
+      (let formatted_fields =  (List.map (fun (field, ty) ->
+      Printf.sprintf " | %s : %s -> %s"
+      (sanitize_name (EnumConstructor.to_string field))
+      (format_typ ty)
+      name 
+      ) constructor_list )
+      in
+      Printf.sprintf "inductive %s : Type where\n%s"
+        name
+        (String.concat "\n" formatted_fields))
+    else 
+      (let formatted_fields = (List.map (fun (field, ty) ->
+      Printf.sprintf " | %s : %s -> %s TForall"
+      (sanitize_name (EnumConstructor.to_string field))
+      (format_typ ty)
+      name 
+      ) constructor_list)
+      in 
+      Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s"
+        name
+        (String.concat "\n" formatted_fields))
+
+ 
+
 (** Generate Lean code for a scope using method-per-rule architecture *)
 let format_scope 
     ?(program_ctx : Shared_ast.decl_ctx option = None)
@@ -816,7 +866,7 @@ let format_scope
   ) StructField.Map.empty output_vars in
   
   let output_struct = format_struct_decl scope_name_str output_fields in
-  
+
   (* 5. Generate main scope function that calls methods *)
   (* Use lowercase for function name to avoid conflict with struct name *)
   let scope_func_name = sanitize_name (String.uncapitalize_ascii scope_name_str) in
@@ -848,7 +898,7 @@ let format_scope
                         (* The SubScopeInput definition has rules that define the value *)
                         if RuleName.Map.is_empty scope_def.Ast.scope_def_rules then
                           (* No rules - this shouldn't happen for inputs, but handle it *)
-                          "sorry -- no rule for sub-scope input"
+                          "sorry -- no rule for sub-scope input\n"
                         else
                           (* Get the first rule and format its consequence *)
                           let rule = snd (RuleName.Map.choose scope_def.Ast.scope_def_rules) in
@@ -944,10 +994,17 @@ let generate_lean_code (prgm : Ast.program) : string =
     (* Skip scope input/output structs - they're generated separately in format_scope *)
     if StructName.Set.mem struct_name scope_structs then
       acc
+    else if ((StructName.to_string struct_name) = "Period_en.Period" || (StructName.to_string struct_name) = "Date_en.MonthOfYear") then
+      acc
     else
       let code = format_struct_decl (sanitize_name (StructName.to_string struct_name)) fields in
       code :: acc
-  ) prgm.program_ctx.ctx_structs [] in
+  ) prgm.program_ctx.ctx_structs [] in 
+
+  let enum_code = EnumName.Map.fold (fun enum_name fields acc ->
+    let code = format_enum_decl (sanitize_name (EnumName.to_string enum_name)) fields in
+    code :: acc
+  ) prgm.program_ctx.ctx_enums [] in 
   
   (* Generate code for each scope in the program root *)
   let scope_code = ScopeName.Map.fold (fun scope_name scope_decl acc ->
@@ -958,6 +1015,7 @@ let generate_lean_code (prgm : Ast.program) : string =
   (* Combine: header, structs, then scopes *)
   let all_parts = List.filter (fun s -> s <> "") [
     header;
+    String.concat "\n\n" (List.rev enum_code);
     String.concat "\n\n" (List.rev struct_code);
     String.concat "\n\n" (List.rev scope_code)
   ] in

@@ -3,6 +3,7 @@
 
   Minimal runtime support for Catala programs compiled to Lean4.
 -/
+import Mathlib.Data.Rat.Init
 
 namespace CatalaRuntime
 
@@ -50,6 +51,8 @@ structure SourcePosition where
 instance : ToString SourcePosition where
   toString p := s!"{p.filename}:{p.start_line}:{p.start_column}"
 
+
+
 -- ============================================================================
 -- Money Operations
 -- ============================================================================
@@ -93,6 +96,7 @@ instance : DecidableRel (α := Money) (· ≤ ·) :=
 instance : DecidableRel (α := Money) (· < ·) :=
   fun a b => inferInstanceAs (Decidable (a.cents < b.cents))
 
+
 end Money
 
 -- Multiplication operator for Money
@@ -126,6 +130,13 @@ end Date
 instance : HSub Date Date Duration where
   hSub := Date.difference
 
+-- adding a duration to a date
+
+instance : HAdd Duration Date Date where
+  hAdd dur dat := Date.addDuration dat dur
+
+instance : HAdd Date Duration Date where
+  hAdd dat dur := Date.addDuration dat dur
 -- ============================================================================
 -- Duration Operations
 -- ============================================================================
@@ -153,6 +164,8 @@ instance : Neg Duration where
 
 end Duration
 
+set_option autoImplicit false
+
 -- Multiplication operator for Duration
 instance : HMul Duration Int Duration where
   hMul := Duration.mulInt
@@ -163,6 +176,8 @@ instance : HMul Duration Int Duration where
 
 /-- Create rational from numerator and denominator -/
 -- Note: Simplified implementation - just does integer division for now
+
+
 def mkRational (num den : Int) : Rat :=
   if den = 0 then
     panic! "Rational denominator cannot be zero"
@@ -234,6 +249,10 @@ namespace Money
   let rat_float := (Float.ofInt (Rat.num r)) / (Float.ofInt (Rat.den r))
   mulFloat m rat_float
 
+@[inline] def divMoney (m1: Money) (m2: Money) : ℚ :=
+  (m1.cents : ℚ) / (m2.cents : ℚ)
+
+#check Rat
 /-- Greater than or equal -/
 @[inline] def ge (a b : Money) : Bool := a.cents ≥ b.cents
 
@@ -255,12 +274,24 @@ end Money
 instance : HMul Money Float Money where
   hMul := Money.mulFloat
 
+-- Division of Money by Money to give a Rational number
+
+instance: HDiv Money Money ℚ where
+  hDiv m1 m2 := Money.divMoney m1 m2
+
+-- Division of Money by rationals and integers to give Money
+
+instance: HDiv Money ℚ Money where
+  hDiv m q := Money.mulRat m (1/q)
+
+instance: HDiv Money Int Money where
+  hDiv m i := {cents := m.cents / i}
 -- ============================================================================
 -- Generic Multiplication Function
 -- ============================================================================
 
 /-- Type class for Catala multiplication -/
-class CatalaMul (α : Type) (β : Type) (γ : Type) where
+class CatalaMul (α : Type) (β : Type) (γ : outParam Type) where
   multiply : α → β → γ
 
 /-- Money * Rat -> Money -/
@@ -297,7 +328,13 @@ instance : CatalaMul Int Duration Duration where
 
 /-- Int * Int -> Int -/
 instance : CatalaMul Int Int Int where
-  multiply := (· * ·)
+  multiply i1 i2 := i1 * i2
+
+instance : CatalaMul Int Rat Rat where
+  multiply i r := ↑(i:Int) * r
+
+instance: CatalaMul Rat Int Rat where
+  multiply r i := ↑(i:Int) * r
 
 /-- Rat * Rat -> Rat -/
 instance : CatalaMul Rat Rat Rat where
@@ -338,6 +375,41 @@ def ge (d1 d2 : Date) : Bool := le d2 d1
 /-- Compare dates: equal -/
 def eq (d1 d2 : Date) : Bool :=
   d1.year = d2.year && d1.month = d2.month && d1.day = d2.day
+
+instance : LT Duration where
+  lt a b := (a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
+    (a.years = b.years ∧ a.months = b.months ∧ a.days < b.days)
+
+instance : LE Duration where
+  le a b := (a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
+    (a.years = b.years ∧ a.months = b.months ∧ a.days ≤ b.days)
+
+instance : LT Date where
+  lt a b := (a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
+    (a.year = b.year ∧ a.month = b.month ∧ a.day < b.day)
+
+instance : LE Date where
+  le a b := (a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
+    (a.year = b.year ∧ a.month = b.month ∧ a.day ≤ b.day)
+
+-- instance : DecidableRel (α := Money) (· ≤ ·) :=
+--   fun a b => inferInstanceAs (Decidable (a.cents ≤ b.cents))
+
+instance : DecidableRel (α := Date) (· < ·) :=
+  fun a b => inferInstanceAs (Decidable ((a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
+    (a.year = b.year ∧ a.month = b.month ∧ a.day < b.day)))
+
+instance : DecidableRel (α := Date) (· ≤ ·) :=
+  fun a b => inferInstanceAs (Decidable ((a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
+    (a.year = b.year ∧ a.month = b.month ∧ a.day ≤ b.day)))
+
+instance : DecidableRel (α := Duration) (· < ·) :=
+  fun a b => inferInstanceAs (Decidable ((a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
+    (a.years = b.years ∧ a.months = b.months ∧ a.days < b.days)))
+
+instance : DecidableRel (α := Duration)  (· ≤ ·) :=
+  fun a b => inferInstanceAs (Decidable ((a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
+    (a.years = b.years ∧ a.months = b.months ∧ a.days ≤ b.days)))
 
 end Date
 
@@ -414,3 +486,4 @@ end CatalaRuntime
 -- Export Rat.mk as an alias
 -- Note: Returns Int for now, not Rat (simplified)
 @[inline] def Rat.mk := CatalaRuntime.mkRational
+
