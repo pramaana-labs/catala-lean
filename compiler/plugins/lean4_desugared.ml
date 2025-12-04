@@ -17,6 +17,7 @@
 
 open Catala_utils
 open Shared_ast
+open Desugared.Dependency
 
 module Ast = Desugared.Ast
 
@@ -58,8 +59,12 @@ let lean_keywords_set =
 
 (** Sanitize a name to avoid Lean keyword conflicts *)
 let sanitize_name (name : string) : string =
-  if String.Set.mem name lean_keywords_set then
+  if String.length name = 0 then name
+  else if String.Set.mem name lean_keywords_set then
     "_" ^ name 
+  else if name.[0] = '\'' then 
+    (* Replace leading apostrophe with 't' (e.g., 'a -> ta, 'b -> tb) *)
+    "t" ^ String.sub name 1 (String.length name - 1)
   else
     name
 
@@ -335,8 +340,31 @@ let rec format_typ (ty : typ) : string =
       Printf.sprintf "(List %s)" (format_typ t)
   | TDefault t -> format_typ t
   | TForAll _ -> "TForall"
-  | TVar _  | TClosureEnv -> "Unit"
+  | TVar v -> sanitize_name (Bindlib.name_of v)  (* Use the type variable's name *)
+  | TClosureEnv -> "Unit"
     (* For now, output Unit for complex types we don't fully support *)
+
+(** Recursively collect unique type variable names from a type *)
+let rec collect_type_vars (ty : typ) (acc : String.Set.t) : String.Set.t =
+  match Mark.remove ty with
+  | TVar v -> String.Set.add (sanitize_name (Bindlib.name_of v)) acc
+  | TArrow (args, ret) ->
+      let acc = List.fold_left (fun a t -> collect_type_vars t a) acc args in
+      collect_type_vars ret acc
+  | TTuple ts ->
+      List.fold_left (fun a t -> collect_type_vars t a) acc ts
+  | TOption t | TArray t | TDefault t ->
+      collect_type_vars t acc
+  | TForAll binder ->
+      (* Unbind and collect from the body type *)
+      let _, body_ty = Bindlib.unmbind binder in
+      collect_type_vars body_ty acc
+  | TLit _ | TStruct _ | TEnum _ | TClosureEnv -> acc
+
+(** Collect unique type variables from a list of types *)
+let collect_type_vars_from_list (tys : typ list) : string list =
+  let var_set = List.fold_left (fun acc ty -> collect_type_vars ty acc) String.Set.empty tys in
+  String.Set.elements var_set
 
 (** Format a location (variable reference) to Lean code *)
 let format_location 
@@ -419,13 +447,35 @@ let rec format_expr
       Printf.sprintf "[%s]" (String.concat ", " formatted)
   | EAppOp { op; args; tys = _ } ->
       format_operator ~scope_defs ~use_input_prefix op args
-  | EMatch _ ->
-      (* Pattern matching - complex, will handle later *)
-      "sorry -- match not yet implemented\n"
+  | EMatch { e = matched_expr; name = enum_name; cases } ->
+      (* Pattern matching: match expr with | Case1 var => body1 | Case2 var => body2 *)
+      let matched_str = format_expr ~scope_defs ~use_input_prefix matched_expr in
+      let enum_name_str = sanitize_name (EnumName.to_string enum_name) in
+      let cases_list = EnumConstructor.Map.bindings cases in
+      let formatted_cases = List.map (fun (cons, case_expr) ->
+        let cons_name = sanitize_name (EnumConstructor.to_string cons) in
+        (* Each case is typically a lambda: fun (x : T) => body *)
+        match Mark.remove case_expr with
+        | EAbs { binder; tys = _; _ } ->
+            let vars, body = Bindlib.unmbind binder in
+            let params = Array.to_list vars in
+            let param_names = List.map (fun var -> sanitize_name (Bindlib.name_of var)) params in
+            let body_str = format_expr ~scope_defs ~use_input_prefix body in
+            Printf.sprintf "  | %s.%s %s => %s" 
+              enum_name_str cons_name (String.concat " " param_names) body_str
+        | _ ->
+            (* Not a lambda - just format the expression directly *)
+            let body_str = format_expr ~scope_defs ~use_input_prefix case_expr in
+            Printf.sprintf "  | %s.%s _ => %s" enum_name_str cons_name body_str
+      ) cases_list in
+      Printf.sprintf "(match %s with\n%s)" matched_str (String.concat "\n" formatted_cases)
   | EAbs { binder; tys; _ } ->
-      (* Lambda abstraction: fun (x : T) (y : U) => body *)
+      (* Lambda abstraction: fun {t : Type} (x : T) (y : U) => body *)
       let vars, body = Bindlib.unmbind binder in
       let params = Array.to_list vars in
+      (* Collect unique type variables from parameter types *)
+      let type_vars = collect_type_vars_from_list tys in
+      let type_var_strs = List.map (fun tv -> Printf.sprintf "{%s : Type}" tv) type_vars in
       let param_strs = List.map2 (fun var ty ->
         match Mark.remove ty with
         | TLit TUnit -> 
@@ -437,8 +487,9 @@ let rec format_expr
               (sanitize_name (Bindlib.name_of var)) 
               (format_typ ty)
       ) params tys in
+      let all_params = type_var_strs @ param_strs in
       Printf.sprintf "(fun %s => %s)"
-        (String.concat " " param_strs)
+        (String.concat " " all_params)
         (format_expr ~scope_defs ~use_input_prefix body)
   | ELocation loc ->
       format_location ~scope_defs ~use_input_prefix loc
@@ -856,11 +907,12 @@ let format_input_struct
     (scope_name : string) 
     (inputs : input_info list) 
     (contexts: context_var_info list)
-    (sub_scopes : ScopeName.t ScopeVar.Map.t)
-    (scope_defs : Ast.scope_def Ast.ScopeDef.Map.t)
+    (scope_decl : Ast.scope)
     : string =
     (* First, all the subscope fields are created pointing to the input structure of the subscopes. Then, all the fields are arranged in 
-    topological order of dependencies and initialized appropriately. *)
+    topological order of dependencies using existing dependency checks and initialized appropriately. *)
+  let sub_scopes = scope_decl.Ast.scope_sub_scopes in
+  let scope_defs = scope_decl.Ast.scope_defs in
   let has_sub_scopes = not (ScopeVar.Map.is_empty sub_scopes) in
   if inputs = [] && contexts = [] && not has_sub_scopes then ""
   else
@@ -878,48 +930,22 @@ let format_input_struct
         (format_typ input.var_type)
     ) inputs in
     
-    (* Sort context variables by dependency order *)
-    (* Build set of context variable names for quick lookup *)
-    let context_var_set = List.fold_left (fun acc ctx ->
-      ScopeVar.Set.add ctx.ctx_var_name acc
-    ) ScopeVar.Set.empty contexts in
+    (* Use build_scope_dependencies and correct_computation_ordering for dependency order *)
+    let scope_deps = build_scope_dependencies scope_decl in
+    let ordered_vertices = correct_computation_ordering scope_deps in
     
-    (* Get dependencies for a context variable (other context vars it depends on) *)
-    let get_ctx_deps (ctx : context_var_info) : ScopeVar.Set.t =
-      match ctx.ctx_default with
-      | None -> ScopeVar.Set.empty
-      | Some expr ->
-          let locs = Ast.locations_used expr in
-          Ast.LocationSet.fold (fun (loc, _pos) acc ->
-            match loc with
-            | DesugaredScopeVar { name; _ } ->
-                let var = Mark.remove name in
-                if ScopeVar.Set.mem var context_var_set then
-                  ScopeVar.Set.add var acc
-                else acc
-            | _ -> acc
-          ) locs ScopeVar.Set.empty
-    in
+    (* Build a map from context var name to context_var_info for quick lookup *)
+    let context_var_map = List.fold_left (fun acc ctx ->
+      ScopeVar.Map.add ctx.ctx_var_name ctx acc
+    ) ScopeVar.Map.empty contexts in
     
-    (* Topological sort of context variables *)
-    let rec topo_sort remaining sorted =
-      if remaining = [] then List.rev sorted
-      else
-        (* Find a variable with no unsatisfied dependencies *)
-        let sorted_set = List.fold_left (fun acc ctx ->
-          ScopeVar.Set.add ctx.ctx_var_name acc
-        ) ScopeVar.Set.empty sorted in
-        let (ready, not_ready) = List.partition (fun ctx ->
-          let deps = get_ctx_deps ctx in
-          ScopeVar.Set.subset deps sorted_set
-        ) remaining in
-        match ready with
-        | [] -> 
-            (* Cycle or all remaining have deps - just add them in order *)
-            List.rev sorted @ remaining
-        | _ -> topo_sort not_ready (List.rev ready @ sorted)
-    in
-    let sorted_contexts = topo_sort contexts [] in
+    (* Filter to only context variables, ignoring assertions *)
+    let sorted_contexts = List.filter_map (fun vertex ->
+      match vertex with
+      | Vertex.Var (var, _state) ->
+          ScopeVar.Map.find_opt var context_var_map
+      | Vertex.Assertion _ -> None  (* Ignore assertions *)
+    ) ordered_vertices in
     
     let formatted_context_fields = List.map (fun (ctx : context_var_info) ->
       let var_name = sanitize_name (ScopeVar.to_string ctx.ctx_var_name) in
@@ -1062,12 +1088,43 @@ let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string
         (String.concat "\n" formatted_fields))
 
 let format_toplevel
-?(program_ctx : Shared_ast.decl_ctx option = None)
-(toplevel_name: TopdefName.t)
-(toplevel_decl: Ast.topdef)
-: string =
-  let toplevel_name_str = sanitize_name (TopdefName.to_string toplevel_name) in 
-  Printf.sprintf "/- %s is a toplevel decl, not handled -/" (toplevel_name_str)
+    ?(program_ctx = None)
+    toplevel_name
+    toplevel_decl =
+  let _ = program_ctx in
+  let toplevel_name_str = sanitize_name (TopdefName.to_string toplevel_name) in
+  
+  (* Get the type and check if it's a function type *)
+  let toplevel_type = toplevel_decl.Ast.topdef_type in
+  let arg_names = toplevel_decl.Ast.topdef_arg_names in
+  
+  (* Format parameters based on the type structure *)
+  let params_str = match Mark.remove toplevel_type with
+    | TArrow (arg_types, _ret_type) ->
+        (* Function type - pair argument types with names *)
+        let params = List.mapi (fun i _arg_ty ->
+          if i < List.length arg_names then
+            sanitize_name (Mark.remove (List.nth arg_names i))
+          else
+            Printf.sprintf "arg%d" i
+        ) arg_types in
+        String.concat " " params
+    | _ ->
+        (* Not a function type - no parameters *)
+        ""
+  in
+  
+  (* Format the body expression *)
+  let body_str = match toplevel_decl.Ast.topdef_expr with
+    | Some expr -> format_expr expr
+    | None -> "sorry /- external or undefined -/"
+  in
+  
+  (* Generate the definition *)
+  if params_str = "" then
+    Printf.sprintf "def %s := %s" toplevel_name_str body_str
+  else
+    Printf.sprintf "def %s %s := %s" toplevel_name_str params_str body_str
 
 (** Generate Lean code for a scope using method-per-rule architecture *)
 let format_scope 
@@ -1081,7 +1138,7 @@ let format_scope
   let var_defs, inputs, context_vars = collect_var_info_ordered ~program_ctx scope_decl in
   
   (* 2. Generate input struct (if any inputs) *)
-  let input_struct = format_input_struct scope_name_str inputs context_vars scope_decl.Ast.scope_sub_scopes scope_decl.Ast.scope_defs in
+  let input_struct = format_input_struct scope_name_str inputs context_vars scope_decl in
   (* 3. Generate all methods for all variables *)
   let all_methods = List.concat (List.map (fun var_def ->
     format_var_methods scope_name_str var_def inputs context_vars scope_decl.Ast.scope_defs
@@ -1218,11 +1275,13 @@ let format_scope
   String.concat "\n" parts
 
 (** Generate a complete Lean file from a desugared program *)
-let generate_lean_code (prgm : Ast.program) : string =
+let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.program) : string =
   let header = "import CaseStudies.Pramaana.CatalaRuntime\n\nopen CatalaRuntime\n" in
   
   (* Collect scope input and output struct names to avoid generating them twice *)
   (* (they're generated in format_scope) *)
+  let program_dep_graph = Scopelang.Dependency.build_program_dep_graph prg_scopelang in 
+  let defs_ordering = Scopelang.Dependency.get_defs_ordering program_dep_graph in 
   let scope_structs = ScopeName.Map.fold (fun _scope_name scope_info acc ->
     acc
     |> StructName.Set.add scope_info.in_struct_name
@@ -1246,19 +1305,43 @@ let generate_lean_code (prgm : Ast.program) : string =
     code :: acc
   ) prgm.program_ctx.ctx_enums [] in 
   
-  (* Generate code for each scope in the program root *)
-  let scope_code = ScopeName.Map.fold (fun scope_name scope_decl acc ->
-    let code = format_scope ~program_ctx:(Some prgm.program_ctx) scope_name scope_decl in
-    code :: acc
-  ) prgm.program_root.module_scopes [] in
-
-  let toplevel_function_code = TopdefName.Map.fold (fun topdef_name topdef_decl acc -> 
-    let code = format_toplevel ~program_ctx:(Some prgm.program_ctx) topdef_name topdef_decl in 
-    code :: acc
-  ) prgm.program_root.module_topdefs [] in 
+  (* Generate code for scopes and topdefs in dependency order *)
+  let (scope_code, toplevel_function_code) = List.fold_left (fun (scopes_acc, topdefs_acc) vertex ->
+    match vertex with
+    | Scopelang.Dependency.Scope (scope_name, _module_opt) -> 
+        (* Check if this scope exists in our program root by matching string name *)
+        let scope_name_str = ScopeName.to_string scope_name in
+        let matching_scope = ScopeName.Map.fold (fun sn scope_decl acc ->
+          match acc with
+          | Some _ -> acc
+          | None ->
+              if ScopeName.to_string sn = scope_name_str then Some (sn, scope_decl)
+              else None
+        ) prgm.program_root.module_scopes None in
+        (match matching_scope with
+        | Some (sn, scope_decl) ->
+            let code = format_scope ~program_ctx:(Some prgm.program_ctx) sn scope_decl in
+            (code :: scopes_acc, topdefs_acc)
+        | None -> (scopes_acc, topdefs_acc))
+    | Scopelang.Dependency.Topdef topdef_name ->
+        (* Check if this topdef exists in our program root by matching string name *)
+        let topdef_name_str = TopdefName.to_string topdef_name in
+        let matching_topdef = TopdefName.Map.fold (fun tn topdef_decl acc ->
+          match acc with
+          | Some _ -> acc
+          | None ->
+              if TopdefName.to_string tn = topdef_name_str then Some (tn, topdef_decl)
+              else None
+        ) prgm.program_root.module_topdefs None in
+        (match matching_topdef with
+        | Some (tn, topdef_decl) ->
+            let code = format_toplevel ~program_ctx:(Some prgm.program_ctx) tn topdef_decl in
+            (scopes_acc, code :: topdefs_acc)
+        | None -> (scopes_acc, topdefs_acc))
+  ) ([], []) defs_ordering in
 
   
-  (* Combine: header, enums,structs, then scopes *)
+  (* Combine: header, enums, structs, topdefs, then scopes (all in dependency order) *)
   let all_parts = List.filter (fun s -> s <> "") [
     header;
     String.concat "\n\n" (List.rev enum_code);
@@ -1280,8 +1363,12 @@ let run
     Driver.Passes.desugared options ~includes ~stdlib
   in
 
+  let prg_scopelang = 
+    Driver.Passes.scopelang options ~includes ~stdlib
+  in 
+
   Message.debug "Generating Lean4 code from desugared AST...";
-  let lean_code = generate_lean_code prg in
+  let lean_code = generate_lean_code prg prg_scopelang in
   
   get_output_format options ~ext:"lean" output
   @@ fun _file fmt -> Format.fprintf fmt "%s@." lean_code

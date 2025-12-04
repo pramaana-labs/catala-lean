@@ -1,0 +1,69 @@
+```catala-metadata
+declaration structure PersonSection152DependencyStatusOutput:
+  # MainOutput for determining if a person is a dependent under section 152 relative to the taxpayer
+  data person content Person
+  data is_dependent_under_152 content boolean
+  data is_qualifying_child_under_152 content boolean
+  data is_qualifying_relative_under_152 content boolean
+  data meets_relationship_test content boolean
+  data meets_residency_test content boolean
+  data meets_support_test content boolean
+  data meets_gross_income_test content boolean
+```
+```catala
+declaration scope PersonSection152DependencyStatus:
+  # Owner: Person (entity-owned scope computing dependency status under §152 for this person, relative to the taxpayer's return)
+
+  # Inputs
+  input person content Person
+  input taxpayer content Person
+  input individual_income_tax_return content IndividualIncomeTaxReturn
+  input parenthood_events content list of ParenthoodEvent
+  input household_membership_events content list of HouseholdMembershipEvent
+  input household_maintenance_cost_events content list of HouseholdMaintenanceCostEvent
+  input residency_events content list of ResidencyEvent
+  input student_enrollment_events content list of StudentEnrollmentEvent
+  input hospital_patient_events content list of HospitalPatientEvent
+  input birth_events content list of BirthEvent
+  input marriage_events content list of MarriageEvent
+  input divorce_events content list of DivorceEvent
+
+  # Context variables to be copied into main_output (definitions added later)
+  context is_dependent_under_152 condition
+  context is_qualifying_child_under_152 condition
+  context is_qualifying_relative_under_152 condition
+  context meets_relationship_test condition
+  context meets_residency_test condition
+  context meets_support_test condition
+  context meets_gross_income_test condition
+
+  # New: §152(b)(2) joint return exception (not refund-only)
+  context filed_joint_return_not_refund_only_in_calendar_year condition
+
+  # Output
+  output main_output content PersonSection152DependencyStatusOutput
+```
+<!-- catala-metadata -->
+```yaml
+type: catala-metadata
+metadata_type: definition
+object_type: scope
+name: PersonSection152DependencyStatus
+action: replace
+law_ref: section_152
+```
+```catala
+scope PersonSection152DependencyStatus:
+  # Compose main_output by copying context variables (no computation here)
+  definition main_output equals
+    PersonSection152DependencyStatusOutput {
+      -- person: person
+      -- is_dependent_under_152: is_dependent_under_152
+      -- is_qualifying_child_under_152: is_qualifying_child_under_152
+      -- is_qualifying_relative_under_152: is_qualifying_relative_under_152
+      -- meets_relationship_test: meets_relationship_test
+      -- meets_residency_test: meets_residency_test
+      -- meets_support_test: meets_support_test
+      -- meets_gross_income_test: meets_gross_income_test
+    }
+```
