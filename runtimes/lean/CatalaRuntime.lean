@@ -52,7 +52,6 @@ instance : ToString SourcePosition where
   toString p := s!"{p.filename}:{p.start_line}:{p.start_column}"
 
 
-
 -- ============================================================================
 -- Money Operations
 -- ============================================================================
@@ -130,6 +129,9 @@ end Date
 instance : HSub Date Date Duration where
   hSub := Date.difference
 
+instance : HSub Date Duration Date where
+  hSub := Date.subDuration
+
 -- adding a duration to a date
 
 instance : HAdd Duration Date Date where
@@ -205,7 +207,7 @@ abbrev D (α : Type) := Except Err (Option α)
 /-- Process a list of exceptions, checking for conflicts.
     Returns the first successful definition, or conflict if multiple succeed.
 -/
-def processExceptions {α : Type} (exceptions : List (D α)) : D α :=
+def processExceptions {α : Type} [DecidableEq α] (exceptions : List (D α)) : D α :=
   exceptions.foldl
     (fun acc ex =>
       match acc with
@@ -213,10 +215,10 @@ def processExceptions {α : Type} (exceptions : List (D α)) : D α :=
       | .ok none =>
           -- No value yet, use this exception if it has one
           ex
-      | .ok (some _) =>
+      | .ok (some v1) =>
           -- We already have a value, check for conflicts
           match ex with
-          | .ok (some _) => .error .conflict  -- conflict!
+          | .ok (some v2) => if v1 = v2 then acc else .error .conflict  -- conflict!
           | .ok none => acc  -- keep existing value
           | .error e => .error e)  -- propagate error
     (.ok none)
@@ -289,6 +291,32 @@ instance: HDiv Money Int Money where
 -- ============================================================================
 -- Generic Multiplication Function
 -- ============================================================================
+/- Convert to Money -/
+
+class CatalatoMoney (α: Type) (γ: outParam Type) where
+  toMoney : α → γ
+
+instance: CatalatoMoney Int Money where
+  toMoney := Money.ofInt
+
+instance: CatalatoMoney Rat Money where
+  toMoney r := Money.ofInt (r.floor)
+
+def toMoney {α γ: Type} [CatalatoMoney α γ] (a: α) : γ :=
+  CatalatoMoney.toMoney a
+
+/- Convert to Rationals -/
+class CatalatoRat (α: Type) (γ: outParam Type) where
+  toRat : α → γ
+
+instance : CatalatoRat Money Rat where
+  toRat m := Rat.ofInt (Money.toInt m)
+
+instance : CatalatoRat Int Rat where
+  toRat m := Rat.ofInt m
+
+def toRat {α γ : Type} [CatalatoRat α γ] (a : α) : γ :=
+  CatalatoRat.toRat a
 
 /-- Type class for Catala multiplication -/
 class CatalaMul (α : Type) (β : Type) (γ : outParam Type) where

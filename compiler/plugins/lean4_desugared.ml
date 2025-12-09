@@ -73,6 +73,7 @@ let sanitize_name (name : string) : string =
 (** Information about a scope input variable *)
 type input_info = {
   var_name: ScopeVar.t;
+  var_state: StateName.t option;  (* State of the variable, if any *)
   var_type: typ;
   io_input: Runtime.io_input Mark.pos;
 }
@@ -80,6 +81,7 @@ type input_info = {
 (** Information about a context variable (Reentrant input with default) *)
 type context_var_info = {
   ctx_var_name: ScopeVar.t;
+  ctx_state: StateName.t option;  (* State of the variable, if any *)
   ctx_var_type: typ;
   ctx_io_input: Runtime.io_input Mark.pos;
   ctx_default: (desugared, untyped) gexpr option;  (* Default value expression if defined *)
@@ -110,8 +112,13 @@ let collect_inputs (scope_decl : Ast.scope) : (input_info list * context_var_inf
   ) scope_decl.Ast.scope_sub_scopes ScopeVar.Set.empty in
   
   Ast.ScopeDef.Map.fold (fun scope_def def (inputs_acc, context_acc) ->
-    let var, _kind = scope_def in
+    let var, kind = scope_def in
     let var_name, _pos = var in
+    (* Extract state from kind *)
+    let state = match kind with
+      | Ast.ScopeDef.Var state -> state
+      | Ast.ScopeDef.SubScopeInput _ -> None
+    in
     (* Skip sub-scope variables - they are not inputs *)
     if ScopeVar.Set.mem var_name sub_scope_vars then
       (inputs_acc, context_acc)
@@ -130,11 +137,12 @@ let collect_inputs (scope_decl : Ast.scope) : (input_info list * context_var_inf
             let default_expr = Some (Expr.unbox rule.Ast.rule_cons) in
             let ctx_info = {
               ctx_var_name = var_name;
+              ctx_state = state;
               ctx_var_type = def.Ast.scope_def_typ;
               ctx_io_input = def.Ast.scope_def_io.io_input;
               ctx_default = default_expr;
             } in
-            (inputs_acc, ctx_info :: context_acc)
+            (inputs_acc,  ctx_info :: context_acc)
       | Runtime.Reentrant ->
           (* Extract default value from rules if present *)
           let default_expr = 
@@ -147,6 +155,7 @@ let collect_inputs (scope_decl : Ast.scope) : (input_info list * context_var_inf
           in
           let ctx_info = {
             ctx_var_name = var_name;
+            ctx_state = state;
             ctx_var_type = def.Ast.scope_def_typ;
             ctx_io_input = def.Ast.scope_def_io.io_input;
             ctx_default = default_expr;
@@ -155,6 +164,7 @@ let collect_inputs (scope_decl : Ast.scope) : (input_info list * context_var_inf
       | _ ->
           let info = {
             var_name = var_name;
+            var_state = state;
             var_type = def.Ast.scope_def_typ;
             io_input = def.Ast.scope_def_io.io_input;
           } in
@@ -444,6 +454,15 @@ let format_location
   | ToplevelVar { name; _ } ->
       sanitize_name (TopdefName.to_string (Mark.remove name))
 
+(** Check if an expression is a boolean operator (And, Or, Xor, Not) *)
+let is_bool_operator (e : (desugared, untyped) gexpr) : bool =
+  match Mark.remove e with
+  | EAppOp { op; _ } ->
+      (match Mark.remove op with
+      | Op.And | Op.Or | Op.Xor | Op.Not -> true
+      | _ -> false)
+  | _ -> false
+
 (** Format an expression to Lean code *)
 let rec format_expr 
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
@@ -573,6 +592,12 @@ and format_operator
     | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr ~scope_defs ~use_input_prefix arg)
     | _ -> "sorry -- wrong number of args for unop"
   in
+  (* Helper to wrap with decide only if not a boolean operator *)
+  let format_bool_arg arg =
+    let formatted = format_expr ~scope_defs ~use_input_prefix arg in
+    if is_bool_operator arg then formatted
+    else Printf.sprintf "decide (%s)" formatted
+  in
   match Mark.remove op with
   (* Overloaded operators in desugared AST *)
   | Add -> binop "+"
@@ -593,11 +618,26 @@ and format_operator
   | Gt -> binop ">"
   | Gte -> binop "≥"
   | Eq -> binop "="
-  (* Boolean operators *)
-  | And -> binop "∧"
-  | Or -> binop "∨"
-  | Xor -> binop "⊕"
-  | Not -> unop "¬"
+  (* Boolean operators - wrap base propositions with decide *)
+  | And ->
+      (match args with
+      | [arg1; arg2] ->
+          Printf.sprintf "(%s && %s)" (format_bool_arg arg1) (format_bool_arg arg2)
+      | _ -> "sorry -- wrong number of args for And")
+  | Or ->
+      (match args with
+      | [arg1; arg2] ->
+          Printf.sprintf "(%s || %s)" (format_bool_arg arg1) (format_bool_arg arg2)
+      | _ -> "sorry -- wrong number of args for Or")
+  | Xor ->
+      (match args with
+      | [arg1; arg2] ->
+          Printf.sprintf "(%s ^^ %s)" (format_bool_arg arg1) (format_bool_arg arg2)
+      | _ -> "sorry -- wrong number of args for Xor")
+  | Not ->
+      (match args with
+      | [arg] -> Printf.sprintf "(!%s)" (format_bool_arg arg)
+      | _ -> "sorry -- wrong number of args for Not")
   (* Polymorphic operators *)
   | Length ->
       (match args with
@@ -650,11 +690,11 @@ and format_operator
        | _ -> "sorry -- wrong args for ToInt")
   | ToRat ->
       (match args with
-       | [arg] -> Printf.sprintf "(Rat.ofInt %s)" (format_expr ~scope_defs ~use_input_prefix arg)
+       | [arg] ->  Printf.sprintf "(CatalaRuntime.toRat %s)" (format_expr ~scope_defs ~use_input_prefix arg)
        | _ -> "sorry -- wrong args for ToRat")
   | ToMoney ->
       (match args with
-       | [arg] -> Printf.sprintf "(CatalaRuntime.Money.ofInt %s)" (format_expr ~scope_defs ~use_input_prefix arg)
+       | [arg] -> Printf.sprintf "(CatalaRuntime.toMoney %s)" (format_expr ~scope_defs ~use_input_prefix arg)
        | _ -> "sorry -- wrong args for ToMoney")
   | Round ->
       (match args with
@@ -781,6 +821,7 @@ let format_method_params
 (** Convert context_var_info to input_info *)
 let context_to_input (ctx : context_var_info) : input_info = {
   var_name = ctx.ctx_var_name;
+  var_state = ctx.ctx_state;
   var_type = ctx.ctx_var_type;
   io_input = ctx.ctx_io_input;
 }
@@ -970,22 +1011,33 @@ let format_input_struct
     topological order of dependencies using existing dependency checks and initialized appropriately. *)
   let sub_scopes = scope_decl.Ast.scope_sub_scopes in
   let scope_defs = scope_decl.Ast.scope_defs in
-  let has_sub_scopes = not (ScopeVar.Map.is_empty sub_scopes) in
     (* Format regular input fields first (they have no dependencies) *)
-    let formatted_input_fields = List.map (fun (input : input_info) ->
-      Printf.sprintf "  %s : %s"
-        (sanitize_name (ScopeVar.to_string input.var_name))
-        (format_typ input.var_type)
+  let formatted_input_fields = List.map (fun (input : input_info) ->
+    let base_name = sanitize_name (ScopeVar.to_string input.var_name) in
+    (* Apply state suffix if present (same logic as format_location) *)
+    let var_name = match input.var_state with
+      | None -> base_name
+      | Some state_name -> Printf.sprintf "%s_%s" base_name (sanitize_name (StateName.to_string state_name))
+    in
+    Printf.sprintf "  %s : %s" var_name (format_typ input.var_type)
     ) inputs in
     
     (* Use build_scope_dependencies and correct_computation_ordering for dependency order *)
     let scope_deps = build_scope_dependencies scope_decl in
     let ordered_vertices = correct_computation_ordering scope_deps in
     
-    (* Build a map from context var name to context_var_info for quick lookup *)
+    (* Build a map from (var_name, state) to context_var_info for quick lookup *)
+    (* Key is a string combining var name and optional state *)
+    let make_context_key var state =
+      let base = ScopeVar.to_string var in
+      match state with
+      | None -> base
+      | Some s -> Printf.sprintf "%s_%s" base (StateName.to_string s)
+    in
     let context_var_map = List.fold_left (fun acc ctx ->
-      ScopeVar.Map.add ctx.ctx_var_name ctx acc
-    ) ScopeVar.Map.empty contexts in
+      let key = make_context_key ctx.ctx_var_name ctx.ctx_state in
+      String.Map.add key ctx acc
+    ) String.Map.empty contexts in
     
     (* Helper to format a subscope field *)
     let format_subscope_field var sub_scope_name =
@@ -1025,9 +1077,14 @@ let format_input_struct
     
     (* Helper to format a context variable field *)
     let format_context_field (ctx : context_var_info) =
-      let var_name = sanitize_name (ScopeVar.to_string ctx.ctx_var_name) in
+      let base_name = sanitize_name (ScopeVar.to_string ctx.ctx_var_name) in
+      (* Apply state suffix if present (same logic as format_location) *)
+      let var_name = match ctx.ctx_state with
+        | None -> base_name
+        | Some state_name -> Printf.sprintf "%s_%s" base_name (sanitize_name (StateName.to_string state_name))
+      in
       let var_type = format_typ ctx.ctx_var_type in
-      let scope_def_key = ((ctx.ctx_var_name, Pos.void), Ast.ScopeDef.Var None) in
+      let scope_def_key = ((ctx.ctx_var_name, Pos.void), Ast.ScopeDef.Var ctx.ctx_state) in
       
       (* Get rules and build default value with exception handling (similar to line 752-821) *)
       (* Note: use_input_prefix:false because we're defining the input struct itself *)
@@ -1119,15 +1176,16 @@ let format_input_struct
     (* Process all vertices in dependency order - both subscopes and context variables *)
     let formatted_dependent_fields = List.filter_map (fun vertex ->
       match vertex with
-      | Vertex.Var (var, _state) ->
+      | Vertex.Var (var, state) ->
           (* Check if this is a subscope variable *)
           (match ScopeVar.Map.find_opt var sub_scopes with
           | Some sub_scope_name ->
               (* It's a subscope - format it *)
               Some (format_subscope_field var sub_scope_name)
           | None ->
-              (* Check if this is a context variable *)
-              (match ScopeVar.Map.find_opt var context_var_map with
+              (* Check if this is a context variable (use both var and state for lookup) *)
+              let key = make_context_key var state in
+              (match String.Map.find_opt key context_var_map with
               | Some ctx -> Some (format_context_field ctx)
               | None -> None))
       | Vertex.Assertion _ -> None  (* Ignore assertions *)
@@ -1145,7 +1203,7 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
       (sanitize_name (StructField.to_string field))
       (format_typ ty)
   ) field_list in
-  Printf.sprintf "structure %s where\n%s\n"
+  Printf.sprintf "structure %s where\n%s\nderiving DecidableEq"
     name
     (String.concat "\n" formatted_fields)
 
@@ -1167,7 +1225,7 @@ let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string
       name 
       ) constructor_list )
       in
-      Printf.sprintf "inductive %s : Type where\n%s\n"
+      Printf.sprintf "inductive %s : Type where\n%s\nderiving DecidableEq"
         name
         (String.concat "\n" formatted_fields))
     else 
@@ -1178,7 +1236,7 @@ let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string
       name 
       ) constructor_list)
       in 
-      Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s\n"
+      Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s\nderiving DecidableEq"
         name
         (String.concat "\n" formatted_fields))
 
@@ -1354,7 +1412,7 @@ let format_scope
 
 (** Generate a complete Lean file from a desugared program *)
 let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.program) : string =
-  let header = "import CatalaRuntime\n\nopen CatalaRuntime\n" in
+  let header = "import CaseStudies.Pramaana.CatalaRuntime\n\nimport CaseStudies.Pramaana.Stdlib.Stdlib\n\nopen CatalaRuntime" in
   
   (* Collect scope input and output struct names to avoid generating them twice *)
   (* (they're generated in format_scope) *)
@@ -1371,23 +1429,32 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
     prgm.program_ctx.ctx_structs 
     prgm.program_ctx.ctx_enums in
   
+  (* Types to skip - they are defined elsewhere (e.g., in stdlib) *)
+  let skip_types = ["Date_en.Month"; "Period_en.Period"; "Date_en.MonthOfYear"; "Optional"] in
+  
   (* Generate struct and enum declarations in dependency order *)
   let type_code = List.filter_map (fun type_id ->
     match type_id with
     | TypeIdent.Struct struct_name ->
-        (* Skip scope input/output structs - they're generated separately in format_scope *)
-        if StructName.Set.mem struct_name scope_structs then
+        let struct_name_str = StructName.to_string struct_name in
+        (* Skip scope input/output structs and types defined elsewhere *)
+        if StructName.Set.mem struct_name scope_structs || List.mem struct_name_str skip_types then
           None
         else
           (match StructName.Map.find_opt struct_name prgm.program_ctx.ctx_structs with
           | Some fields ->
-              Some (format_struct_decl (sanitize_name (StructName.to_string struct_name)) fields)
+              Some (format_struct_decl (sanitize_name struct_name_str) fields)
           | None -> None)
     | TypeIdent.Enum enum_name ->
-        (match EnumName.Map.find_opt enum_name prgm.program_ctx.ctx_enums with
-        | Some fields ->
-            Some (format_enum_decl (sanitize_name (EnumName.to_string enum_name)) fields)
-        | None -> None)
+        let enum_name_str = EnumName.to_string enum_name in
+        (* Skip types defined elsewhere *)
+        if List.mem enum_name_str skip_types then
+          None
+        else
+          (match EnumName.Map.find_opt enum_name prgm.program_ctx.ctx_enums with
+          | Some fields ->
+              Some (format_enum_decl (sanitize_name enum_name_str) fields)
+          | None -> None)
   ) type_ordering in
   
   (* Generate code for scopes and topdefs in dependency order, also collect scope function names *)
@@ -1438,7 +1505,7 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
     String.concat "\n\n" type_code;
     String.concat "\n\n" (List.rev toplevel_function_code);
     String.concat "\n\n" (List.rev scope_code);
-    String.concat "\n" eval_statements
+    (* String.concat "\n" eval_statements *)
   ] in
   String.concat "\n\n" all_parts
 
