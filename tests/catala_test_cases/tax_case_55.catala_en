@@ -1,0 +1,194 @@
+> Module Tax_case_55
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase55:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase55:
+  # Alice has a son, Bob. From September 1st, 2015 to November 3rd, 2019, Alice and Bob lived in the same home, maintained by Alice. Bob was born on September 1st, 2015. Alice's gross income for the year 2017 is $545547. Alice's gross income for the year 2018 is $545947. Alice's gross income for the year 2019 is $545927.
+
+  # How much tax does Alice have to pay in 2018? $187552
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let household equals
+      Sara.Household {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob_birth equals
+      Sara.BirthEvent {
+        -- id: 1
+        -- individual: bob
+        -- birth_date: Date.of_year_month_day of 2015, 9, 1
+        -- is_counterfactual: false
+      } in
+    let alice_parenthood equals
+      Sara.ParenthoodEvent {
+        -- id: 1
+        -- parent: alice
+        -- child: bob
+        -- start_date: Date.of_year_month_day of 2015, 9, 1
+        -- parent_type: Sara.ParentType.Biological
+        -- is_counterfactual: false
+      } in
+    let alice_family_relationship equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 1
+        -- person: alice
+        -- relative: bob
+        -- relationship_type: Sara.FamilyRelationshipType.Child
+        -- start_date: Date.of_year_month_day of 2015, 9, 1
+        -- is_counterfactual: false
+      } in
+    let bob_family_relationship equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 2
+        -- person: bob
+        -- relative: alice
+        -- relationship_type: Sara.FamilyRelationshipType.Mother
+        -- start_date: Date.of_year_month_day of 2015, 9, 1
+        -- is_counterfactual: false
+      } in
+    let alice_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 1
+        -- individual: alice
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2015, 9, 1
+        -- end_date: Date.of_year_month_day of 2019, 11, 3
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let bob_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 2
+        -- individual: bob
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2015, 9, 1
+        -- end_date: Date.of_year_month_day of 2019, 11, 3
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let alice_household_maintenance equals
+      Sara.HouseholdMaintenanceEvent {
+        -- id: 1
+        -- individual: alice
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2015, 9, 1
+        -- end_date: Date.of_year_month_day of 2019, 11, 3
+        -- cost_furnished_percentage: 100.0
+        -- is_counterfactual: false
+      } in
+    let alice_income_2017 equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2017
+        -- has_income: true
+        -- earned_income: $545547
+        -- is_counterfactual: false
+      } in
+    let alice_income_2018 equals
+      Sara.IncomeEvent {
+        -- id: 2
+        -- individual: alice
+        -- tax_year: 2018
+        -- has_income: true
+        -- earned_income: $545947
+        -- is_counterfactual: false
+      } in
+    let alice_income_2019 equals
+      Sara.IncomeEvent {
+        -- id: 3
+        -- individual: alice
+        -- tax_year: 2019
+        -- has_income: true
+        -- earned_income: $545927
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2018
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let head_of_household_variant equals
+      Sara.HeadOfHouseholdVariant {
+        -- taxpayer: alice
+        -- qualifying_person: bob
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2018
+        -- details: Sara.FilingStatusVariant.HeadOfHousehold content head_of_household_variant
+      } in
+    let dummy_org equals
+      Sara.Organization {
+        -- id: 0
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let employer_general_variant equals
+      Sara.EmployerGeneralVariant {
+        -- employer: dummy_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 0
+        -- tax_year: 2018
+        -- details: Sara.EmployerVariant.GeneralEmployer content employer_general_variant
+      } in
+    let income_events_list equals [ alice_income_2017 ] ++ [ alice_income_2018 ] ++ [ alice_income_2019 ] in
+    let adjusted_gross_income equals $545947 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ]
+      -- organizations: [ dummy_org ]
+      -- birth_events: [ bob_birth ]
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: [ alice_residence ] ++ [ bob_residence ]
+      -- household_maintenance_events: [ alice_household_maintenance ]
+      -- parenthood_events: [ alice_parenthood ]
+      -- family_relationship_events: [ alice_family_relationship ] ++ [ bob_family_relationship ]
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: []
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of computation.tax = $187552)
+```

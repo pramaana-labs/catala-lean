@@ -61,6 +61,13 @@
  (libraries catala.driver desugared scopelang))
 
 (library
+ (name lean4_desugared_catala_test)
+ (public_name catala.plugins.lean4_desugared_test)
+ (synopsis "Catala plugin that generates Lean 4 code for Catala tests from desugared AST")
+ (modules lean4_desugared_for_catala_tests)
+ (libraries catala.driver desugared scopelang))
+
+(library
  (name lean4_desugared_test)
  (synopsis "Tests for Lean4 desugared backend")
  (modules lean4_desugared_test)
