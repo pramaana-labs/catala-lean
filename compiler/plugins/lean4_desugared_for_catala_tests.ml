@@ -706,7 +706,7 @@ and format_operator
        | _ -> "sorry -- wrong args for ToMoney")
   | Round ->
       (match args with
-       | [arg] -> Printf.sprintf "(round %s)" (format_expr ~scope_defs ~use_input_prefix arg)
+       | [arg] -> Printf.sprintf "(Money.ofCents ((%s).toIntRound * 100))" (format_expr ~scope_defs ~use_input_prefix arg)
        | _ -> "sorry -- wrong args for Round")
   (* Other *)
   | Log _ -> (match args with [arg] -> format_expr ~scope_defs ~use_input_prefix arg | _ -> "sorry -- log")
@@ -1515,7 +1515,7 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
   
   (* Generate #eval statements for assertions *)
   let assertion_eval_statements = List.map (fun assertion_body ->
-    Printf.sprintf "#eval (%s)" assertion_body
+    Printf.sprintf "#eval! (%s)" assertion_body
   ) (List.rev all_assertions) in
   
   (* Combine: header, types (structs and enums in dependency order), topdefs, scopes, then eval statements *)
