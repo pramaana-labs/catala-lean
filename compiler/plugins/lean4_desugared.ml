@@ -1000,6 +1000,55 @@ let format_var_methods
       methods
     ) var_def.rule_trees)
 
+(** Format a rule tree as a value expression (for use in input struct defaults) *)
+let rec format_rule_tree_value
+    ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
+    (tree : Scopelang.From_desugared.rule_tree)
+    : string =
+  match tree with
+  | Scopelang.From_desugared.Leaf base_rules ->
+      (* Leaf: format base rules *)
+      (match base_rules with
+      | [] -> "sorry /- no rules -/"
+      | [single_rule] ->
+          let just_expr = Expr.unbox single_rule.Ast.rule_just in
+          let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
+          (match Mark.remove just_expr with
+          | ELit (LBool true) -> format_expr ~scope_defs ~use_input_prefix:false cons_expr
+          | _ -> Printf.sprintf "(if %s then %s else sorry)"
+                   (format_expr ~scope_defs ~use_input_prefix:false just_expr) 
+                   (format_expr ~scope_defs ~use_input_prefix:false cons_expr))
+      | multiple_rules ->
+          let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false) multiple_rules in
+          Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
+            (String.concat ", " rule_bodies))
+  | Scopelang.From_desugared.Node (exception_trees, base_rules) ->
+      (* Node: process exceptions first, then fall back to base rules *)
+      let local_default = match base_rules with
+        | [] -> "sorry /- no base case -/"
+        | [single_rule] ->
+            let just_expr = Expr.unbox single_rule.Ast.rule_just in
+            let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
+            (match Mark.remove just_expr with
+            | ELit (LBool true) -> format_expr ~scope_defs ~use_input_prefix:false cons_expr
+            | _ -> Printf.sprintf "(if %s then %s else sorry)"
+                     (format_expr ~scope_defs ~use_input_prefix:false just_expr) 
+                     (format_expr ~scope_defs ~use_input_prefix:false cons_expr))
+        | multiple_rules ->
+            let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false) multiple_rules in
+            Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
+              (String.concat ", " rule_bodies)
+      in
+      (* Format exception trees as D monad expressions *)
+      let format_exception_tree exc_tree =
+        let value = format_rule_tree_value ~scope_defs exc_tree in
+        (* Wrap in D monad format expected by processExceptions *)
+        Printf.sprintf ".ok (some (%s))" value
+      in
+      let exception_calls = List.map format_exception_tree exception_trees in
+      Printf.sprintf "(match processExceptions [%s] with | .ok none => %s | .ok (some r) => r | .error _ => sorry)"
+        (String.concat ", " exception_calls) local_default
+
 (** Generate input struct for a scope *)
 let format_input_struct 
     (scope_name : string) 
@@ -1011,6 +1060,8 @@ let format_input_struct
     topological order of dependencies using existing dependency checks and initialized appropriately. *)
   let sub_scopes = scope_decl.Ast.scope_sub_scopes in
   let scope_defs = scope_decl.Ast.scope_defs in
+  (* Get exception graphs for all variables in this scope *)
+  let exc_graphs = Scopelang.From_desugared.scope_to_exception_graphs scope_decl in
     (* Format regular input fields first (they have no dependencies) *)
   let formatted_input_fields = List.map (fun (input : input_info) ->
     let base_name = sanitize_name (ScopeVar.to_string input.var_name) in
@@ -1086,7 +1137,8 @@ let format_input_struct
       let var_type = format_typ ctx.ctx_var_type in
       let scope_def_key = ((ctx.ctx_var_name, Pos.void), Ast.ScopeDef.Var ctx.ctx_state) in
       
-      (* Get rules and build default value with exception handling (similar to line 752-821) *)
+      (* Get rules and build default value with proper exception tree handling *)
+      (* Uses exception graphs and def_map_to_tree for correct labelled exception handling *)
       (* Note: use_input_prefix:false because we're defining the input struct itself *)
       let format_default_with_exceptions () =
         match Ast.ScopeDef.Map.find_opt scope_def_key scope_defs with
@@ -1100,43 +1152,55 @@ let format_input_struct
               | Some expr -> Some (format_expr ~use_input_prefix:false expr)
               | None -> None)
             else
-              let rules_list = RuleName.Map.bindings scope_def.Ast.scope_def_rules in
-              (* Separate base case rules from exception rules *)
-              let base_rules = List.filter_map (fun (_, rule) ->
-                match rule.Ast.rule_exception with
-                | Ast.BaseCase -> Some rule
-                | _ -> None
-              ) rules_list in
-              let exception_rules = List.filter_map (fun (_, rule) ->
-                match rule.Ast.rule_exception with
-                | Ast.BaseCase -> None
-                | _ -> Some rule
-              ) rules_list in
-              
-              (* Build local_default from base cases (similar to line 752-765) *)
-              let local_default = match base_rules with
-                | [] -> "sorry /- no base case -/"
-                | [single_rule] ->
-                    let just_expr = Expr.unbox single_rule.Ast.rule_just in
-                    let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
-                    (match Mark.remove just_expr with
-                    | ELit (LBool true) -> format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr
-                    | _ -> Printf.sprintf "(if %s then %s else sorry)"
-                             (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false just_expr) 
-                             (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr))
-                | multiple_rules ->
-                    let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) multiple_rules in
-                    Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
-                      (String.concat ", " rule_bodies)
-              in
-              
-              (* If there are exceptions, use processExceptions pattern (similar to line 821) *)
-              if List.length exception_rules > 0 then
-                let exception_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) exception_rules in
-                Some (Printf.sprintf "(match processExceptions [%s] with | .ok none => %s | .ok (some r) => r | .error _ => sorry)"
-                  (String.concat ", " exception_bodies) local_default)
-              else
-                Some local_default
+              (* Use exception graph to build proper rule tree with label hierarchy *)
+              let exc_graph_opt = Ast.ScopeDef.Map.find_opt scope_def_key exc_graphs in
+              match exc_graph_opt with
+              | Some exc_graph ->
+                  (* Build rule tree using the exception graph - this properly handles
+                     "exception to label_name" relationships *)
+                  let rule_trees = Scopelang.From_desugared.def_map_to_tree 
+                    scope_def.Ast.scope_def_rules exc_graph in
+                  (match rule_trees with
+                  | [] -> 
+                      (match ctx.ctx_default with
+                      | Some expr -> Some (format_expr ~use_input_prefix:false expr)
+                      | None -> None)
+                  | [single_tree] -> 
+                      (* Single rule tree - format it directly *)
+                      Some (format_rule_tree_value ~scope_defs:(Some scope_defs) single_tree)
+                  | multiple_trees ->
+                      (* Multiple independent trees - combine with processExceptions *)
+                      let tree_values = List.map (fun tree ->
+                        Printf.sprintf ".ok (some (%s))" 
+                          (format_rule_tree_value ~scope_defs:(Some scope_defs) tree)
+                      ) multiple_trees in
+                      Some (Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
+                        (String.concat ", " tree_values)))
+              | None ->
+                  (* No exception graph - fall back to simple rule processing *)
+                  let rules_list = RuleName.Map.bindings scope_def.Ast.scope_def_rules in
+                  let base_rules = List.filter_map (fun (_, rule) ->
+                    match rule.Ast.rule_exception with
+                    | Ast.BaseCase -> Some rule
+                    | _ -> None
+                  ) rules_list in
+                  (match base_rules with
+                  | [] -> 
+                      (match ctx.ctx_default with
+                      | Some expr -> Some (format_expr ~use_input_prefix:false expr)
+                      | None -> Some "sorry /- no base case -/")
+                  | [single_rule] ->
+                      let just_expr = Expr.unbox single_rule.Ast.rule_just in
+                      let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
+                      (match Mark.remove just_expr with
+                      | ELit (LBool true) -> Some (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr)
+                      | _ -> Some (Printf.sprintf "(if %s then %s else sorry)"
+                               (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false just_expr) 
+                               (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr)))
+                  | multiple_rules ->
+                      let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) multiple_rules in
+                      Some (Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
+                        (String.concat ", " rule_bodies)))
       in
       
       (* Check if the type is a function type (depends on) *)
