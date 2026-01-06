@@ -42,7 +42,7 @@ let lean_keywords =
     "all_goals"; "any_goals"; "focus"; "rotate_left"; "rotate_right";
     "repeat"; "try"; "first"; "solve1"; "trace"; "trace_state";
     "trace_message"; "assumption"; "contradiction"; "constructor"; "cases";
-    "case"; "next"; "skip"; "sorry"; "admit"; "exact"; "apply"; "refine";
+    "case"; "next"; "skip"; "default"; "admit"; "exact"; "apply"; "refine";
     "rw"; "simp"; "dsimp"; "unfold"; "fold"; "change"; "convert"; "congr";
     "ac_refl"; "cc"; "linarith"; "omega"; "finish"; "safe"; "norm_num";
     "norm_cast"; "push_cast"; "ring"; "ring_exp"; "abel"; "field_simp";
@@ -382,7 +382,7 @@ let rec format_typ (ty : typ) : string =
   | TDefault t -> format_typ t
   | TForAll _ -> "TForall"
   | TVar v -> sanitize_name (Bindlib.name_of v)  (* Use the type variable's name *)
-  | TClosureEnv -> "Unit"
+  | TClosureEnv | TError -> "Unit"
     (* For now, output Unit for complex types we don't fully support *)
 
 (** Recursively collect unique type variable names from a type *)
@@ -400,7 +400,7 @@ let rec collect_type_vars (ty : typ) (acc : String.Set.t) : String.Set.t =
       (* Unbind and collect from the body type *)
       let _, body_ty = Bindlib.unmbind binder in
       collect_type_vars body_ty acc
-  | TLit _ | TStruct _ | TEnum _ | TClosureEnv -> acc
+  | TLit _ | TStruct _ | TEnum _ | TClosureEnv | TError -> acc
 
 (** Collect unique type variables from a list of types *)
 let collect_type_vars_from_list (tys : typ list) : string list =
@@ -566,11 +566,11 @@ let rec format_expr
     (* Scope calls handled, but not completely *)
   | EDefault _ | EPureDefault _ | EEmpty | EErrorOnEmpty _ ->
       (* Default logic - will handle later *)
-      "sorry -- default logic not yet implemented\n"
+      "default -- default logic not yet implemented\n"
   | EDStructAmend _ ->
-      "sorry -- struct amendment not yet implemented\n"
+      "default -- struct amendment not yet implemented\n"
   | _ ->
-      "sorry /-unsupported expression-/"
+      "default /-unsupported expression-/"
 
 (** Format an operator and its arguments to Lean code *)
 and format_operator 
@@ -585,12 +585,12 @@ and format_operator
     | [arg1; arg2] ->
         Printf.sprintf "(%s %s %s)"
           (format_expr ~scope_defs ~use_input_prefix arg1) sym (format_expr ~scope_defs ~use_input_prefix arg2)
-    | _ -> "sorry -- wrong number of args for binop"
+    | _ -> "default -- wrong number of args for binop"
   in
   let unop sym =
     match args with
     | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr ~scope_defs ~use_input_prefix arg)
-    | _ -> "sorry -- wrong number of args for unop"
+    | _ -> "default -- wrong number of args for unop"
   in
   (* Helper to wrap with decide only if not a boolean operator *)
   let format_bool_arg arg =
@@ -610,7 +610,7 @@ and format_operator
           let arg2_str = format_expr ~scope_defs ~use_input_prefix arg2 in
           Printf.sprintf "(CatalaRuntime.multiply %s %s)"
             arg1_str arg2_str
-      | _ -> "sorry -- wrong number of args for Mult")
+      | _ -> "default -- wrong number of args for Mult")
   | Div -> binop "/"
   | Minus -> unop "-"
   | Lt -> binop "<"
@@ -623,40 +623,40 @@ and format_operator
       (match args with
       | [arg1; arg2] ->
           Printf.sprintf "(%s && %s)" (format_bool_arg arg1) (format_bool_arg arg2)
-      | _ -> "sorry -- wrong number of args for And")
+      | _ -> "default -- wrong number of args for And")
   | Or ->
       (match args with
       | [arg1; arg2] ->
           Printf.sprintf "(%s || %s)" (format_bool_arg arg1) (format_bool_arg arg2)
-      | _ -> "sorry -- wrong number of args for Or")
+      | _ -> "default -- wrong number of args for Or")
   | Xor ->
       (match args with
       | [arg1; arg2] ->
           Printf.sprintf "(%s ^^ %s)" (format_bool_arg arg1) (format_bool_arg arg2)
-      | _ -> "sorry -- wrong number of args for Xor")
+      | _ -> "default -- wrong number of args for Xor")
   | Not ->
       (match args with
       | [arg] -> Printf.sprintf "(!%s)" (format_bool_arg arg)
-      | _ -> "sorry -- wrong number of args for Not")
+      | _ -> "default -- wrong number of args for Not")
   (* Polymorphic operators *)
   | Length ->
       (match args with
        | [arg] -> Printf.sprintf "(%s).length" (format_expr ~scope_defs ~use_input_prefix arg)
-       | _ -> "sorry -- wrong args for Length")
+       | _ -> "default -- wrong args for Length")
   | Map ->
       (match args with
         | [func; arr] ->
             Printf.sprintf "(List.map (%s) %s)"
               (format_expr ~scope_defs ~use_input_prefix func)
               (format_expr ~scope_defs ~use_input_prefix arr)
-        | _ -> "sorry -- wrong args for Map")
+        | _ -> "default -- wrong args for Map")
   | Filter ->
       (match args with
         | [pred; arr] ->
             Printf.sprintf "(List.filter (%s) %s)"
               (format_expr ~scope_defs ~use_input_prefix pred)
               (format_expr ~scope_defs ~use_input_prefix arr)
-        | _ -> "sorry -- wrong args for Filter")
+        | _ -> "default -- wrong args for Filter")
   | Fold ->
       (match args with
         | [fn; init; arr] ->
@@ -664,14 +664,14 @@ and format_operator
               (format_expr ~scope_defs ~use_input_prefix fn)
               (format_expr ~scope_defs ~use_input_prefix init)
               (format_expr ~scope_defs ~use_input_prefix arr)
-        | _ -> "sorry -- wrong args for Fold")
+        | _ -> "default -- wrong args for Fold")
   | Concat ->
       (match args with
         | [arr1; arr2] ->
             Printf.sprintf "(%s ++ %s)"
               (format_expr ~scope_defs ~use_input_prefix arr1)
               (format_expr ~scope_defs ~use_input_prefix arr2)
-        | _ -> "sorry -- wrong args for Concat")
+        | _ -> "default -- wrong args for Concat")
   | Reduce ->
       (match args with
         | [fn; default; arr] ->
@@ -680,34 +680,34 @@ and format_operator
               (format_expr ~scope_defs ~use_input_prefix arr)
               (format_expr ~scope_defs ~use_input_prefix default)
               (format_expr ~scope_defs ~use_input_prefix fn)
-        | _ -> "sorry -- wrong args for Reduce")
+        | _ -> "default -- wrong args for Reduce")
   | Map2 ->
-      "sorry -- map2 not yet implemented\n"
+      "default -- map2 not yet implemented\n"
   (* Conversions *)
   | ToInt ->
       (match args with
        | [arg] -> Printf.sprintf "(Rat.floor %s)" (format_expr ~scope_defs ~use_input_prefix arg)
-       | _ -> "sorry -- wrong args for ToInt")
+       | _ -> "default -- wrong args for ToInt")
   | ToRat ->
       (match args with
        | [arg] ->  Printf.sprintf "(CatalaRuntime.toRat %s)" (format_expr ~scope_defs ~use_input_prefix arg)
-       | _ -> "sorry -- wrong args for ToRat")
+       | _ -> "default -- wrong args for ToRat")
   | ToMoney ->
       (match args with
        | [arg] -> Printf.sprintf "(CatalaRuntime.toMoney %s)" (format_expr ~scope_defs ~use_input_prefix arg)
-       | _ -> "sorry -- wrong args for ToMoney")
+       | _ -> "default -- wrong args for ToMoney")
   | Round ->
       (match args with
        | [arg] -> Printf.sprintf "(round %s)" (format_expr ~scope_defs ~use_input_prefix arg)
-       | _ -> "sorry -- wrong args for Round")
+       | _ -> "default -- wrong args for Round")
   (* Other *)
-  | Log _ -> (match args with [arg] -> format_expr ~scope_defs ~use_input_prefix arg | _ -> "sorry -- log")
-  | ToClosureEnv | FromClosureEnv -> "sorry -- closure env"
-  | _ -> "sorry -- unsupported operator"
+  | Log _ -> (match args with [arg] -> format_expr ~scope_defs ~use_input_prefix arg | _ -> "default -- log")
+  | ToClosureEnv | FromClosureEnv -> "default -- closure env"
+  | _ -> "default -- unsupported operator"
 
 
 (** {1 Phase 2: Lean code generation for method-per-variable} *)
-(** Format a single rule body (justification and consequence) wrapped in D monad *)
+(** Format a single rule body (justification and consequence) wrapped in Option *)
 let format_rule_body 
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     ?(use_input_prefix : bool = true)
@@ -733,11 +733,11 @@ let format_rule_body
   (* Check if justification is always true (common case) *)
   match Mark.remove just_expr with
   | ELit (LBool true) ->
-    (* Unconditional rule: just return the consequence wrapped in D *)
-    Printf.sprintf ".ok (some (%s))" (format_cons ())
+    (* Unconditional rule: just return the consequence wrapped in some *)
+    Printf.sprintf "some (%s)" (format_cons ())
   | _ ->
     (* Conditional rule: if-then-else *)
-    Printf.sprintf "if %s then .ok (some (%s)) else .ok none"
+    Printf.sprintf "if %s then some (%s) else none"
         (format_expr ~scope_defs ~use_input_prefix just_expr)
         (format_cons ())
 
@@ -829,7 +829,7 @@ let context_to_input (ctx : context_var_info) : input_info = {
 (** Generate a Lean method from a rule tree node.
     Each node becomes its own method that:
     1. Computes local "default" from base rules
-    2. Calls processExceptions with exception child methods
+    2. Calls processExceptions2 with exception child methods
     3. Returns the combined result
 *)
 let rec format_rule_tree_method
@@ -860,15 +860,15 @@ let rec format_rule_tree_method
       let method_name = format_tree_method_name scope_name var_name tree index in
       let dependencies = rules_locations_used base_rules in
       let params = format_method_params all_inputs scope_name dependencies scope_defs in
-      let return_type = Printf.sprintf "D %s" (format_typ var_type) in
+      let return_type = Printf.sprintf "Option %s" (format_typ var_type) in
       
       let body = match base_rules with
-        | [] -> ".ok none"
+        | [] -> "none"
         | [single_rule] -> format_rule_body ~scope_defs:(Some scope_defs) single_rule
         | multiple_rules ->
             (* Multiple piecewise rules in leaf *)
             let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs)) multiple_rules in
-            Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies)
+            Printf.sprintf "processExceptions2 [%s]" (String.concat ", " rule_bodies)
       in
       
       let method_def = Printf.sprintf "def %s %s : %s :=\n  %s\n" 
@@ -891,7 +891,7 @@ let rec format_rule_tree_method
       (* Generate this node's method *)
       let method_name = format_tree_method_name scope_name var_name tree index in
       let params = format_method_params all_inputs scope_name all_dependencies scope_defs in
-      let return_type = Printf.sprintf "D %s" (format_typ var_type) in
+      let return_type = Printf.sprintf "Option %s" (format_typ var_type) in
       
       (* Build local default from base rules *)
       let local_default = match base_rules with
@@ -906,7 +906,7 @@ let rec format_rule_tree_method
         | multiple_rules ->
             (* Multiple piecewise rules - process them first *)
             let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs)) multiple_rules in
-            Printf.sprintf "match processExceptions [%s] with | .ok r => r | .error e => none"
+            Printf.sprintf "(processExceptions2 [%s])"
               (String.concat ", " rule_bodies)
       in
       
@@ -960,10 +960,10 @@ let rec format_rule_tree_method
       
       let body = 
         if exception_calls = [] then
-          Printf.sprintf ".ok (%s)" local_default
+          local_default
         else
           Printf.sprintf 
-            "match processExceptions [%s] with\n    | .ok none => .ok (%s)\n    | .ok (some r) => .ok (some r)\n    | .error e => .error e"
+            "(match processExceptions2 [%s] with\n    | none => %s\n    | some r => some r)"
             (String.concat ", " exception_calls)
             local_default
       in
@@ -987,11 +987,11 @@ let format_var_methods
   (* For input-output variables with no rule trees, generate a simple passthrough method *)
   if var_def.is_input_output && var_def.rule_trees = [] then
     let method_name = Printf.sprintf "%s_%s" scope_name var_name_str in
-    let return_type = Printf.sprintf "D %s" (format_typ var_def.var_type) in
+    let return_type = Printf.sprintf "Option %s" (format_typ var_def.var_type) in
     let has_inputs = inputs <> [] || contexts <> [] in
     let input_param = if has_inputs then Printf.sprintf "(input : %s_Input)" scope_name else "" in
-    (* Return the input value directly wrapped in D monad *)
-    let body = Printf.sprintf ".ok (some input.%s)" var_name_str in
+    (* Return the input value directly wrapped in some *)
+    let body = Printf.sprintf "some input.%s" var_name_str in
     [Printf.sprintf "def %s %s : %s :=\n  %s\n" method_name input_param return_type body]
   else
     (* Normal case: generate methods from rule trees *)
@@ -1000,54 +1000,50 @@ let format_var_methods
       methods
     ) var_def.rule_trees)
 
-(** Format a rule tree as a value expression (for use in input struct defaults) *)
-let rec format_rule_tree_value
+(** Format a rule tree as an Option expression (inline, for use in input struct defaults).
+    This follows the same logic as format_rule_tree_method but generates inline expressions
+    instead of method definitions.
+    - Leaf nodes: return Option from base rules
+    - Node nodes: recursively process exception trees, combine with processExceptions2 *)
+let rec format_rule_tree_inline
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     (tree : Scopelang.From_desugared.rule_tree)
     : string =
   match tree with
   | Scopelang.From_desugared.Leaf base_rules ->
-      (* Leaf: format base rules *)
+      (* Leaf: format base rules as Option *)
       (match base_rules with
-      | [] -> "sorry /- no rules -/"
-      | [single_rule] ->
-          let just_expr = Expr.unbox single_rule.Ast.rule_just in
-          let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
-          (match Mark.remove just_expr with
-          | ELit (LBool true) -> format_expr ~scope_defs ~use_input_prefix:false cons_expr
-          | _ -> Printf.sprintf "(if %s then %s else sorry)"
-                   (format_expr ~scope_defs ~use_input_prefix:false just_expr) 
-                   (format_expr ~scope_defs ~use_input_prefix:false cons_expr))
+      | [] -> "none"
+      | [single_rule] -> format_rule_body ~scope_defs ~use_input_prefix:false single_rule
       | multiple_rules ->
           let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false) multiple_rules in
-          Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
-            (String.concat ", " rule_bodies))
+          Printf.sprintf "processExceptions2 [%s]" (String.concat ", " rule_bodies))
   | Scopelang.From_desugared.Node (exception_trees, base_rules) ->
       (* Node: process exceptions first, then fall back to base rules *)
+      (* Build local_default as Option value *)
       let local_default = match base_rules with
-        | [] -> "sorry /- no base case -/"
+        | [] -> "none"
         | [single_rule] ->
             let just_expr = Expr.unbox single_rule.Ast.rule_just in
             let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
             (match Mark.remove just_expr with
-            | ELit (LBool true) -> format_expr ~scope_defs ~use_input_prefix:false cons_expr
-            | _ -> Printf.sprintf "(if %s then %s else sorry)"
+            | ELit (LBool true) -> Printf.sprintf "some (%s)" (format_expr ~scope_defs ~use_input_prefix:false cons_expr)
+            | _ -> Printf.sprintf "if %s then some (%s) else none"
                      (format_expr ~scope_defs ~use_input_prefix:false just_expr) 
                      (format_expr ~scope_defs ~use_input_prefix:false cons_expr))
         | multiple_rules ->
             let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false) multiple_rules in
-            Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
+            Printf.sprintf "(processExceptions2 [%s])"
               (String.concat ", " rule_bodies)
       in
-      (* Format exception trees as D monad expressions *)
-      let format_exception_tree exc_tree =
-        let value = format_rule_tree_value ~scope_defs exc_tree in
-        (* Wrap in D monad format expected by processExceptions *)
-        Printf.sprintf ".ok (some (%s))" value
-      in
-      let exception_calls = List.map format_exception_tree exception_trees in
-      Printf.sprintf "(match processExceptions [%s] with | .ok none => %s | .ok (some r) => r | .error _ => sorry)"
-        (String.concat ", " exception_calls) local_default
+      (* Recursively format exception trees as Option expressions *)
+      let exception_calls = List.map (format_rule_tree_inline ~scope_defs) exception_trees in
+      if exception_calls = [] then
+        local_default
+      else
+        (* Exceptions take priority: try exceptions first, then fall back to local default *)
+        Printf.sprintf "(match processExceptions2 [%s] with | none => %s | some r => some r)"
+          (String.concat ", " exception_calls) local_default
 
 (** Generate input struct for a scope *)
 let format_input_struct 
@@ -1137,8 +1133,7 @@ let format_input_struct
       let var_type = format_typ ctx.ctx_var_type in
       let scope_def_key = ((ctx.ctx_var_name, Pos.void), Ast.ScopeDef.Var ctx.ctx_state) in
       
-      (* Get rules and build default value with proper exception tree handling *)
-      (* Uses exception graphs and def_map_to_tree for correct labelled exception handling *)
+      (* Get rules and build default value with exception handling *)
       (* Note: use_input_prefix:false because we're defining the input struct itself *)
       let format_default_with_exceptions () =
         match Ast.ScopeDef.Map.find_opt scope_def_key scope_defs with
@@ -1152,55 +1147,82 @@ let format_input_struct
               | Some expr -> Some (format_expr ~use_input_prefix:false expr)
               | None -> None)
             else
-              (* Use exception graph to build proper rule tree with label hierarchy *)
-              let exc_graph_opt = Ast.ScopeDef.Map.find_opt scope_def_key exc_graphs in
-              match exc_graph_opt with
-              | Some exc_graph ->
-                  (* Build rule tree using the exception graph - this properly handles
-                     "exception to label_name" relationships *)
-                  let rule_trees = Scopelang.From_desugared.def_map_to_tree 
-                    scope_def.Ast.scope_def_rules exc_graph in
-                  (match rule_trees with
-                  | [] -> 
-                      (match ctx.ctx_default with
-                      | Some expr -> Some (format_expr ~use_input_prefix:false expr)
-                      | None -> None)
-                  | [single_tree] -> 
-                      (* Single rule tree - format it directly *)
-                      Some (format_rule_tree_value ~scope_defs:(Some scope_defs) single_tree)
-                  | multiple_trees ->
-                      (* Multiple independent trees - combine with processExceptions *)
-                      let tree_values = List.map (fun tree ->
-                        Printf.sprintf ".ok (some (%s))" 
-                          (format_rule_tree_value ~scope_defs:(Some scope_defs) tree)
-                      ) multiple_trees in
-                      Some (Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
-                        (String.concat ", " tree_values)))
-              | None ->
-                  (* No exception graph - fall back to simple rule processing *)
-                  let rules_list = RuleName.Map.bindings scope_def.Ast.scope_def_rules in
-                  let base_rules = List.filter_map (fun (_, rule) ->
-                    match rule.Ast.rule_exception with
-                    | Ast.BaseCase -> Some rule
-                    | _ -> None
-                  ) rules_list in
-                  (match base_rules with
-                  | [] -> 
-                      (match ctx.ctx_default with
-                      | Some expr -> Some (format_expr ~use_input_prefix:false expr)
-                      | None -> Some "sorry /- no base case -/")
-                  | [single_rule] ->
-                      let just_expr = Expr.unbox single_rule.Ast.rule_just in
-                      let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
-                      (match Mark.remove just_expr with
-                      | ELit (LBool true) -> Some (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr)
-                      | _ -> Some (Printf.sprintf "(if %s then %s else sorry)"
-                               (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false just_expr) 
-                               (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr)))
-                  | multiple_rules ->
-                      let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) multiple_rules in
-                      Some (Printf.sprintf "(match processExceptions [%s] with | .ok (some r) => r | _ => sorry)"
-                        (String.concat ", " rule_bodies)))
+              let rules_list = RuleName.Map.bindings scope_def.Ast.scope_def_rules in
+              (* Separate base case rules from exception rules *)
+              let base_rules = List.filter_map (fun (_, rule) ->
+                match rule.Ast.rule_exception with
+                | Ast.BaseCase -> Some rule
+                | _ -> None
+              ) rules_list in
+              let exception_rules = List.filter_map (fun (_, rule) ->
+                match rule.Ast.rule_exception with
+                | Ast.BaseCase -> None
+                | _ -> Some rule
+              ) rules_list in
+              
+              (* Only use exception tree approach if there are exceptions *)
+              if List.length exception_rules > 0 then
+                (* Use exception graph to build proper rule tree with label hierarchy *)
+                let exc_graph_opt = Ast.ScopeDef.Map.find_opt scope_def_key exc_graphs in
+                match exc_graph_opt with
+                | Some exc_graph ->
+                    (* Build rule tree using the exception graph - this properly handles
+                       "exception to label_name" relationships *)
+                    let rule_trees = Scopelang.From_desugared.def_map_to_tree 
+                      scope_def.Ast.scope_def_rules exc_graph in
+                    (match rule_trees with
+                    | [] -> 
+                        (match ctx.ctx_default with
+                        | Some expr -> Some (format_expr ~use_input_prefix:false expr)
+                        | None -> None)
+                    | [single_tree] -> 
+                        (* Single rule tree - format as Option then unwrap *)
+                        let opt_expr = format_rule_tree_inline ~scope_defs:(Some scope_defs) single_tree in
+                        Some (Printf.sprintf "(match %s with | some r => r | _ => default)" opt_expr)
+                    | multiple_trees ->
+                        (* Multiple independent trees - combine with processExceptions2 *)
+                        let tree_exprs = List.map (format_rule_tree_inline ~scope_defs:(Some scope_defs)) multiple_trees in
+                        Some (Printf.sprintf "(match (processExceptions2 [%s]) with | some r => r | _ => default)"
+                          (String.concat ", " tree_exprs)))
+                | None ->
+                    (* No exception graph but has exception rules - use simple processExceptions2 *)
+                    let exception_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) exception_rules in
+                    let local_default = match base_rules with
+                      | [] -> "default /- no base case -/"
+                      | [single_rule] ->
+                          let just_expr = Expr.unbox single_rule.Ast.rule_just in
+                          let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
+                          (match Mark.remove just_expr with
+                          | ELit (LBool true) -> format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr
+                          | _ -> Printf.sprintf "(if %s then %s else default)"
+                                   (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false just_expr) 
+                                   (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr))
+                      | multiple_rules ->
+                          let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) multiple_rules in
+                          Printf.sprintf "(match (processExceptions2 [%s]) with | some r => r | _ => default)"
+                            (String.concat ", " rule_bodies)
+                    in
+                    Some (Printf.sprintf "(match processExceptions2 [%s] with | none => %s | some r => r)"
+                      (String.concat ", " exception_bodies) local_default)
+              else
+                (* No exceptions - use simple direct formatting *)
+                (match base_rules with
+                | [] -> 
+                    (match ctx.ctx_default with
+                    | Some expr -> Some (format_expr ~use_input_prefix:false expr)
+                    | None -> Some "default /- no base case -/")
+                | [single_rule] ->
+                    let just_expr = Expr.unbox single_rule.Ast.rule_just in
+                    let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
+                    (match Mark.remove just_expr with
+                    | ELit (LBool true) -> Some (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr)
+                    | _ -> Some (Printf.sprintf "(if %s then %s else default)"
+                             (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false just_expr) 
+                             (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr)))
+                | multiple_rules ->
+                    let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) multiple_rules in
+                    Some (Printf.sprintf "(match (processExceptions2 [%s]) with | some r => r | _ => default)"
+                      (String.concat ", " rule_bodies)))
       in
       
       (* Check if the type is a function type (depends on) *)
@@ -1267,7 +1289,7 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
       (sanitize_name (StructField.to_string field))
       (format_typ ty)
   ) field_list in
-  Printf.sprintf "structure %s where\n%s\nderiving DecidableEq"
+  Printf.sprintf "structure %s where\n%s\nderiving DecidableEq, Inhabited"
     name
     (String.concat "\n" formatted_fields)
 
@@ -1289,7 +1311,7 @@ let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string
       name 
       ) constructor_list )
       in
-      Printf.sprintf "inductive %s : Type where\n%s\nderiving DecidableEq"
+      Printf.sprintf "inductive %s : Type where\n%s\nderiving DecidableEq, Inhabited"
         name
         (String.concat "\n" formatted_fields))
     else 
@@ -1300,7 +1322,7 @@ let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string
       name 
       ) constructor_list)
       in 
-      Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s\nderiving DecidableEq"
+      Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s\nderiving DecidableEq, Inhabited"
         name
         (String.concat "\n" formatted_fields))
 
@@ -1316,7 +1338,7 @@ let format_toplevel
   (* Format the body expression *)
   let body_str = match toplevel_decl.Ast.topdef_expr with
     | Some expr -> format_expr expr
-    | None -> "sorry /- external or undefined -/"
+    | None -> "default /- external or undefined -/"
   in
   Printf.sprintf "def %s := %s" toplevel_name_str body_str
 
@@ -1397,7 +1419,7 @@ let format_scope
           ) scope_decl.Ast.scope_defs ([], false) in
           
           Printf.sprintf "%s { %s }" func_name (String.concat ", " (List.rev sub_scope_inputs))
-      | None -> "sorry -- sub-scope name missing")
+      | None -> "default -- sub-scope name missing")
     else
       (* Regular variable: call the method *)
       let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
@@ -1431,12 +1453,11 @@ let format_scope
       let var_name = sanitize_name (ScopeVar.to_string var_def.var_name) in
       let call = get_method_call var_def in
       if var_def.is_sub_scope then
-        (* Sub-scope variables return the struct directly, no D monad *)
+        (* Sub-scope variables return the struct directly *)
         Some (Printf.sprintf "let %s := %s" var_name call)
       else
-        (* Regular variables return D monad *)
-        Some (Printf.sprintf "let %s := match %s with | .ok (some val) => val | _ => sorry "
-          var_name call)
+        (* Regular variables return Option - unwrap *)
+        Some (Printf.sprintf "let %s := match %s with | some val => val | _ => default " var_name call)
   ) var_defs in
   (* Build output struct field assignments by just referencing the variables *)
   let output_assignments = List.map (fun var_def ->

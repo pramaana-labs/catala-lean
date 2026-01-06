@@ -382,7 +382,7 @@ let rec format_typ (ty : typ) : string =
   | TDefault t -> format_typ t
   | TForAll _ -> "TForall"
   | TVar v -> sanitize_name (Bindlib.name_of v)  (* Use the type variable's name *)
-  | TClosureEnv -> "Unit"
+  | TClosureEnv | TError -> "Unit"
     (* For now, output Unit for complex types we don't fully support *)
 
 (** Recursively collect unique type variable names from a type *)
@@ -400,7 +400,7 @@ let rec collect_type_vars (ty : typ) (acc : String.Set.t) : String.Set.t =
       (* Unbind and collect from the body type *)
       let _, body_ty = Bindlib.unmbind binder in
       collect_type_vars body_ty acc
-  | TLit _ | TStruct _ | TEnum _ | TClosureEnv -> acc
+  | TLit _ | TStruct _ | TEnum _ | TClosureEnv | TError -> acc
 
 (** Collect unique type variables from a list of types *)
 let collect_type_vars_from_list (tys : typ list) : string list =

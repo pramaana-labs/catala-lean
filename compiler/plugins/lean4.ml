@@ -82,9 +82,10 @@ let rec format_typ (fmt : Format.formatter) (ty : typ) : unit =
   | TArray t ->
       Format.fprintf fmt "(Array %a)" format_typ t
   | TDefault t -> format_typ fmt t
-  | TVar _ | TForAll _ | TClosureEnv -> 
+  | TVar _ | TForAll _ | TClosureEnv | TError -> 
       (* For now, output Unit for complex types we don't fully support *)
       Format.pp_print_string fmt "Unit"
+ 
 
 (** Format expressions - simplified *)
 let rec format_expr (_ctx : decl_ctx) (fmt : Format.formatter) (e : 'm expr) : unit =
