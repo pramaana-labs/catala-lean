@@ -1,4 +1,4 @@
-(* This file is part of the Catala compiler, a specification language for tax
+(* (* This file is part of the Catala compiler, a specification language for tax
    and social benefits computation rules. Copyright (C) 2020 Inria,
    contributors: Denis Merigoux <denis.merigoux@inria.fr>
 
@@ -121,4 +121,4 @@ let () =
     ~doc:"Generate inter-scope dependency graph (between scopes)";
   Driver.Plugin.register "custom-checkpoint" custom_checkpoint_term
     ~doc:"Generate type dependency graph"
-
+ *)
