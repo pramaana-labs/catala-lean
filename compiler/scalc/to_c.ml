@@ -157,7 +157,7 @@ let rec format_typ
   | TVar v ->
     Format.fprintf fmt "%svoid * /* any %s */%t" sconst (Bindlib.name_of v)
       element_name
-  | TForAll _ -> assert false
+  | TForAll _ | TError -> assert false
   | TClosureEnv -> Format.fprintf fmt "%sCLOSURE_ENV%t" sconst element_name
 
 let format_ctx (type_ordering : TypeIdent.t list) ~ppc ~pph (ctx : decl_ctx) :
@@ -347,6 +347,11 @@ let rec format_expression
          ~pp_sep:(fun fmt () -> Format.fprintf fmt ",@ ")
          format_expression)
       args
+  | EAppOp { op = Eq, _; args = [x1; x2]; _ } ->
+    (* The Eq operator must have been expanded: this should only concern
+       constant constructor equality checks *)
+    Format.fprintf fmt "catala_new_bool(@[<hov 0>(%a)->code == (%a)->code)@]"
+      format_expression x1 format_expression x2
   | EAppOp { op = ((And | Or) as op), _; args; _ } ->
     Format.fprintf fmt "catala_new_bool(@[<hov 0>%a)@]"
       (Format.pp_print_list
@@ -579,7 +584,7 @@ and format_ite (ctx : ctx) (env : env) (fmt : Format.formatter) (b : block) :
     format_block ctx env fmt ite.then_block;
     Format.fprintf fmt "@;<1 -2>} else ";
     format_ite ctx env fmt ite.else_block
-  | [(SSwitch { switch_var; enum_name = e_name; switch_cases = cases; _ }, pos)]
+  | [(SSwitch { switch_var; enum_name = e_name; switch_cases = cases; _ }, _)]
     when EnumName.equal e_name Expr.option_enum ->
     let cases =
       List.map2
@@ -599,17 +604,12 @@ and format_ite (ctx : ctx) (env : env) (fmt : Format.formatter) (b : block) :
     in
     Format.fprintf fmt "if (%a->code == catala_option_some) {" VarName.format
       switch_var;
-    format_block ctx env fmt
-      (Utils.subst_block some_case.payload_var_name
-         (* Not a real catala struct, but will print as <var>->payload *)
-         ( EStructFieldAccess
-             {
-               e1 = EVar switch_var, pos;
-               field = StructField.fresh ("payload", pos);
-               name = Expr.option_struct;
-             },
-           pos )
-         some_case.payload_var_typ pos some_case.case_block);
+    Format.fprintf fmt "@ @[<hov 2>%a = %a->payload;@]"
+      (format_typ ctx.decl_ctx ~const:true (fun fmt ->
+           Format.pp_print_space fmt ();
+           VarName.format fmt some_case.payload_var_name))
+      some_case.payload_var_typ VarName.format switch_var;
+    format_block ctx env fmt some_case.case_block;
     Format.fprintf fmt "@;<1 -2>} else ";
     format_ite ctx env fmt none_case.case_block
   | _ -> Format.fprintf fmt "{%a@;<1 -2>}" (format_block ctx env) b
@@ -854,7 +854,7 @@ let format_program
     | None, None -> "MAIN"
     | None, Some f ->
       String.uppercase_ascii
-        (String.to_id (File.basename (Filename.remove_extension f)))
+        (String.to_id (File.basename (File.remove_extension f)))
     | Some (m, _), _ ->
       String.uppercase_ascii (String.to_ascii (ModuleName.to_string m))
   in

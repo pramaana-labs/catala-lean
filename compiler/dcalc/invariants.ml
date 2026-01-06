@@ -142,14 +142,18 @@ let rec check_typ_no_default ctx ty =
     List.for_all (check_typ_no_default ctx) args && check_typ_no_default ctx res
   | TArray ty -> check_typ_no_default ctx ty
   | TDefault _t -> false
-  | TVar _ | TForAll _ ->
-    Message.error ~internal:true
-      "Some Dcalc invariants are invalid: TForAll was found whereas it should \
-       be fully resolved."
+  | TVar _ -> true
+  | TForAll m ->
+    let _v, ty = Bindlib.unmbind m in
+    check_typ_no_default ctx ty
   | TClosureEnv ->
     Message.error ~internal:true
       "Some Dcalc invariants are invalid: TClosureEnv was found whereas it \
        should only appear later in the compilation process."
+  | TError ->
+    Message.error ~internal:true
+      "Some Dcalc invariants are invalid: TError was found whereas it should \
+       only appear later in the compilation process."
 
 let check_type_thunked_or_nodefault ctx ty =
   check_typ_no_default ctx ty
@@ -188,7 +192,7 @@ let invariant_typing_defaults () : string * invariant_expr =
     fun ctx e ->
       if check_type_root ctx (Expr.ty e) then Pass
       else (
-        Message.warning "typing error %a@." Print.typ (Expr.ty e);
+        Message.warning "typing error %a" Print.typ (Expr.ty e);
         Fail) )
 
 let check_all_invariants prgm =

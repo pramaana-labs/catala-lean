@@ -97,11 +97,16 @@ module ParserAux (LocalisedLexer : Lexer_common.LocalisedLexer) = struct
     in
     let error_loc = Pos.from_lpos (lexing_positions lexbuf) in
     let wrong_token = Utf8.lexeme lexbuf in
-    let msg = custom_menhir_message in
-    Message.delayed_error ~kind:Parsing () ?suggestion ~pos:error_loc
-      "@[<hov>Syntax error at %a:@ %t@]"
-      (fun ppf string -> Format.fprintf ppf "@{<yellow>\"%s\"@}" string)
-      wrong_token msg
+    if String.trim wrong_token = "```" then
+      (* If the token is an ending code fence, override the message for an
+         appropriate one. *)
+      Message.delayed_error ~kind:Parsing () ?suggestion ~pos:error_loc
+        "@[<hov>Syntax error in preceding code block@]"
+    else
+      Message.delayed_error ~kind:Parsing () ?suggestion ~pos:error_loc
+        "@[<hov>Syntax error at %a:@ %t@]"
+        (fun ppf string -> Format.fprintf ppf "@{<yellow>\"%s\"@}" string)
+        wrong_token custom_menhir_message
 
   let sorted_candidate_tokens lexbuf token_list env =
     let acceptable_tokens =
@@ -487,19 +492,17 @@ let check_modname program source_file =
   | ( Some { module_name = mname, pos; _ },
       (Global.FileName file | Global.Contents (_, file) | Global.Stdin file) )
     ->
-    if
-      File.equal (String.to_id mname)
-        (String.to_id Filename.(remove_extension (basename file)))
-    then ()
+    let basename_no_ext = File.remove_extension (Filename.basename file) in
+    if File.equal (String.to_id mname) (String.to_id basename_no_ext) then ()
     else
       Message.error ~kind:Parsing ~pos
         "Module declared as@ @{<blue>%s@},@ which@ does@ not@ match@ the@ \
          file@ name@ %a.@ Rename the module to@ @{<blue>%s@}@ or@ the@ file@ \
          to@ %a."
         mname File.format file
-        (String.capitalize_ascii Filename.(remove_extension (basename file)))
+        (String.capitalize_ascii basename_no_ext)
         File.format
-        File.((dirname file / mname) ^ Filename.extension file)
+        File.((dirname file / mname) -.- extension file)
   | _ -> ()
 
 let load_source_file ?default_module_name source_file content_builder =
@@ -522,7 +525,7 @@ let load_source_file ?default_module_name source_file content_builder =
         (Global.input_src_file source_file)
         (match source_file with
         | FileName s ->
-          String.capitalize_ascii Filename.(basename (remove_extension s))
+          String.capitalize_ascii (Filename.basename (File.remove_extension s))
         | _ -> "Module_name")
   in
   let used_modules, module_items = content_builder program in
@@ -600,8 +603,6 @@ let parse_top_level_file
     | None -> fun s -> Option.value (tbl_lookup s) ~default:(Global.FileName s)
     | Some f -> f
   in
-  Message.with_delayed_errors
-  @@ fun () ->
   let program =
     with_sedlex_source source_file (parse_source ~resolve_included_file)
   in

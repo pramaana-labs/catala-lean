@@ -143,6 +143,12 @@ let () =
   | Error h -> failwith "Hash mismatch for module Date_en, it may need recompiling"
 module Date_en = Date_en
 let () =
+  match Catala_runtime.check_module "MonthYear_en" "CMX|XXXXXXXX|XXXXXXXX|XXXXXXXX"
+    with
+  | Ok () -> ()
+  | Error h -> failwith "Hash mismatch for module MonthYear_en, it may need recompiling"
+module MonthYear_en = MonthYear_en
+let () =
   match Catala_runtime.check_module "Period_en" "CMX|XXXXXXXX|XXXXXXXX|XXXXXXXX"
     with
   | Ok () -> ()
@@ -212,7 +218,7 @@ let assert__1 : Assert_in.t -> Assert.t = fun _ ->
                 start_line=23; start_column=3; end_line=23; end_column=59;
                 law_headings=[]})))
        with
-       | Optional.Absent _ ->
+       | Optional.Absent ->
            (Optional.Present
               (false,
                 ({filename="tests/name_resolution/good/conflicts.catala_en";
@@ -220,7 +226,7 @@ let assert__1 : Assert_in.t -> Assert.t = fun _ ->
                   law_headings=[]})))
        | Optional.Present x -> (Optional.Present x))
     with
-    | Optional.Absent _ -> (raise
+    | Optional.Absent -> (raise
         (Error (NoValue, [{filename="tests/name_resolution/good/conflicts.catala_en";
                            start_line=19; start_column=10;
                            end_line=19; end_column=16; law_headings=[]}])))

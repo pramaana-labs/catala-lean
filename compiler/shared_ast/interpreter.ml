@@ -446,12 +446,12 @@ let rec evaluate_operator
               | ETuple [e; (EPos p, _)], _ ->
                 Runtime.Optional.Present (e, Expr.pos_to_runtime p)
               | _ -> err ()
-            else Runtime.Optional.Absent ()
+            else Runtime.Optional.Absent
           | _ -> err ())
         exps
     in
     match Runtime.handle_exceptions (Array.of_list exps) with
-    | Runtime.Optional.Absent () ->
+    | Runtime.Optional.Absent ->
       EInj
         { name = Expr.option_enum; cons = Expr.none_constr; e = ELit LUnit, m }
     | Runtime.Optional.Present (e, rpos) ->
@@ -522,29 +522,61 @@ let rec runtime_to_val :
          (Array.to_seq (Obj.obj o))
     |> StructField.Map.of_seq
     |> fun fields -> EStruct { name; fields }, m
-  | TEnum name ->
-    (* we only use non-constant constructors of arity 1, which allows us to
-       always use the tag directly (ordered as declared in the constr map), and
-       the field 0 *)
+  | TEnum name -> (
     let cons_map = EnumName.Map.find name ctx.ctx_enums in
-    let cons, ty =
-      List.nth
-        (EnumConstructor.Map.bindings cons_map)
-        (Obj.tag o - Obj.first_non_constant_constructor_tag)
-    in
-    let e = runtime_to_val eval_expr ctx m ty (Obj.field o 0) in
-    EInj { name; cons; e }, m
-  | TOption ty -> (
-    match Obj.tag o - Obj.first_non_constant_constructor_tag with
-    | 0 ->
-      let e =
-        runtime_to_val eval_expr ctx m (TLit TUnit, Pos.void) (Obj.field o 0)
-      in
-      EInj { name = Expr.option_enum; cons = Expr.none_constr; e }, m
-    | 1 ->
+    let tag = Obj.tag o in
+    if tag = Obj.int_tag then
+      (* constant constructor case *)
+      let exception Found of EnumConstructor.t in
+      match
+        EnumConstructor.Map.fold
+          (fun cons ty skip ->
+            match ty with
+            | TLit TUnit, _ -> if skip = 0 then raise (Found cons) else skip - 1
+            | _ -> skip)
+          cons_map
+          (Obj.obj o : int)
+      with
+      | _ -> assert false
+      | exception Found cons ->
+        ( EInj
+            {
+              name;
+              cons;
+              e = ELit LUnit, Expr.with_ty m (TLit TUnit, Pos.void);
+            },
+          m )
+    else
+      (* non-constant constructor *)
+      let exception Found of EnumConstructor.t * typ in
+      match
+        EnumConstructor.Map.fold
+          (fun cons ty skip ->
+            match ty with
+            | TLit TUnit, _ -> skip
+            | _ -> if skip = 0 then raise (Found (cons, ty)) else skip - 1)
+          cons_map
+          (Obj.tag o - Obj.first_non_constant_constructor_tag)
+      with
+      | _ -> assert false
+      | exception Found (cons, ty) ->
+        let payload = Obj.field o 0 (* Arity is always 1 in the runtime *) in
+        let e = runtime_to_val eval_expr ctx m ty payload in
+        EInj { name; cons; e }, m)
+  | TOption ty ->
+    if Obj.is_int o then
+      (* constant constructor => None case *)
+      ( EInj
+          {
+            name = Expr.option_enum;
+            cons = Expr.none_constr;
+            e = ELit LUnit, Expr.with_ty m (TLit TUnit, Pos.void);
+          },
+        m )
+    else
+      (* Some case *)
       let e = runtime_to_val eval_expr ctx m ty (Obj.field o 0) in
       EInj { name = Expr.option_enum; cons = Expr.some_constr; e }, m
-    | _ -> assert false)
   | TClosureEnv ->
     (* By construction, a closure environment can only be consumed from the same
        scope where it was built (compiled or not) ; for this reason, we can
@@ -561,7 +593,7 @@ let rec runtime_to_val :
     (* This case is only valid for ASTs including default terms; but the typer
        isn't aware so we need some additional dark arts. *)
     match (Obj.obj o : 'a Runtime.Optional.t) with
-    | Runtime.Optional.Absent () -> Obj.magic EEmpty, m
+    | Runtime.Optional.Absent -> Obj.magic EEmpty, m
     | Runtime.Optional.Present o -> (
       match runtime_to_val eval_expr ctx m ty o with
       | ETuple [(e, m); (EPos pos, _)], _ -> e, Expr.with_pos pos m
@@ -573,6 +605,7 @@ let rec runtime_to_val :
     (* A type variable being an unresolved type, it can't be deconstructed, so
        we can let it pass through. *)
     Obj.obj o, m
+  | TError -> assert false
 
 and val_to_runtime :
     type d.
@@ -615,37 +648,42 @@ and val_to_runtime :
       (StructField.Map.to_seq fields)
     |> Array.of_seq
     |> Obj.repr
-  | TEnum name1, EInj { name; cons; e } ->
+  | TEnum name1, EInj { name; cons; e } -> (
     assert (EnumName.equal name name1);
     let cons_map = EnumName.Map.find name ctx.ctx_enums in
-    let rec find_tag n = function
-      | [] -> assert false
-      | (c, ty) :: _ when EnumConstructor.equal c cons -> n, ty
-      | _ :: r -> find_tag (n + 1) r
-    in
-    let tag, ty =
-      find_tag Obj.first_non_constant_constructor_tag
-        (EnumConstructor.Map.bindings cons_map)
-    in
-    let field = val_to_runtime eval_expr ctx ty e in
-    let o = Obj.with_tag tag (Obj.repr (Some ())) in
-    Obj.set_field o 0 field;
-    o
+    match EnumConstructor.Map.find cons cons_map with
+    | TLit TUnit, _ -> (
+      let exception (* Constant constructor case *)
+        Found of int in
+      match
+        EnumConstructor.Map.fold
+          (fun c ty n ->
+            if EnumConstructor.equal c cons then raise (Found n)
+            else match ty with TLit TUnit, _ -> n + 1 | _ -> n)
+          cons_map 0
+      with
+      | _ -> assert false
+      | exception Found constant_tag -> Obj.repr constant_tag)
+    | ty -> (
+      let exception (* Non-constant constructor *)
+        Found of int in
+      match
+        EnumConstructor.Map.fold
+          (fun c ty n ->
+            if EnumConstructor.equal c cons then raise (Found n)
+            else match ty with TLit TUnit, _ -> n | _ -> n + 1)
+          cons_map Obj.first_non_constant_constructor_tag
+      with
+      | _ -> assert false
+      | exception Found tag ->
+        let field = val_to_runtime eval_expr ctx ty e in
+        let o = Obj.with_tag tag (Obj.repr (Some ())) in
+        Obj.set_field o 0 field;
+        o))
   | TOption ty, EInj { name; cons; e } ->
     assert (EnumName.equal name Expr.option_enum);
-    let tag, ty =
-      (* None is before Some because the constructors have been defined in this
-         order in [expr.ml], and the ident maps preserve definition ordering *)
-      if EnumConstructor.equal cons Expr.none_constr then
-        Obj.first_non_constant_constructor_tag, (TLit TUnit, Pos.void)
-      else if EnumConstructor.equal cons Expr.some_constr then
-        Obj.first_non_constant_constructor_tag + 1, ty
-      else assert false
-    in
-    let field = val_to_runtime eval_expr ctx ty e in
-    let o = Obj.with_tag tag (Obj.repr (Some ())) in
-    Obj.set_field o 0 field;
-    o
+    if EnumConstructor.equal cons Expr.none_constr then Obj.repr None
+    else Obj.repr (Some (val_to_runtime eval_expr ctx ty e))
   | TArray ty, EArray es ->
     Array.of_list (List.map (val_to_runtime eval_expr ctx ty) es) |> Obj.repr
   | TArrow (targs, tret), _ ->
@@ -667,7 +705,7 @@ and val_to_runtime :
     (* In dcalc, this is an expression. in the runtime (lcalc), this is an
        option(pair(expression, pos)) *)
     match v with
-    | EEmpty, _ -> Obj.repr (Runtime.Optional.Absent ())
+    | EEmpty, _ -> Obj.repr Runtime.Optional.Absent
     | EPureDefault e, m | ((_, m) as e) ->
       let e = eval_expr ctx e in
       let pos = Expr.pos e in
@@ -696,14 +734,17 @@ and val_to_runtime :
 
 let rec evaluate_expr :
     type d.
+    ?on_expr:(((d, yes) interpr_kind, 'm) gexpr -> unit) ->
     decl_ctx ->
     Global.backend_lang ->
     ((d, yes) interpr_kind, 't) gexpr ->
     ((d, yes) interpr_kind, 't) gexpr =
- fun ctx lang e ->
+ fun ?on_expr ctx lang e ->
   let debug_print, e =
     Expr.take_attr e (function DebugPrint { label } -> Some label | _ -> None)
   in
+  let evaluate_expr = evaluate_expr ?on_expr in
+  Option.iter (fun f -> f e) on_expr;
   let m = Mark.get e in
   let pos = Expr.mark_pos m in
   (match debug_print with
@@ -902,30 +943,29 @@ let rec evaluate_expr :
     match Mark.remove e with
     | ELit (LBool true) -> Mark.add m (ELit LUnit)
     | ELit (LBool false) ->
-      if Global.options.stop_on_error then
-        raise Runtime.(Error (AssertionFailed, [Expr.pos_to_runtime pos]))
-      else
-        let partially_evaluated_assertion_failure_expr =
-          partially_evaluate_expr_for_assertion_failure_message ctx lang
-            (Expr.skip_wrappers e')
-        in
-        (match Mark.remove partially_evaluated_assertion_failure_expr with
-        | ELit (LBool false) ->
-          if Global.options.no_fail_on_assert then
-            Message.warning ~pos "Assertion failed"
-          else
-            Message.delayed_error ~kind:AssertFailure () ~pos "Assertion failed"
-        | _ ->
-          if Global.options.no_fail_on_assert then
-            Message.warning ~pos "Assertion failed:@ %a"
-              (Print.UserFacing.expr lang)
-              partially_evaluated_assertion_failure_expr
-          else
-            Message.delayed_error ~kind:AssertFailure () ~pos
-              "Assertion failed:@ %a"
-              (Print.UserFacing.expr lang)
-              partially_evaluated_assertion_failure_expr);
-        Mark.add m (ELit LUnit)
+      let partially_evaluated_assertion_failure_expr =
+        partially_evaluate_expr_for_assertion_failure_message ?on_expr ctx lang
+          (Expr.skip_wrappers e')
+      in
+      (match Mark.remove partially_evaluated_assertion_failure_expr with
+      | ELit (LBool false) ->
+        if Global.options.no_fail_on_assert then
+          Message.warning ~pos "Assertion failed"
+        else
+          Message.delayed_error ~kind:AssertFailure () ~pos
+            "During evaluation: %s."
+            (Runtime.error_message Runtime.AssertionFailed)
+      | _ ->
+        if Global.options.no_fail_on_assert then
+          Message.warning ~pos "Assertion failed:@ %a"
+            (Print.UserFacing.expr lang)
+            partially_evaluated_assertion_failure_expr
+        else
+          Message.delayed_error ~kind:AssertFailure () ~pos
+            "Assertion failed: %a."
+            (Print.UserFacing.expr lang)
+            partially_evaluated_assertion_failure_expr);
+      Mark.add m (ELit LUnit)
     | _ ->
       Message.error ~pos:(Expr.pos e') "%a" Format.pp_print_text
         "Expected a boolean literal for the result of this assertion (should \
@@ -961,15 +1001,20 @@ let rec evaluate_expr :
       in
       raise Runtime.(Error (Conflict, poslist)))
   | EPureDefault e -> evaluate_expr ctx lang e
+  | EBad ->
+    Message.error ~internal:true ~pos:(Expr.pos e) "%a" Format.pp_print_text
+      "Attempting to evaluate a EBad node which should have been previously \
+       filtered."
   | _ -> .
 
 and partially_evaluate_expr_for_assertion_failure_message :
     type d.
+    ?on_expr:(((d, yes) interpr_kind, 'm) gexpr -> unit) ->
     decl_ctx ->
     Global.backend_lang ->
     ((d, yes) interpr_kind, 't) gexpr ->
     ((d, yes) interpr_kind, 't) gexpr =
- fun ctx lang e ->
+ fun ?on_expr ctx lang e ->
   (* Here we want to print an expression that explains why an assertion has
      failed. Since assertions have type [bool] and are usually constructed with
      comparisons and logical operators, we leave those unevaluated at the top of
@@ -995,25 +1040,28 @@ and partially_evaluate_expr_for_assertion_failure_message :
           tys;
           args =
             [
-              partially_evaluate_expr_for_assertion_failure_message ctx lang e1;
-              partially_evaluate_expr_for_assertion_failure_message ctx lang e2;
+              partially_evaluate_expr_for_assertion_failure_message ?on_expr ctx
+                lang e1;
+              partially_evaluate_expr_for_assertion_failure_message ?on_expr ctx
+                lang e2;
             ];
         },
       Mark.get e )
   (* TODO: improve this heuristic, because if the assertion is not [e1 <op> e2],
      the error message merely displays [false]... *)
-  | _ -> evaluate_expr ctx lang e
+  | _ -> evaluate_expr ?on_expr ctx lang e
 
 let evaluate_expr_trace :
     type d.
+    ?on_expr:(((d, yes) interpr_kind, 'm) gexpr -> unit) ->
     decl_ctx ->
     Global.backend_lang ->
     ((d, yes) interpr_kind, 't) gexpr ->
     ((d, yes) interpr_kind, 't) gexpr =
- fun ctx lang e ->
+ fun ?on_expr ctx lang e ->
   Runtime.reset_log ();
   Fun.protect
-    (fun () -> evaluate_expr ctx lang e)
+    (fun () -> evaluate_expr ?on_expr ctx lang e)
     ~finally:(fun () ->
       match Global.options.trace with
       | None -> ()
@@ -1045,12 +1093,16 @@ let evaluate_expr_trace :
 
 let evaluate_expr_safe :
     type d.
+    ?on_expr:(((d, yes) interpr_kind, 'm) gexpr -> unit) ->
     decl_ctx ->
     Global.backend_lang ->
     ((d, yes) interpr_kind, 't) gexpr ->
     ((d, yes) interpr_kind, 't) gexpr =
- fun ctx lang e ->
-  try evaluate_expr_trace ctx lang e
+ fun ?on_expr ctx lang e ->
+  try
+    let r = evaluate_expr_trace ?on_expr ctx lang e in
+    Message.report_delayed_errors_if_any ();
+    r
   with Runtime.Error (err, rpos) ->
     Message.error
       ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
@@ -1073,7 +1125,7 @@ let addcustom e =
     | (EPos _, _) as e -> Expr.map ~f e
     | ( ( EAssert _ | EFatalError _ | ELit _ | EApp _ | EArray _ | EVar _
         | EExternal _ | EAbs _ | EIfThenElse _ | ETuple _ | ETupleAccess _
-        | EInj _ | EStruct _ | EStructAccess _ | EMatch _ ),
+        | EInj _ | EStruct _ | EStructAccess _ | EMatch _ | EBad ),
         _ ) as e ->
       Expr.map ~f e
     | _ -> .
@@ -1104,7 +1156,7 @@ let delcustom e =
     | (EPos _, _) as e -> Expr.map ~f e
     | ( ( EAssert _ | EFatalError _ | ELit _ | EApp _ | EArray _ | EVar _
         | EExternal _ | EAbs _ | EIfThenElse _ | ETuple _ | ETupleAccess _
-        | EInj _ | EStruct _ | EStructAccess _ | EMatch _ ),
+        | EInj _ | EStruct _ | EStructAccess _ | EMatch _ | EBad ),
         _ ) as e ->
       Expr.map ~f e
     | _ -> .
@@ -1116,83 +1168,118 @@ let delcustom e =
 
 let interpret_program_lcalc p s : (Uid.MarkedString.info * ('a, 'm) gexpr) list
     =
-  Message.with_delayed_errors (fun () ->
-      let e = Expr.unbox @@ Program.to_expr p s in
-      let ctx = p.decl_ctx in
-      match evaluate_expr_safe ctx p.lang (addcustom e) with
-      | (EAbs { tys = [((TStruct s_in, _) as _targs)]; _ }, mark_e) as e ->
-        begin
-        (* At this point, the interpreter seeks to execute the scope but does
-           not have a way to retrieve input values from the command line. [taus]
-           contain the types of the scope arguments. For [context] arguments, we
-           can provide an empty term. But for [input] arguments of another type,
-           we cannot provide anything so we have to fail. *)
-        let application_term = Scope.empty_input_struct_lcalc ctx s_in mark_e in
-        let to_interpret =
-          Expr.make_app (Expr.box e) [application_term]
-            [TStruct s_in, Expr.pos e]
-            (Expr.pos e)
-        in
-        match
-          Mark.remove (evaluate_expr_safe ctx p.lang (Expr.unbox to_interpret))
-        with
-        | EStruct { fields; _ } ->
-          List.map
-            (fun (fld, e) -> StructField.get_info fld, e)
-            (StructField.Map.bindings fields)
-        (* | exception Runtime.Error (err, rpos) ->
-         *   Message.error
-         *     ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
-         *     "%a" Format.pp_print_text
-         *     (Runtime.error_message err) *)
-        | _ ->
-          Message.error ~pos:(Expr.pos e) ~internal:true "%a"
-            Format.pp_print_text
-            "The interpretation of the program doesn't yield a struct \
-             corresponding to the scope variables"
-      end
-      | _ ->
-        Message.error ~pos:(Expr.pos e) "%a" Format.pp_print_text
-          "The interpreter can only interpret terms starting with functions \
-           having thunked arguments")
+  let e = Expr.unbox @@ Program.to_expr p s in
+  let ctx = p.decl_ctx in
+  match evaluate_expr_safe ctx p.lang (addcustom e) with
+  | (EAbs { tys = [((TStruct s_in, _) as _targs)]; _ }, mark_e) as e -> begin
+    (* At this point, the interpreter seeks to execute the scope but does not
+       have a way to retrieve input values from the command line. [taus] contain
+       the types of the scope arguments. For [context] arguments, we can provide
+       an empty term. But for [input] arguments of another type, we cannot
+       provide anything so we have to fail. *)
+    let application_term = Scope.empty_input_struct_lcalc ctx s_in mark_e in
+    let to_interpret =
+      Expr.make_app (Expr.box e) [application_term]
+        [TStruct s_in, Expr.pos e]
+        (Expr.pos e)
+    in
+    match
+      Mark.remove (evaluate_expr_safe ctx p.lang (Expr.unbox to_interpret))
+    with
+    | EStruct { fields; _ } ->
+      List.map
+        (fun (fld, e) -> StructField.get_info fld, e)
+        (StructField.Map.bindings fields)
+    (* | exception Runtime.Error (err, rpos) ->
+     *   Message.error
+     *     ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
+     *     "%a" Format.pp_print_text
+     *     (Runtime.error_message err) *)
+    | _ ->
+      Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
+        "The interpretation of the program doesn't yield a struct \
+         corresponding to the scope variables"
+  end
+  | _ ->
+    Message.error ~pos:(Expr.pos e) "%a" Format.pp_print_text
+      "The interpreter can only interpret terms starting with functions having \
+       thunked arguments"
 
 (** {1 API} *)
-let interpret_program_dcalc p s : (Uid.MarkedString.info * ('a, 'm) gexpr) list
-    =
-  Message.with_delayed_errors (fun () ->
-      let ctx = p.decl_ctx in
-      let e = Expr.unbox (Program.to_expr p s) in
-      match evaluate_expr_safe p.decl_ctx p.lang (addcustom e) with
-      | (EAbs { tys = [((TStruct s_in, _) as _targs)]; _ }, mark_e) as e ->
-        begin
-        (* At this point, the interpreter seeks to execute the scope but does
-           not have a way to retrieve input values from the command line. [taus]
-           contain the types of the scope arguments. For [context] arguments, we
-           can provide an empty thunked term. But for [input] arguments of
-           another type, we cannot provide anything so we have to fail. *)
-        let application_term = Scope.empty_input_struct_dcalc ctx s_in mark_e in
-        let to_interpret =
-          Expr.make_app (Expr.box e) [application_term]
-            [TStruct s_in, Expr.pos e]
-            (Expr.pos e)
-        in
-        match
-          Mark.remove (evaluate_expr_safe ctx p.lang (Expr.unbox to_interpret))
-        with
-        | EStruct { fields; _ } ->
-          List.map
-            (fun (fld, e) -> StructField.get_info fld, e)
-            (StructField.Map.bindings fields)
-        | _ ->
-          Message.error ~pos:(Expr.pos e) ~internal:true "%a"
-            Format.pp_print_text
-            "The interpretation of a program should always yield a struct \
-             corresponding to the scope variables"
-      end
-      | _ ->
-        Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
-          "The interpreter can only interpret terms starting with functions \
-           having thunked arguments")
+let interpret_program_dcalc ?on_expr p s :
+    (Uid.MarkedString.info * ('a, 'm) gexpr) list =
+  let ctx = p.decl_ctx in
+  let e = Expr.unbox (Program.to_expr p s) in
+  match evaluate_expr_safe ?on_expr p.decl_ctx p.lang (addcustom e) with
+  | (EAbs { tys = [((TStruct s_in, _) as _targs)]; _ }, mark_e) as e -> begin
+    (* At this point, the interpreter seeks to execute the scope but does not
+       have a way to retrieve input values from the command line. [taus] contain
+       the types of the scope arguments. For [context] arguments, we can provide
+       an empty thunked term. But for [input] arguments of another type, we
+       cannot provide anything so we have to fail. *)
+    let application_term = Scope.empty_input_struct_dcalc ctx s_in mark_e in
+    let to_interpret =
+      Expr.make_app (Expr.box e) [application_term]
+        [TStruct s_in, Expr.pos e]
+        (Expr.pos e)
+    in
+    match
+      Mark.remove
+        (evaluate_expr_safe ?on_expr ctx p.lang (Expr.unbox to_interpret))
+    with
+    | EStruct { fields; _ } ->
+      List.map
+        (fun (fld, e) -> StructField.get_info fld, e)
+        (StructField.Map.bindings fields)
+    | _ ->
+      Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
+        "The interpretation of a program should always yield a struct \
+         corresponding to the scope variables"
+  end
+  | _ ->
+    Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
+      "The interpreter can only interpret terms starting with functions having \
+       thunked arguments"
+
+let interpret_program_dcalc_with_coverage
+    ?(stdlib : Global.raw_file option)
+    (p : (dcalc, 'm) gexpr program)
+    scope :
+    (Uid.MarkedString.info * ((yes, yes) interpr_kind, 'm) gexpr) list
+    * Coverage.coverage_map =
+  let reachable_map =
+    (* Mark program positions as unreached *)
+    Coverage.reachable_positions p
+  in
+  let coverage_map = ref Coverage.empty in
+  let on_expr (e : ((yes, yes) interpr_kind, 'm) gexpr) =
+    match Mark.remove e with
+    | EDefault _ ->
+      ()
+      (* Bad location, ignore this case, sub-nodes positions will still be added
+         later on *)
+    | _ -> coverage_map := Coverage.reached_pos (Expr.pos e) scope !coverage_map
+  in
+  let r = interpret_program_dcalc ~on_expr p scope in
+  Option.iter
+    (fun (stdlib_dir : Global.raw_file) ->
+      let stdlib_dir = Global.options.path_rewrite stdlib_dir in
+      (* Remove stdlib's files reached positions if provided. Reachable stdlib
+         positions in 'reachable_map' will be discarded when the follow-up merge
+         occurs. *)
+      coverage_map :=
+        Coverage.filter_files
+          (fun path -> not (String.starts_with ~prefix:stdlib_dir path))
+          !coverage_map)
+    stdlib;
+  let coverage =
+    Coverage.(
+      merge_with_reachable_positions ~reachable:reachable_map
+        ~reached:!coverage_map)
+  in
+  r, coverage
+
+let interpret_program_dcalc p s = interpret_program_dcalc p s
 
 (* Evaluation may introduce intermediate custom terms ([ECustom], pointers to
    external functions), straying away from the DCalc and LCalc ASTS. [addcustom]
@@ -1200,7 +1287,7 @@ let interpret_program_dcalc p s : (Uid.MarkedString.info * ('a, 'm) gexpr) list
    reflect that. *)
 let evaluate_expr ctx lang e =
   Fun.protect ~finally:Runtime.reset_log
-  @@ fun () -> evaluate_expr ctx lang (addcustom e)
+  @@ fun () -> evaluate_expr_safe ctx lang (addcustom e)
 
 let loaded_modules = Hashtbl.create 17
 

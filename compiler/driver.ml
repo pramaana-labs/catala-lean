@@ -20,7 +20,15 @@ open Shared_ast
 
 (** Associates a file extension with its corresponding
     {!type: Global.backend_lang} string representation. *)
-let extensions = [".catala_fr", "fr"; ".catala_en", "en"; ".catala_pl", "pl"]
+let extensions =
+  [
+    ".catala_fr", "fr";
+    ".catala_fr.md", "fr";
+    ".catala_en", "en";
+    ".catala_en.md", "en";
+    ".catala_pl", "pl";
+    ".catala_pl.md", "pl";
+  ]
 
 let load_modules
     options
@@ -31,8 +39,6 @@ let load_modules
     program :
     ModuleName.t Ident.Map.t
     * (Surface.Ast.module_content * ModuleName.t Ident.Map.t) ModuleName.Map.t =
-  Message.with_delayed_errors
-  @@ fun () ->
   let stdlib_root_module lang =
     let lang = if Global.has_localised_stdlib lang then lang else Global.En in
     "Stdlib_" ^ Cli.language_code lang
@@ -124,7 +130,7 @@ let load_modules
               (* This preserves the filename capitalisation, which corresponds
                  to the convention for files related to not-module compilation
                  artifacts and is used by [depends] below *)
-              Some Filename.(basename (remove_extension f))
+              Some (Filename.basename (File.remove_extension f))
             else None
           in
           let module_content =
@@ -218,13 +224,16 @@ module Passes = struct
     debug_pass_name "desugared";
     Message.debug "Name resolution...";
     let ctx = Desugared.Name_resolution.form_context (prg, mod_uses) modules in
+    Message.report_delayed_errors_if_any ();
     Message.debug "Desugaring...";
     let modules = ModuleName.Map.map fst modules in
     let prg =
       Desugared.From_surface.translate_program ctx ?allow_external modules prg
     in
+    Message.report_delayed_errors_if_any ();
     Message.debug "Disambiguating...";
     let prg = Desugared.Disambiguate.program prg in
+    Message.report_delayed_errors_if_any ();
     Message.debug "Linting...";
     Desugared.Linting.lint_program prg;
     prg, ctx
@@ -239,6 +248,7 @@ module Passes = struct
     let prg =
       Scopelang.From_desugared.translate_program prg exceptions_graphs
     in
+    Message.report_delayed_errors_if_any ();
     prg
 
   let dcalc :
@@ -266,6 +276,7 @@ module Passes = struct
       | Untyped _ -> prg
       | Custom _ -> invalid_arg "Driver.Passes.dcalc"
     in
+    Message.report_delayed_errors_if_any ();
     Message.debug "Translating to default calculus...";
     let prg = Dcalc.From_scopelang.translate_program prg in
     let prg =
@@ -291,6 +302,7 @@ module Passes = struct
       | Untyped _ -> prg
       | Custom _ -> assert false
     in
+    Message.report_delayed_errors_if_any ();
     if check_invariants then (
       Message.debug "Checking invariants...";
       match typed with
@@ -371,6 +383,7 @@ module Passes = struct
         prg, type_ordering)
       else prg, type_ordering
     in
+    Message.report_delayed_errors_if_any ();
     match renaming with
     | None -> prg, type_ordering, None
     | Some renaming ->
@@ -539,7 +552,7 @@ module Commands = struct
       (String.concat "\\\n"
          (Option.value ~default:"stdout" output_file
          :: List.map
-              (fun ext -> Filename.remove_extension source_file ^ ext)
+              (fun ext -> File.remove_extension source_file ^ ext)
               backend_extensions_list))
       (String.concat "\\\n" prg.Surface.Ast.program_source_files)
       (String.concat "\\\n" prg.Surface.Ast.program_source_files)
@@ -760,6 +773,7 @@ module Commands = struct
         if quiet then () else Message.result "All invariant checks passed"
       else
         raise (Message.error ~internal:true "Some Dcalc invariants are invalid"));
+    Message.report_delayed_errors_if_any ();
     if not quiet then Message.result "Typechecking successful!"
 
   let typecheck_cmd =
@@ -870,11 +884,10 @@ module Commands = struct
       options
       ?(quiet = false)
       interpreter
-      prg
       scope_uid =
     try
       Message.debug "Starting interpretation...";
-      let results = interpreter prg scope_uid in
+      let results, cov_opt = interpreter () in
       Message.debug "End of interpretation";
       let results =
         List.sort
@@ -884,10 +897,14 @@ module Commands = struct
       let language =
         Cli.file_lang (Global.input_src_file options.Global.input_src)
       in
-      if quiet then
+      if quiet then begin
         (* Caution: this output is parsed by Clerk *)
-        Format.fprintf (Message.std_ppf ()) "%a: @{<green>passed@}@."
-          ScopeName.format scope_uid
+        Format.fprintf (Message.std_ppf ()) "%a: @{<green>passed@}%t@."
+          ScopeName.format scope_uid (fun fmt ->
+            Option.iter
+              (Format.fprintf fmt "|%a" Coverage.format_coverage_hex_dump)
+              cov_opt)
+      end
       else if results = [] then Message.result "Computation successful!"
       else
         Message.results
@@ -916,6 +933,7 @@ module Commands = struct
 
   let interpret_dcalc
       typed
+      code_coverage
       options
       includes
       stdlib
@@ -933,9 +951,20 @@ module Commands = struct
     let success =
       List.fold_left
         (fun success scope ->
-          print_interpretation_results ~quiet options
-            Interpreter.interpret_program_dcalc prg scope
-          && success)
+          if code_coverage then
+            let interp () =
+              let res, cov =
+                Interpreter.interpret_program_dcalc_with_coverage ?stdlib prg
+                  scope
+              in
+              res, Some cov
+            in
+            print_interpretation_results options ~quiet interp scope
+          else
+            let interp () =
+              Interpreter.interpret_program_dcalc prg scope, None
+            in
+            print_interpretation_results ~quiet options interp scope && success)
         true
         (get_scopelist_uids prg ex_scopes)
     in
@@ -1027,9 +1056,8 @@ module Commands = struct
     let success =
       List.fold_left
         (fun success scope ->
-          print_interpretation_results ~quiet options
-            Interpreter.interpret_program_lcalc prg scope
-          && success)
+          let interp () = Interpreter.interpret_program_lcalc prg scope, None in
+          print_interpretation_results ~quiet options interp scope && success)
         true
         (get_scopelist_uids prg ex_scopes)
     in
@@ -1042,15 +1070,20 @@ module Commands = struct
         keep_special_ops
         monomorphize_types
         expand_ops
-        no_typing =
+        no_typing
+        code_coverage =
       if not lcalc then
         if closure_conversion || monomorphize_types then
           Message.error
             "The flags @{<bold>--closure-conversion@} and \
              @{<bold>--monomorphize-types@} only make sense with the \
              @{<bold>--lcalc@} option"
-        else if no_typing then interpret_dcalc Expr.untyped
-        else interpret_dcalc Expr.typed
+        else if no_typing then interpret_dcalc Expr.untyped code_coverage
+        else interpret_dcalc Expr.typed code_coverage
+      else if code_coverage then
+        Message.error
+          "The flag @{<bold>--code-coverage@} is not compatible with the \
+           @{<bold>--lcalc@} option"
       else if no_typing then
         interpret_lcalc Expr.untyped closure_conversion keep_special_ops
           monomorphize_types expand_ops
@@ -1072,6 +1105,7 @@ module Commands = struct
         $ Cli.Flags.keep_special_ops
         $ Cli.Flags.expand_ops
         $ Cli.Flags.no_typing
+        $ Cli.Flags.code_coverage
         $ Cli.Flags.Global.options
         $ Cli.Flags.include_dirs
         $ Cli.Flags.stdlib_dir
@@ -1242,9 +1276,9 @@ module Commands = struct
       match output_file, options.Global.input_src with
       | Some file, _
       | None, (FileName (file : File.t) | Contents (_, (file : File.t))) ->
-        let name = Filename.(remove_extension file |> basename) in
+        let name = File.remove_extension file |> Filename.basename in
         if Global.options.gen_external then
-          String.capitalize_ascii (Filename.remove_extension name)
+          String.capitalize_ascii (File.remove_extension name)
         else name
       | None, Stdin _ -> "AnonymousClass"
     in
@@ -1308,7 +1342,7 @@ module Commands = struct
               (fun f ->
                 let name =
                   String.capitalize_ascii
-                    (String.to_id Filename.(basename (remove_extension f)))
+                    (String.to_id (Filename.basename (File.remove_extension f)))
                 in
                 {
                   mod_use_name = name, Pos.void;
@@ -1503,18 +1537,24 @@ let main () =
     if Global.options.debug then Printexc.print_raw_backtrace stderr bt;
     exit excode
   in
-  match Cmd.eval_value ~catch:false ~argv command with
+  let eval_cmd () =
+    let r = Cmd.eval_value ~catch:false ~argv command in
+    Message.report_delayed_errors_if_any ();
+    r
+  in
+  match eval_cmd () with
   | Ok _ -> exit Cmd.Exit.ok
   | Error e ->
     if e = `Term then Plugin.print_failures ();
     exit Cmd.Exit.cli_error
   | exception Cli.Exit_with n -> exit n
-  | exception Message.CompilerError content ->
-    exit_with_error Cmd.Exit.some_error @@ fun () -> content
   | exception Message.CompilerErrors contents ->
-    let bt = Printexc.get_raw_backtrace () in
     Message.Content.emit_n contents Error;
-    if Global.options.debug then Printexc.print_raw_backtrace stderr bt;
+    exit Cmd.Exit.some_error
+  | exception Message.CompilerError content ->
+    let bt = Printexc.get_raw_backtrace () in
+    let contents = Message.combine_with_pending_errors content bt in
+    Message.Content.emit_n contents Error;
     exit Cmd.Exit.some_error
   | exception Failure msg ->
     exit_with_error Cmd.Exit.some_error

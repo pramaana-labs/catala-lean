@@ -20,6 +20,7 @@ module L = Surface.Lexer_common
 type item = {
   file_name : File.t;
   module_def : string Mark.pos option;
+  is_stdlib : bool;
   extrnal : bool;
   used_modules : string Mark.pos list;
   included_files : File.t Mark.pos list;
@@ -27,8 +28,12 @@ type item = {
   has_scope_tests : bool Lazy.t;
 }
 
+let libcatala = "libcatala"
+
 let catala_suffix_regex =
-  Re.(compile (seq [str ".catala_"; group (seq [alpha; alpha]); eos]))
+  Re.(
+    compile
+      (seq [str ".catala_"; group (seq [alpha; alpha]); opt (str ".md"); eos]))
 
 let test_command_args =
   let open Re in
@@ -99,6 +104,7 @@ let catala_file (file : File.t) (lang : Catala_utils.Global.backend_lang) : item
       {
         file_name = file;
         module_def = None;
+        is_stdlib = not (Filename.is_relative file);
         extrnal = false;
         used_modules = [];
         included_files = [];
@@ -111,7 +117,13 @@ let catala_file (file : File.t) (lang : Catala_utils.Global.backend_lang) : item
       ((* If there are includes, they must be checked for test scopes as well *)
        Lazy.force item.has_scope_tests
       || List.exists
-           (fun l -> find_test_scope ~lang (Mark.remove l))
+           (fun l ->
+             let included_file = Mark.remove l in
+             if File.check_file included_file = None then
+               Message.error ~kind:Parsing ~pos:(Mark.get l)
+                 "Included file '%s' is not a regular file or does not exist."
+                 included_file;
+             find_test_scope ~lang included_file)
            item.included_files)
   in
   { item with has_scope_tests }
@@ -124,12 +136,12 @@ let tree (dir : File.t) : (File.t * File.t list * item list) Seq.t =
       | Some lang -> Some (catala_file f lang))
     dir
 
+let target_basename t =
+  match t.module_def with
+  | Some m -> String.to_id (Mark.remove m)
+  | None -> String.to_id File.(remove_extension (basename t.file_name))
+
 let target_file_name t =
   let open File in
-  let dir =
-    if Filename.is_relative t.file_name then File.dirname t.file_name
-    else "libcatala"
-  in
-  match t.module_def with
-  | Some m -> dir / String.to_id (Mark.remove m)
-  | None -> dir / String.to_id (basename t.file_name -.- "")
+  let dir = if t.is_stdlib then libcatala else File.dirname t.file_name in
+  dir / target_basename t

@@ -219,7 +219,8 @@ backend-tests-%: $(CLERK_BIN) $(BACKEND_TESTS)
 backend-tests-python: BACKEND_ENV=$(PY_VENV_ACTIVATE)
 
 validate-py-runtime: dependencies-python
-	@$(PY_VENV_ACTIVATE) mypy runtimes/python/src/catala/catala_runtime.py
+	@$(PY_VENV_ACTIVATE) MYPYPATH=$(PWD)/runtimes/python/src/catala: mypy -p catala_runtime
+	@$(PY_VENV_ACTIVATE) PYTHONPATH=$(PWD)/runtimes/python/src/catala: mypy --follow-untyped-imports stdlib/python/*
 
 backend-tests: backend-tests-ocaml backend-tests-c backend-tests-python backend-tests-java
 
@@ -340,7 +341,7 @@ alltest: dependencies-python
 	$(test_title) "Running catala-examples" && \
 	$(call local_tmp_clone,catala-examples) && \
 	$(PY_VENV_ACTIVATE) $(MAKE) -C catala-examples.tmp \
-	  CATALA_FLAGS=
+	  CATALA_FLAGS= \
 	  CATALA=$(CURDIR)/_build/install/default/bin/catala \
 	  CLERK=$(CURDIR)/_build/install/default/bin/clerk \
 	  BUILD=../_build/default \

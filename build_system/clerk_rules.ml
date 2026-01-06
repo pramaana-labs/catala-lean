@@ -33,8 +33,6 @@ let backend_from_config = function
   | Clerk_config.Java -> Java
   | _ -> invalid_arg __FUNCTION__
 
-let runtime_subdir = "libcatala"
-
 (** Ninja variable names *)
 module Var = struct
   include Nj.Var
@@ -93,7 +91,7 @@ module Var = struct
   let ( ! ) = Nj.Var.v
 end
 
-let base_bindings ~autotest ~enabled_backends ~config =
+let base_bindings ~code_coverage ~autotest ~enabled_backends ~config =
   let options = config.Clerk_cli.options in
   let includes ?backend () =
     List.fold_right
@@ -108,7 +106,7 @@ let base_bindings ~autotest ~enabled_backends ~config =
       options.global.include_dirs []
   in
   let catala_flags =
-    ("--stdlib=" ^ File.(Var.(!builddir) / runtime_subdir))
+    ("--stdlib=" ^ File.(Var.(!builddir) / Scan.libcatala))
     :: ("--directory=" ^ Var.(!builddir))
     :: options.global.catala_opts
   in
@@ -185,7 +183,10 @@ let base_bindings ~autotest ~enabled_backends ~config =
          :: Var.(!catala_exe)
          :: ("--test-flags=" ^ String.concat "," test_flags)
          :: includes ()
-        @ List.map (fun f -> "--catala-opts=" ^ f) catala_flags));
+        @ (if code_coverage then ["--code-coverage"] else [])
+        @ List.map
+            (fun f -> "--catala-opts=" ^ f)
+            (catala_flags @ if code_coverage then ["--whole-program"] else [])));
   ]
   @ (if List.mem OCaml enabled_backends then
        [
@@ -233,7 +234,7 @@ let base_bindings ~autotest ~enabled_backends ~config =
           ]);
       def Var.c_include
         (lazy
-          (["-I"; File.(Var.(!builddir) / runtime_subdir / "c")]
+          (["-I"; File.(Var.(!builddir) / Scan.libcatala / "c")]
           @ includes ~backend:"c" ()));
     ]
   else []
@@ -250,7 +251,7 @@ let[@ocamlformat "disable"] static_base_rules enabled_backends =
       ~description:["<copy>"; !input];
   ] @ (if List.mem OCaml enabled_backends then
          let runtime_include =
-           File.(Var.(!builddir) / runtime_subdir / "ocaml")
+           File.(Var.(!builddir) / Scan.libcatala / "ocaml")
          in
          [
       Nj.rule "catala-ocaml"
@@ -274,7 +275,6 @@ let[@ocamlformat "disable"] static_base_rules enabled_backends =
           [!ocamlopt_exe; "-shared"; !ocaml_flags; !ocaml_include; "-I"; runtime_include; !input;
            "-o"; !output]
         ~description:["<ocaml>"; "⇒"; !output];
-
     ] else []) @
   (if List.mem C enabled_backends then [
     Nj.rule "catala-c"
@@ -299,7 +299,7 @@ let[@ocamlformat "disable"] static_base_rules enabled_backends =
                   "-o"; !output; "--"; !input]
         ~description:["<catala>"; "java"; "⇒"; !output];
       Nj.rule "java-class"
-        ~command:[!javac; "-cp"; File.(Var.(!builddir) / runtime_subdir / "java")^":" ^ !class_path; !javac_flags; !input]
+        ~command:[!javac; "-cp"; File.(Var.(!builddir) / Scan.libcatala / "java")^":" ^ !class_path; !javac_flags; !input]
         ~description:["<catala>"; "java"; "⇒"; !output];
     ] else []) @
   (if List.mem Tests enabled_backends then
@@ -630,8 +630,7 @@ let gen_build_statements
        but then we could use the already resolved target files directly and get
        rid of these aliases. *)
     match item.module_def with
-    | Some m when (not (Filename.is_relative dir)) || List.mem dir include_dirs
-      ->
+    | Some m when item.is_stdlib || List.mem dir include_dirs ->
       let modname = Mark.remove m in
       Nj.build "phony" ~outputs:[modname ^ "@src"] ~inputs:[catala_src]
       ::
@@ -720,7 +719,10 @@ let gen_build_statements_dir
     | None -> String.Map.add s fname seen
   in
   let _names = List.fold_left check_conflicts String.Map.empty items in
-  let dir = if Filename.is_relative dir then dir else runtime_subdir in
+  let dir =
+    if Filename.is_relative dir (* Detect stdlib modules *) then dir
+    else Scan.libcatala
+  in
   let open File in
   let ( ! ) = Var.( ! ) in
   Seq.cons (Nj.comment "")
@@ -767,7 +769,7 @@ let dir_test_rules dir subdirs enabled_backends items =
 
 let runtime_build_statements ~config enabled_backends =
   let open File in
-  let stdbase = Var.(!builddir) / runtime_subdir in
+  let stdbase = Var.(!builddir) / Scan.libcatala in
   let runtime_orig =
     (* content of the variable [Var.(!runtime)] *)
     match
@@ -899,8 +901,16 @@ let runtime_build_statements ~config enabled_backends =
        let python_src = Var.(!runtime) / "python" / "src" / "catala" in
        [
          Nj.build "phony"
-           ~inputs:[python_base -.- "py"; Var.(!catala_exe)]
+           ~inputs:
+             [
+               python_base -.- "py";
+               python_base /../ "dates.py";
+               Var.(!catala_exe);
+             ]
            ~outputs:["@runtime-python"];
+         Nj.build "copy"
+           ~inputs:[python_src / "dates.py"]
+           ~outputs:[python_base /../ "dates.py"];
          Nj.build "copy"
            ~inputs:[python_src / "catala_runtime.py"]
            ~outputs:[python_base -.- "py"];
@@ -927,7 +937,7 @@ let runtime_build_statements ~config enabled_backends =
     in
     let java_list_file =
       let base =
-        config.Clerk_cli.options.global.build_dir / runtime_subdir / "java"
+        config.Clerk_cli.options.global.build_dir / Scan.libcatala / "java"
       in
       File.with_out_channel (base / "java.files") (fun oc ->
           List.iter (fun s -> output_string oc ((base / s) ^ "\n")) java_files);
@@ -1048,7 +1058,7 @@ let with_ninja_process
     ~config
     ~clean_up_env
     ~ninja_flags
-    ?(quiet = not Global.options.debug)
+    ~quiet
     (callback : Format.formatter -> 'a) =
   let env = if clean_up_env then cleaned_up_env () else Unix.environment () in
   let fname =
@@ -1062,8 +1072,10 @@ let with_ninja_process
   let ninja_process nin_file nin_fd =
     let args =
       let ninja_flags =
-        if quiet && Lazy.force ninja_version >= [1; 12] then
-          "--quiet" :: ninja_flags
+        (* Newer versions of ninja have a flag to not print "nothing to do", we
+           use that if available. *)
+        if (not Global.options.debug) && Lazy.force ninja_version >= [1; 12]
+        then "--quiet" :: ninja_flags
         else ninja_flags
       in
       ("-f" :: nin_file :: ninja_flags)
@@ -1072,8 +1084,16 @@ let with_ninja_process
     let cmdline = ninja_exec :: args in
     Message.debug "executing '%s'..." (String.concat " " cmdline);
     let npid =
-      Unix.create_process_env ninja_exec (Array.of_list cmdline) env nin_fd
-        Unix.stdout Unix.stderr
+      let out =
+        (* In --quiet, we redirect all ninja's output to /dev/null *)
+        if quiet then Unix.openfile Filename.null [O_WRONLY] 0o111
+        else Unix.stdout
+      in
+      Fun.protect
+        ~finally:(fun () -> if quiet then Unix.close out)
+        (fun () ->
+          Unix.create_process_env ninja_exec (Array.of_list cmdline) env nin_fd
+            out Unix.stderr)
     in
     let rec wait () =
       match Unix.waitpid [] npid with
@@ -1124,6 +1144,8 @@ let with_ninja_process
 let run_ninja
     ~config
     ?(enabled_backends = all_backends)
+    ~quiet
+    ~code_coverage
     ~autotest
     ?(clean_up_env = false)
     ?(ninja_flags = [])
@@ -1131,8 +1153,10 @@ let run_ninja
   let enabled_backends =
     if autotest then OCaml :: enabled_backends else enabled_backends
   in
-  let var_bindings = base_bindings ~config ~enabled_backends ~autotest in
-  with_ninja_process ~config ~clean_up_env ~ninja_flags (fun nin_ppf ->
+  let var_bindings =
+    base_bindings ~code_coverage ~config ~enabled_backends ~autotest
+  in
+  with_ninja_process ~config ~clean_up_env ~ninja_flags ~quiet (fun nin_ppf ->
       let insource = Lazy.force Poll.catala_source_tree_root <> None in
       let stdlib_dir = Lazy.force Poll.stdlib_dir in
       let stdlib_tree =

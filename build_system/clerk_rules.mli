@@ -22,10 +22,6 @@ type backend = OCaml | Python | C | Java | Tests
 val all_backends : backend list
 val backend_from_config : Clerk_config.backend -> backend
 
-val runtime_subdir : File.t
-(** The local subdirectory of the builddir hosting the mirror of the standard
-    library and runtime *)
-
 module Var : sig
   type t = Ninja_utils.Var.t
 
@@ -52,6 +48,7 @@ module Var : sig
 end
 
 val base_bindings :
+  code_coverage:bool ->
   autotest:bool ->
   enabled_backends:backend list ->
   config:Clerk_cli.config ->
@@ -60,6 +57,8 @@ val base_bindings :
 val run_ninja :
   config:Clerk_cli.config ->
   ?enabled_backends:backend list ->
+  quiet:bool ->
+  code_coverage:bool ->
   autotest:bool ->
   ?clean_up_env:bool ->
   ?ninja_flags:string list ->

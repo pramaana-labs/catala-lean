@@ -45,7 +45,7 @@ type code_location = {
 }
 
 module Optional : sig
-  type 'a t = Absent of unit | Present of 'a
+  type 'a t = Absent | Present of 'a
 end
 
 (** This type characterizes the three levels of visibility for a given scope
@@ -76,6 +76,7 @@ type error =
   | DivisionByZero  (** The denominator happened to be 0 here *)
   | ListEmpty  (** Element access on an empty list *)
   | NotSameLength  (** Traversing multiple lists of different lengths *)
+  | InvalidDate  (** Invalid year/month/day combination *)
   | UncomparableDurations
       (** Comparing durations in different units (e.g. months vs. days) *)
   | AmbiguousDateRounding

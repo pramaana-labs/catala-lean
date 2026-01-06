@@ -25,21 +25,20 @@ let format_lit (fmt : Format.formatter) (l : lit Mark.pos) : unit =
   match Mark.remove l with
   | LBool true -> Format.pp_print_string fmt "True"
   | LBool false -> Format.pp_print_string fmt "False"
-  | LInt i ->
-    Format.fprintf fmt "integer_of_string(\"%s\")" (Runtime.integer_to_string i)
+  | LInt i -> Format.fprintf fmt "Integer(%s)" (Runtime.integer_to_string i)
   | LUnit -> Format.pp_print_string fmt "Unit()"
   | LRat i -> Format.fprintf fmt "decimal_of_string(\"%s\")" (Q.to_string i)
   | LMoney e ->
-    Format.fprintf fmt "money_of_cents_string(\"%s\")"
+    Format.fprintf fmt "Money(Integer(%s))"
       (Runtime.integer_to_string (Runtime.money_to_cents e))
   | LDate d ->
-    Format.fprintf fmt "date_of_numbers(%d,%d,%d)"
+    Format.fprintf fmt "Date((%d,%d,%d))"
       (Runtime.integer_to_int (Runtime.year_of_date d))
       (Runtime.integer_to_int (Runtime.month_number_of_date d))
       (Runtime.integer_to_int (Runtime.day_of_month_of_date d))
   | LDuration d ->
     let years, months, days = Runtime.duration_to_years_months_days d in
-    Format.fprintf fmt "duration_of_numbers(%d,%d,%d)" years months days
+    Format.fprintf fmt "Duration((%d,%d,%d))" years months days
 
 let format_op (fmt : Format.formatter) (op : operator Mark.pos) : unit =
   match Mark.remove op with
@@ -62,17 +61,17 @@ let format_op (fmt : Format.formatter) (op : operator Mark.pos) : unit =
   | Add_dat_dur rounding ->
     Format.fprintf fmt "add_date_duration(%s)"
       (match rounding with
-      | RoundUp -> "DateRounding.RoundUp"
-      | RoundDown -> "DateRounding.RoundDown"
-      | AbortOnRound -> "DateRounding.AbortOnRound")
+      | RoundUp -> "dates.DateRounding.RoundUp"
+      | RoundDown -> "dates.DateRounding.RoundDown"
+      | AbortOnRound -> "dates.DateRounding.AbortOnRound")
   | Sub_int_int | Sub_rat_rat | Sub_mon_mon | Sub_dat_dat | Sub_dur_dur ->
     Format.pp_print_string fmt "-"
   | Sub_dat_dur rounding ->
     Format.fprintf fmt "sub_date_duration(%s)"
       (match rounding with
-      | RoundUp -> "DateRounding.RoundUp"
-      | RoundDown -> "DateRounding.RoundDown"
-      | AbortOnRound -> "DateRounding.AbortOnRound")
+      | RoundUp -> "dates.DateRounding.RoundUp"
+      | RoundDown -> "dates.DateRounding.RoundDown"
+      | AbortOnRound -> "dates.DateRounding.AbortOnRound")
   | Mult_int_int | Mult_rat_rat | Mult_mon_int | Mult_mon_rat | Mult_dur_int ->
     Format.pp_print_string fmt "*"
   | Div_int_int | Div_rat_rat | Div_mon_mon | Div_mon_int | Div_mon_rat
@@ -90,13 +89,13 @@ let format_op (fmt : Format.formatter) (op : operator Mark.pos) : unit =
     Format.pp_print_string fmt ">"
   | Gte_int_int | Gte_rat_rat | Gte_mon_mon | Gte_dat_dat ->
     Format.pp_print_string fmt ">="
-  | Lt_dur_dur -> Format.pp_print_string fmt "lt_duration"
-  | Lte_dur_dur -> Format.pp_print_string fmt "leq_duration"
-  | Gt_dur_dur -> Format.pp_print_string fmt "gt_duration"
-  | Gte_dur_dur -> Format.pp_print_string fmt "geq_duration"
-  | Eq_boo_boo | Eq_int_int | Eq_rat_rat | Eq_mon_mon | Eq_dat_dat | Eq_dur_dur
-    ->
+  | Eq_boo_boo | Eq_int_int | Eq_rat_rat | Eq_mon_mon | Eq_dat_dat ->
     Format.pp_print_string fmt "=="
+  | Lt_dur_dur -> Format.pp_print_string fmt "lt_duration"
+  | Lte_dur_dur -> Format.pp_print_string fmt "le_duration"
+  | Gt_dur_dur -> Format.pp_print_string fmt "gt_duration"
+  | Gte_dur_dur -> Format.pp_print_string fmt "ge_duration"
+  | Eq_dur_dur -> Format.pp_print_string fmt "eq_duration"
   | Map -> Format.pp_print_string fmt "list_map"
   | Map2 -> Format.pp_print_string fmt "list_map2"
   | Reduce -> Format.pp_print_string fmt "list_reduce"
@@ -229,6 +228,7 @@ let rec format_typ ctx (fmt : Format.formatter) (typ : typ) : unit =
     let _v, typ = Bindlib.unmbind tb in
     format_typ fmt typ
   | TClosureEnv -> failwith "unimplemented!"
+  | TError -> assert false
 
 let format_func_name (fmt : Format.formatter) (v : FuncName.t) : unit =
   FuncName.format fmt v
@@ -380,9 +380,18 @@ let rec format_statement ctx (fmt : Format.formatter) (s : stmt Mark.pos) : unit
     Format.fprintf fmt "@[<hov 4>raise %s(%a)@]"
       (Runtime.error_to_string error)
       (format_expression ctx) pos_expr
-  | SIfThenElse { if_expr = cond; then_block = b1; else_block = b2 } ->
-    Format.fprintf fmt "@[<v 4>if %a:@ %a@]@,@[<v 4>else:@ %a@]"
-      (format_expression ctx) cond (format_block ctx) b1 (format_block ctx) b2
+  | SIfThenElse { if_expr; then_block; else_block } ->
+    let rec pr_else = function
+      | [(SIfThenElse { if_expr; then_block; else_block }, _)] ->
+        Format.fprintf fmt "@[<v 4>elif @[<hov>%a@]:@ %a@]@,"
+          (format_expression ctx) if_expr (format_block ctx) then_block;
+        pr_else else_block
+      | else_block ->
+        Format.fprintf fmt "@[<v 4>else:@ %a@]" (format_block ctx) else_block
+    in
+    Format.fprintf fmt "@[<v 4>if @[<hov>%a@]:@ %a@]@," (format_expression ctx)
+      if_expr (format_block ctx) then_block;
+    pr_else else_block
   | SSwitch
       {
         switch_var;
@@ -422,9 +431,9 @@ let rec format_statement ctx (fmt : Format.formatter) (s : stmt Mark.pos) : unit
         cases
         (EnumConstructor.Map.bindings cons_map)
     in
-    Format.fprintf fmt "@[<hov 4>if %a@]"
+    Format.fprintf fmt "@[<v 4>if %a@]"
       (Format.pp_print_list
-         ~pp_sep:(fun fmt () -> Format.fprintf fmt "@]@\n@[<hov 4>elif ")
+         ~pp_sep:(fun fmt () -> Format.fprintf fmt "@]@\n@[<v 4>elif ")
          (fun fmt (case, cons_name) ->
            Format.fprintf fmt "%a.code == %a_Code.%a:@," VarName.format
              switch_var (format_enum ctx) e_name EnumConstructor.format
@@ -628,6 +637,10 @@ let format_program
     (fmt : Format.formatter)
     (p : Ast.program)
     (type_ordering : TypeIdent.t list) : unit =
+  (* Disable the formatting line length limit which may lead to broken
+     indentation (we need to disable all line breaking for this, since Format
+     doesn't accept max_indent >= margin) *)
+  Format.pp_set_geometry fmt ~max_indent:999_990 ~margin:1_000_000;
   Format.pp_open_vbox fmt 0;
   let header =
     (if Global.options.gen_external then
