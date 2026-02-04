@@ -110,6 +110,9 @@ $ catala scalc
 module stdlib_en = Stdlib_en
 module date_en = Date_en
 module date_internal = Date_internal
+module list_en = List_en
+module list_internal = List_internal
+module duration_en = Duration_en
 module month_year_en = MonthYear_en
 module period_en = Period_en
 module period_internal = Period_internal
@@ -118,8 +121,6 @@ module money_internal = Money_internal
 module integer_en = Integer_en
 module decimal_en = Decimal_en
 module decimal_internal = Decimal_internal
-module list_en = List_en
-module list_internal = List_internal
 let glob1 = 44.12
 
 let glob3 (x: money) = return to_rat x + 10.
@@ -206,12 +207,13 @@ from typing import Any, List, Callable, Tuple
 from enum import Enum
 from . import Stdlib_en as stdlib_en
 from . import Date_en as date_en
+from . import List_en as list_en
+from . import Duration_en as duration_en
 from . import MonthYear_en as month_year_en
 from . import Period_en as period_en
 from . import Money_en as money_en
 from . import Integer_en as integer_en
 from . import Decimal_en as decimal_en
-from . import List_en as list_en
 
 class A:
     def __init__(self, y: bool, z: Decimal) -> None:
@@ -384,7 +386,7 @@ def s2(s2_in:S2In):
         a = (a__1.value[0])
     else:
         pos__1 = (SourcePosition(filename="tests/name_resolution/good/toplevel_defs.catala_en", start_line=50, start_column=10, end_line=50, end_column=11, law_headings=["Test toplevel function defs"]))
-        raise NoValue(pos__1)
+        raise NoValue(pos__1, None)
     return S2(a = a)
 
 def s3(s3_in:S3In):
@@ -394,7 +396,7 @@ def s3(s3_in:S3In):
         a = (a__1.value[0])
     else:
         pos__1 = (SourcePosition(filename="tests/name_resolution/good/toplevel_defs.catala_en", start_line=71, start_column=10, end_line=71, end_column=11, law_headings=["Test function def with two args"]))
-        raise NoValue(pos__1)
+        raise NoValue(pos__1, None)
     return S3(a = a)
 
 def s4(s4_in:S4In):
@@ -404,7 +406,7 @@ def s4(s4_in:S4In):
         a = (a__1.value[0])
     else:
         pos__1 = (SourcePosition(filename="tests/name_resolution/good/toplevel_defs.catala_en", start_line=95, start_column=10, end_line=95, end_column=11, law_headings=["Test inline defs in toplevel defs"]))
-        raise NoValue(pos__1)
+        raise NoValue(pos__1, None)
     return S4(a = a)
 
 def s(s_in:SIn):
@@ -414,14 +416,14 @@ def s(s_in:SIn):
         a = (a__1.value[0])
     else:
         pos__1 = (SourcePosition(filename="tests/name_resolution/good/toplevel_defs.catala_en", start_line=7, start_column=10, end_line=7, end_column=11, law_headings=["Test basic toplevel values defs"]))
-        raise NoValue(pos__1)
+        raise NoValue(pos__1, None)
     pos__1 = (SourcePosition(filename="tests/name_resolution/good/toplevel_defs.catala_en", start_line=19, start_column=24, end_line=19, end_column=29, law_headings=["Test basic toplevel values defs"]))
     b__1 = (Option((glob2, pos__1)))
     if b__1.value is not None:
         b = (b__1.value[0])
     else:
         pos__2 = (SourcePosition(filename="tests/name_resolution/good/toplevel_defs.catala_en", start_line=8, start_column=10, end_line=8, end_column=11, law_headings=["Test basic toplevel values defs"]))
-        raise NoValue(pos__2)
+        raise NoValue(pos__2, None)
     return S(a = a, b = b)
 
 # Automatic Catala tests

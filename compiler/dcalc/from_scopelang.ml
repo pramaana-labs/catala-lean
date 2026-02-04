@@ -41,7 +41,8 @@ type 'm scope_sig_ctx = {
   scope_sig_input_struct : StructName.t;  (** Scope input *)
   scope_sig_output_struct : StructName.t;  (** Scope output *)
   scope_sig_in_fields : scope_input_var_ctx ScopeVar.Map.t;
-      (** Mapping between the input scope variables and the input struct fields. *)
+      (** Mapping between the input scope variables and the input struct fields.
+      *)
 }
 
 type 'm ctx = {
@@ -148,7 +149,7 @@ let collapse_similar_outcomes (type m) (excepts : m S.expr list) : m S.expr list
     let format = Expr.format
   end) in
   (* Detect identical outcomes, and implicitely add a hierarchy so that a
-     conflict is'nt triggered *)
+     conflict isn't triggered *)
   let cons_map =
     List.fold_left
       (fun map -> function
@@ -184,7 +185,7 @@ let collapse_similar_outcomes (type m) (excepts : m S.expr list) : m S.expr list
         let just =
           match ex with
           | EDefault { cons = EDefault _, _; _ }, _ -> None
-          | EDefault { just; _ }, _ -> Some just
+          | EDefault { just; excepts = []; _ }, _ -> Some just
           | EPureDefault (_, m), _ -> Some (ELit (LBool true), m)
           | _ -> None
         in
@@ -569,7 +570,7 @@ let rec translate_expr (ctx : 'm ctx) (e : 'm S.expr) : 'm Ast.expr boxed =
     Expr.eappop ~op:(Sub_dat_dur ctx.date_rounding, opos) ~args ~tys m
   | ( EVar _ | EAbs _ | ELit _ | EStruct _ | EStructAccess _ | ETuple _
     | ETupleAccess _ | EInj _ | EFatalError _ | EEmpty | EErrorOnEmpty _
-    | EArray _ | EIfThenElse _ | EAppOp _ | EPos _ | EBad ) as e ->
+    | EArray _ | EIfThenElse _ | EAppOp _ | EPos _ | EAssert _ | EBad ) as e ->
     Expr.map ~f:(translate_expr ctx) ~op:Operator.translate (e, m)
 
 (** The result of a rule translation is a list of assignments, with variables
@@ -640,7 +641,7 @@ let translate_rule
             (a_var, Mark.remove typ, io)
             ctx.scope_vars;
       } )
-  | Assertion e ->
+  | Assertion { e; pos } ->
     let new_e = translate_expr ctx e in
     let scope_let_pos = Expr.pos e in
     let scope_let_typ = TLit TUnit, scope_let_pos in
@@ -653,7 +654,10 @@ let translate_rule
                   scope_let_typ;
                   scope_let_expr =
                     Mark.add
-                      (Expr.map_ty (fun _ -> scope_let_typ) (Mark.get e))
+                      (Expr.map_mark
+                         (fun _ -> pos)
+                         (fun _ -> scope_let_typ)
+                         (Mark.get e))
                       (EAssert new_e);
                   scope_let_kind = Assertion;
                 },
@@ -762,9 +766,9 @@ let translate_scope_decl
         scope_name
     | ( S.ScopeVarDefinition { e; _ }
       | S.SubScopeVarDefinition { e; _ }
-      | S.Assertion e )
+      | S.Assertion { e; _ } )
       :: _ ->
-      Mark.get e
+      Expr.no_attrs (Mark.get e)
   in
   let scope_mark =
     Expr.with_ty scope_mark
@@ -952,6 +956,8 @@ let translate_program (prgm : 'm S.program) : 'm Ast.program =
         if StructName.path sname = [] then add (Struct sname) acc else acc
       | Shared_ast.TEnum ename ->
         if EnumName.path ename = [] then add (Enum ename) acc else acc
+      | Shared_ast.TAbstract tname ->
+        if AbstractType.path tname = [] then add (Abstract tname) acc else acc
       | _ -> Type.shallow_fold typ_deps ty acc
     in
     transitive_closure
@@ -961,7 +967,8 @@ let translate_program (prgm : 'm S.program) : 'm Ast.program =
           StructField.Map.fold (fun _ -> typ_deps) fields empty
         | Enum ename ->
           let constrs = EnumName.Map.find ename decl_ctx.ctx_enums in
-          EnumConstructor.Map.fold (fun _ -> typ_deps) constrs empty)
+          EnumConstructor.Map.fold (fun _ -> typ_deps) constrs empty
+        | Abstract _ -> empty)
       empty ctx_public_types
   in
   let decl_ctx = { decl_ctx with ctx_structs; ctx_public_types } in

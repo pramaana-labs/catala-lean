@@ -37,9 +37,11 @@ val evaluate_expr :
   Global.backend_lang ->
   (('a, _) interpr_kind, 'm) gexpr ->
   (('a, yes) interpr_kind, 'm) gexpr
-(** Evaluates an expression according to the semantics of the default calculus. *)
+(** Evaluates an expression according to the semantics of the default calculus.
+*)
 
 val interpret_program_dcalc :
+  ?input:Yojson.Safe.t ->
   (dcalc, 'm) gexpr program ->
   ScopeName.t ->
   (Uid.MarkedString.info * ((yes, yes) interpr_kind, 'm) gexpr) list
@@ -59,6 +61,7 @@ val interpret_program_dcalc_with_coverage :
     to it will be discarded. *)
 
 val interpret_program_lcalc :
+  ?input:Yojson.Safe.t ->
   (lcalc, 'm) gexpr program ->
   ScopeName.t ->
   (Uid.MarkedString.info * ((no, yes) interpr_kind, 'm) gexpr) list

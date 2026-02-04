@@ -105,10 +105,10 @@ let attr ppf = function
   | DebugPrint { label } ->
     Format.fprintf ppf "#[debug.print%a]@ "
       (fun ppf -> function
-        | None -> ()
-        | Some label -> Format.fprintf ppf " = %S" label)
+        | None -> () | Some label -> Format.fprintf ppf " = %S" label)
       label
   | Test -> Format.fprintf ppf "#[test]@ "
+  | ErrorMessage s -> Format.fprintf ppf "#[error.message = %S]@ " s
   | ImplicitPosArg -> Format.fprintf ppf "#[implicit_position_argument]@ "
   | _ -> Format.fprintf ppf "#[?]@ "
 
@@ -157,6 +157,7 @@ let rec typ_gen :
     pp_color_string (List.hd colors) fmt ")"
   | TStruct s -> StructName.format fmt s
   | TEnum e -> Format.fprintf fmt "@[<hov 2>%a@]" EnumName.format e
+  | TAbstract e -> Format.fprintf fmt "@[<hov 2>%a@]" AbstractType.format e
   | TOption t ->
     Format.fprintf fmt "@[<hov 2>%a@ %a@]" base_type "option" (typ_gen ()) t
   | TArrow ([t1], t2) ->
@@ -496,8 +497,7 @@ module type EXPR_PARAM = sig
 end
 
 module ExprGen (C : EXPR_PARAM) = struct
-  let rec expr_aux :
-      type a t.
+  let rec expr_aux : type a t.
       Bindlib.ctxt ->
       Ocolor_types.color4 list ->
       Format.formatter ->
@@ -712,8 +712,7 @@ module ExprGen (C : EXPR_PARAM) = struct
           (rhs exprc) e'
       | EPos p -> Format.fprintf fmt "<%s>" (Pos.to_string_shorter p)
       | EAssert e' ->
-        Format.fprintf fmt "@[<hov 2>%a@ %a%a%a@]" keyword "assert" punctuation
-          "(" (rhs exprc) e' punctuation ")"
+        Format.fprintf fmt "@[<hov 2>%a@ %a@]" keyword "assert" (rhs exprc) e'
       | EFatalError err ->
         Format.fprintf fmt "@[<hov 2>%a@ @{<red>%s@}@]" keyword "error"
           (Catala_runtime.error_to_string err)
@@ -1109,9 +1108,9 @@ module UserFacing = struct
     let splur n s = if abs n > 1 then n, s ^ "s" else n, s in
     Format.pp_print_char ppf '[';
     (match lang with
-    | En -> [splur y "year"; splur m "month"; splur d "day"]
-    | Fr -> [splur y "an"; m, "mois"; splur d "jour"]
-    | Pl -> [y, "rok"; m, "miesiac"; d, "dzien"])
+      | En -> [splur y "year"; splur m "month"; splur d "day"]
+      | Fr -> [splur y "an"; m, "mois"; splur d "jour"]
+      | Pl -> [y, "rok"; m, "miesiac"; d, "dzien"])
     |> filter0
     |> Format.pp_print_list
          ~pp_sep:(fun ppf () -> Format.pp_print_string ppf ", ")
@@ -1139,8 +1138,7 @@ module UserFacing = struct
   let lit (lang : Global.backend_lang) ppf lit : unit =
     with_color (lit_raw lang) Ocolor_types.yellow ppf lit
 
-  let rec value :
-      type a.
+  let rec value : type a.
       ?fallback:(Format.formatter -> (a, 't) gexpr -> unit) ->
       Global.backend_lang ->
       Format.formatter ->
@@ -1186,8 +1184,8 @@ module UserFacing = struct
     | EDStructAccess _ | EBad ->
       fallback ppf e
 
-  let expr :
-      type a. Global.backend_lang -> Format.formatter -> (a, 't) gexpr -> unit =
+  let expr : type a.
+      Global.backend_lang -> Format.formatter -> (a, 't) gexpr -> unit =
    fun lang ->
     let rec aux_value : type a t. Format.formatter -> (a, t) gexpr -> unit =
      fun ppf e -> value ~fallback lang ppf e

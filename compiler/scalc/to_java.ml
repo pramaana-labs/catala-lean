@@ -23,12 +23,12 @@ module L = Lcalc.Ast
 open Format
 
 let pp_comma ppf () = fprintf ppf ",@ "
-let pp_print_double_space ppf () = fprintf ppf "@ @ "
+let pp_skip_line ppf () = fprintf ppf "\n@,"
 
 let pp_print_list_padded ?pp_sep pp ppf l =
   if l = [] then ()
   else (
-    pp_print_double_space ppf ();
+    pp_skip_line ppf ();
     (pp_print_list ?pp_sep pp) ppf l)
 
 type context = {
@@ -206,6 +206,7 @@ let rec format_typ ?(wildcard = false) ctx ppf (typ : typ) =
     pp_print_string ppf "CatalaPosition"
   | TStruct sname -> format_struct ppf sname
   | TEnum ename -> format_enum ppf ename
+  | TAbstract aname -> format_qualified (module AbstractType) ppf aname
   | TOption typ -> fprintf ppf "CatalaOption<%a>" (format_typ ctx) typ
   | TArray typ -> fprintf ppf "CatalaArray<%a>" (format_typ ctx) typ
   | TDefault typ -> (format_typ ctx) ppf typ
@@ -266,14 +267,14 @@ let fill_struct_bindings
   let expected : expr StructField.Map.t =
     StructName.Map.find struct_name ctx.decl_ctx.ctx_structs
     |> StructField.Map.map (fun _ ->
-           ( EInj
-               {
-                 name = Expr.option_enum;
-                 cons = Expr.none_constr;
-                 e1 = ELit LUnit, Pos.void;
-                 expr_typ = TOption (Type.any Pos.void), Pos.void;
-               },
-             Pos.void ))
+        ( EInj
+            {
+              name = Expr.option_enum;
+              cons = Expr.none_constr;
+              e1 = ELit LUnit, Pos.void;
+              expr_typ = TOption (Type.any Pos.void), Pos.void;
+            },
+          Pos.void ))
   in
   StructField.Map.(
     merge
@@ -368,9 +369,10 @@ let rec format_expression ctx (ppf : formatter) (e : expr) : unit =
     let pos = Mark.get e in
     fprintf ppf
       "@[<hv 2>new CatalaPosition@;\
-       <0 -1>(@[<hov>\"%s\",@ %d, %d,@ %d, %d,@ %a@])@]" (Pos.get_file pos)
-      (Pos.get_start_line pos) (Pos.get_start_column pos) (Pos.get_end_line pos)
-      (Pos.get_end_column pos) format_string_list (Pos.get_law_info pos)
+       <0 -1>(@[<hov>\"%s\",@ %d, %d,@ %d, %d,@ %a@])@]"
+      (Pos.get_file pos) (Pos.get_start_line pos) (Pos.get_start_column pos)
+      (Pos.get_end_line pos) (Pos.get_end_column pos) format_string_list
+      (Pos.get_law_info pos)
   | EAppOp { op = (HandleExceptions, _) as op; args = [(EArray exprs, _)]; _ }
     ->
     fprintf ppf "@[<hv 2>%a@;<0 -1>(new CatalaArray<>(@ %a@ )@])" format_op op
@@ -511,9 +513,16 @@ let rec format_stmt ~toplevel (ctx : context) ppf (stmt : Ast.stmt Mark.pos) =
     fprintf ppf "@[<hov 4>%a %a =@ %a;@]" (format_typ ctx) typ VarName.format
       (Mark.remove name) (format_expression ctx) expr
   | SFatalError { pos_expr; error } ->
-    fprintf ppf "throw new CatalaError(CatalaError.Error.%s, %a);"
+    fprintf ppf "throw new CatalaError(CatalaError.Error.%s, %a%s);"
       (Runtime.error_to_string error)
       (format_expression ctx) pos_expr
+      (match
+         Pos.get_attr (Mark.get stmt) (function
+           | ErrorMessage m -> Some m
+           | _ -> None)
+       with
+      | None -> ""
+      | Some m -> ", " ^ String.quote m)
   | SIfThenElse { if_expr; then_block; else_block } ->
     format_if ppf
       ~cond_format:(fun ppf ->
@@ -594,11 +603,18 @@ let rec format_stmt ~toplevel (ctx : context) ppf (stmt : Ast.stmt Mark.pos) =
       (List.combine enum_cstrs switch_cases)
       pp_default_initializer
   | SAssert { expr; pos_expr } ->
-    fprintf ppf "@[<hov 4>CatalaAssertion.check(%a, %a);@]"
+    fprintf ppf "@[<hov 4>CatalaAssertion.check(%a, %a%s);@]"
       (format_expression_with_paren ctx)
       pos_expr
       (format_expression_with_paren ctx)
       expr
+      (match
+         Pos.get_attr (Mark.get stmt) (function
+           | ErrorMessage m -> Some m
+           | _ -> None)
+       with
+      | None -> ""
+      | Some m -> ", " ^ String.quote m)
   | SSpecialOp _ -> .
 
 and format_inner_func_def ctx ppf (name, func) =
@@ -713,7 +729,7 @@ let format_comparison class_name pp_fields_comparison ppf =
      @[<hov2>public CatalaBool equalsTo(CatalaValue other) {@\n\
      @[<v 4>if (other instanceof %s v) {@\n\
      %t@]@\n\
-     } else { return CatalaBool.FALSE; } @]@\n\
+     } else { return CatalaBool.FALSE; }@]@\n\
      }"
     class_name pp_fields_comparison
 
@@ -796,7 +812,7 @@ let format_enum_to_string ppf =
 
 let format_tests ctx ppf (closures, tests) =
   assert (closures = []);
-  pp_print_double_space ppf ();
+  pp_skip_line ppf ();
   fprintf ppf "// Automatic Catala tests@\n";
   fprintf ppf "@[<v 4>public static void main(String[] args) {@\n";
   (if tests = [] then
@@ -843,13 +859,21 @@ let format_scope ctx ppf (sbody : Ast.scope_body) =
   let out_fields =
     StructName.Map.find_opt out_struct_name ctx.decl_ctx.ctx_structs
     |> function
-    | None -> [] | Some out_fields -> StructField.Map.bindings out_fields
+    | None -> []
+    | Some out_fields -> StructField.Map.bindings out_fields
   in
   let fields_l = List.map fst out_fields |> List.map StructField.to_string in
   let format_fields_comparison ppf = format_fields_comparison ppf fields_l in
   fprintf ppf
-    "@[<v 4>@[<hov 4>public static class %a@ implements CatalaValue {@]@ @ %a@ \
-     %t@ @ %t@ @ %t@ @ %a@]@\n\
+    "@[<v 4>@[<hov 4>public static class %a@ implements CatalaValue {@]\n\
+     @,\
+     %a@ %t\n\
+     @,\
+     %t\n\
+     @,\
+     %t\n\
+     @,\
+     %a@]@\n\
      }"
     format_scope sbody.scope_body_name
     (format_scope_output_parameters ctx sbody)
@@ -958,8 +982,15 @@ let format_structs ctx ppf =
     let fields_l = List.map fst fields_l |> List.map StructField.to_string in
     let format_fields_comparison ppf = format_fields_comparison ppf fields_l in
     fprintf ppf
-      "@[<v 4>public static class %a@ implements CatalaValue {@ @ %t@ @ %a@ @ \
-       %t@ @ %a@]@\n\
+      "@[<v 4>public static class %a@ implements CatalaValue {\n\
+       @,\
+       %t\n\
+       @,\
+       %a\n\
+       @,\
+       %t\n\
+       @,\
+       %a@]@\n\
        }"
       format_struct sname format_params
       (format_struct_constructor ctx ~vis:Public)
@@ -976,7 +1007,7 @@ let format_structs ctx ppf =
       ctx.decl_ctx.ctx_structs
     |> StructName.Map.bindings
   in
-  pp_print_list_padded ~pp_sep:pp_print_double_space format_struct ppf
+  pp_print_list_padded ~pp_sep:pp_skip_line format_struct ppf
     structs_to_generate
 
 let format_enums ctx ppf =
@@ -1000,14 +1031,16 @@ let format_enums ctx ppf =
         in
         fprintf ppf
           "@[<v 4>public static %a make%a(%t) {@ return new %a(Kind.%a, %s);@;\
-           <1 -4>}@]" format_enum ename EnumConstructor.format cstr format_arg
-          format_enum ename EnumConstructor.format cstr
+           <1 -4>}@]"
+          format_enum ename EnumConstructor.format cstr format_arg format_enum
+          ename EnumConstructor.format cstr
           (if is_unit then "CatalaUnit.INSTANCE" else "v")
       in
       fprintf ppf
         "@[<v 4>private %a(Kind k, CatalaValue contents) {@ this.kind = k;@ \
          this.contents = contents;@;\
-         <1 -4>}@]%a" format_enum ename
+         <1 -4>}@]%a"
+        format_enum ename
         (pp_print_list_padded ~pp_sep:pp_print_space format_enum_make)
         (EnumConstructor.Map.bindings cstrs)
     in
@@ -1048,8 +1081,19 @@ let format_enums ctx ppf =
          <1 -4>}@]"
     in
     fprintf ppf
-      "@[<v 4>public static class %a@ implements CatalaValue {@ @ %t@ @ %t@ @ \
-       %t@ @ %t@ @ %t@ @ %t@]@\n\
+      "@[<v 4>public static class %a@ implements CatalaValue {\n\
+       @,\
+       %t\n\
+       @,\
+       %t\n\
+       @,\
+       %t\n\
+       @,\
+       %t\n\
+       @,\
+       %t\n\
+       @,\
+       %t@]@\n\
        }"
       format_enum ename format_enum_kind format_enum_params format_enum_constrs
       format_enum_accessors
@@ -1063,8 +1107,28 @@ let format_enums ctx ppf =
       ctx.decl_ctx.ctx_enums
     |> EnumName.Map.bindings
   in
-  pp_print_list_padded ~pp_sep:pp_print_double_space format_enum ppf
-    enums_to_generate
+  pp_print_list_padded ~pp_sep:pp_skip_line format_enum ppf enums_to_generate
+
+let format_abstract_types ctx ppf =
+  let format_abs ppf name =
+    Message.debug ">> %a" AbstractType.format name;
+    fprintf ppf
+      "@[<v 4>public static class %a@ implements CatalaValue {@ %t@ %t@]@\n}"
+      (format_qualified (module AbstractType))
+      name
+      (format_comparison (AbstractType.to_string name) (fun ppf ->
+           Format.pp_print_string ppf "// TO IMPLEMENT"))
+      (fun ppf ->
+        Format.fprintf ppf
+          "%@Override@\n\
+           @[<v 4>public String toString() {@\n\
+           // TO IMPLEMENT@]@\n\
+           }")
+  in
+  ctx.decl_ctx.ctx_abstract_types
+  |> AbstractType.Set.filter (fun tname -> AbstractType.path tname = [])
+  |> AbstractType.Set.elements
+  |> pp_print_list_padded ~pp_sep:pp_skip_line format_abs ppf
 
 let format_external_parameter ctx ppf (name, ty, vis) =
   fprintf ppf
@@ -1133,15 +1197,14 @@ let format_globals ctx ppf globals =
         format_global_method ctx' ppf (var, func, visibility)
       | _ -> assert false
     in
-    pp_print_double_space ppf ();
+    pp_skip_line ppf ();
     fprintf ppf "@[<v 4>@[<hov 4>public static class Globals@ {@]%a%a%a@]@\n}"
-      (pp_print_list_padded ~pp_sep:pp_print_double_space pp_item)
+      (pp_print_list_padded ~pp_sep:pp_skip_line pp_item)
       globals
-      (pp_print_list_padded ~pp_sep:pp_print_double_space
+      (pp_print_list_padded ~pp_sep:pp_skip_line
          (format_external_parameter ctx'))
       externals_vars
-      (pp_print_list_padded ~pp_sep:pp_print_double_space
-         (format_external_method ctx'))
+      (pp_print_list_padded ~pp_sep:pp_skip_line (format_external_method ctx'))
       externals_funcs;
     let vars, funcs =
       List.partition_map
@@ -1184,6 +1247,7 @@ let format_program ctx ppf { code_items; tests; _ } =
       code_items
   in
   let ctx = format_globals ctx ppf globals in
+  format_abstract_types ctx ppf;
   format_structs ctx ppf;
   format_enums ctx ppf;
   let ctx =
@@ -1196,7 +1260,7 @@ let format_program ctx ppf { code_items; tests; _ } =
         })
       ctx scopes
   in
-  pp_print_list_padded ~pp_sep:pp_print_double_space
+  pp_print_list_padded ~pp_sep:pp_skip_line
     (fun ppf s -> format_scope ctx ppf s)
     ppf scopes;
   if snd tests <> [] then format_tests ctx ppf tests

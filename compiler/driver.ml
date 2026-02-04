@@ -105,105 +105,91 @@ let load_modules
         (Format.pp_print_list ~pp_sep:Format.pp_print_space File.format)
         ms
   in
-  let rec aux is_stdlib req_chain seen uses :
-      (ModuleName.t * Surface.Ast.module_content * ModuleName.t Ident.Map.t)
-      option
-      File.Map.t
+  let load_file ~is_stdlib f =
+    let default_module_name =
+      if allow_notmodules then
+        (* This preserves the filename capitalisation, which corresponds to the
+           convention for files related to not-module compilation artifacts and
+           is used by [depends] below *)
+        Some (Filename.basename (File.remove_extension f))
+      else None
+    in
+    if options.Global.whole_program then
+      Surface.Parser_driver.load_interface_and_code ?default_module_name
+        ~is_stdlib (Global.FileName f)
+    else
+      Surface.Parser_driver.load_interface ?default_module_name ~is_stdlib
+        (Global.FileName f)
+  in
+  let rec load_uses file ~is_stdlib req_chain acc uses :
+      (ModuleName.t option File.Map.t
+      * (Surface.Ast.module_content * ModuleName.t Ident.Map.t) ModuleName.Map.t)
       * ModuleName.t Ident.Map.t =
+    let use_map = Ident.Map.empty in
+    let acc, use_map =
+      if is_stdlib || stdlib = None then acc, use_map
+      else
+        let std_use = stdlib_use file in
+        let acc, std_modname =
+          load_submodule ~is_stdlib:true req_chain acc std_use
+        in
+        let std_uses =
+          let _, modules = acc in
+          let _, std_uses = ModuleName.Map.find std_modname modules in
+          std_uses
+        in
+        ( acc,
+          Ident.Map.add
+            (Mark.remove std_use.Surface.Ast.mod_use_name)
+            std_modname std_uses )
+    in
     List.fold_left
-      (fun (seen, use_map) use ->
-        let f = find_module is_stdlib req_chain use.Surface.Ast.mod_use_name in
-        match File.Map.find_opt f seen with
-        | Some (Some (modname, _, _)) ->
-          ( seen,
-            Ident.Map.add
-              (Mark.remove use.Surface.Ast.mod_use_alias)
-              modname use_map )
-        | Some None ->
-          Message.error
-            ~extra_pos:
-              (err_req_pos (Mark.get use.Surface.Ast.mod_use_name :: req_chain))
-            "Circular module dependency"
-        | None ->
-          let default_module_name =
-            if allow_notmodules then
-              (* This preserves the filename capitalisation, which corresponds
-                 to the convention for files related to not-module compilation
-                 artifacts and is used by [depends] below *)
-              Some (Filename.basename (File.remove_extension f))
-            else None
-          in
-          let module_content =
-            if options.Global.whole_program then
-              Surface.Parser_driver.load_interface_and_code ?default_module_name
-                (Global.FileName f)
-            else
-              Surface.Parser_driver.load_interface ?default_module_name
-                (Global.FileName f)
-          in
-          let modname =
-            ModuleName.fresh
-              module_content.Surface.Ast.module_modname.module_name
-          in
-          let seen = File.Map.add f None seen in
-          let seen, file_use_map =
-            aux is_stdlib
-              (Mark.get use.Surface.Ast.mod_use_name :: req_chain)
-              seen module_content.Surface.Ast.module_submodules
-          in
-          ( File.Map.add f (Some (modname, module_content, file_use_map)) seen,
-            Ident.Map.add
-              (Mark.remove use.Surface.Ast.mod_use_alias)
-              modname use_map ))
-      (seen, Ident.Map.empty) uses
+      (fun (acc, use_map) use ->
+        let acc, modname = load_submodule ~is_stdlib req_chain acc use in
+        ( acc,
+          Ident.Map.add
+            (Mark.remove use.Surface.Ast.mod_use_alias)
+            modname use_map ))
+      (acc, use_map) uses
+  and load_submodule ~is_stdlib req_chain (files, modules) use =
+    let f = find_module is_stdlib req_chain use.Surface.Ast.mod_use_name in
+    match File.Map.find_opt f files with
+    | Some (Some modname) ->
+      (* Already loaded *)
+      (files, modules), modname
+    | Some None ->
+      (* Already being resolved *)
+      Message.error
+        ~extra_pos:
+          (err_req_pos (Mark.get use.Surface.Ast.mod_use_name :: req_chain))
+        "Circular module dependency"
+    | None ->
+      let module_content = load_file ~is_stdlib f in
+      let modname =
+        ModuleName.fresh module_content.Surface.Ast.module_modname.module_name
+      in
+      let files = File.Map.add f None files in
+      let req_chain = Mark.get use.Surface.Ast.mod_use_name :: req_chain in
+      let (files, modules), use_map =
+        load_uses f ~is_stdlib req_chain (files, modules)
+          module_content.Surface.Ast.module_submodules
+      in
+      ( ( File.Map.add f (Some modname) files,
+          ModuleName.Map.add modname (module_content, use_map) modules ),
+        modname )
   in
   let file =
     match program.Surface.Ast.program_module with
     | Some m -> Pos.get_file (Mark.get m.module_name)
     | None -> List.hd program.Surface.Ast.program_source_files
   in
-  let modules_map file_map =
-    File.Map.fold
-      (fun _ info acc ->
-        match info with
-        | None -> acc
-        | Some (mname, intf, use_map) ->
-          ModuleName.Map.add mname (intf, use_map) acc)
-      file_map ModuleName.Map.empty
+  let (_files, module_map), root_uses =
+    load_uses file ~is_stdlib:false
+      [Pos.from_info file 0 0 0 0]
+      (File.Map.empty, ModuleName.Map.empty)
+      program.Surface.Ast.program_used_modules
   in
-  let stdlib_files, stdlib_uses =
-    if stdlib = None then File.Map.empty, Ident.Map.empty
-    else
-      let stdlib_files, stdlib_use_map =
-        aux true [Pos.from_info file 0 0 0 0] File.Map.empty [stdlib_use file]
-      in
-      let stdlib_modules = modules_map stdlib_files in
-      let _, (_, stdlib_uses) =
-        (* Uses from the stdlib are "flattened" to the parent module, but can
-           still be overriden *)
-        ModuleName.Map.choose stdlib_modules
-      in
-      ( stdlib_files,
-        Ident.Map.union (fun _ _ m -> Some m) stdlib_uses stdlib_use_map )
-  in
-  let file_module_map, root_uses =
-    aux false [] stdlib_files program.Surface.Ast.program_used_modules
-  in
-  let file_module_map =
-    File.Map.mapi
-      (fun file ->
-        Option.map (fun (mname, intf, use_map) ->
-            ( mname,
-              intf,
-              if
-                File.Map.mem file stdlib_files
-                || intf.Surface.Ast.module_modname.module_external
-              then use_map
-              else Ident.Map.union (fun _ _ m -> Some m) stdlib_uses use_map )))
-      file_module_map
-  in
-  ( Ident.Map.union (fun _ _ m -> Some m) stdlib_uses root_uses,
-    modules_map file_module_map )
+  root_uses, module_map
 
 module Passes = struct
   (* Each pass takes only its cli options, then calls upon its dependent passes
@@ -251,8 +237,7 @@ module Passes = struct
     Message.report_delayed_errors_if_any ();
     prg
 
-  let dcalc :
-      type ty.
+  let dcalc : type ty.
       Global.options ->
       includes:Global.raw_file list ->
       stdlib:Global.raw_file option ->
@@ -265,8 +250,8 @@ module Passes = struct
     let prg = scopelang options ~includes ~stdlib in
     debug_pass_name "dcalc";
     let type_ordering =
-      Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-        prg.program_ctx.ctx_enums
+      Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_abstract_types
+        prg.program_ctx.ctx_structs prg.program_ctx.ctx_enums
     in
     let (prg : ty Scopelang.Ast.program) =
       match typed with
@@ -394,7 +379,8 @@ module Passes = struct
         List.map
           (function
             | Struct s -> Struct (Renaming.struct_name ren_ctx s)
-            | Enum e -> Enum (Renaming.enum_name ren_ctx e))
+            | Enum e -> Enum (Renaming.enum_name ren_ctx e)
+            | Abstract t -> Abstract (Renaming.abstract_type ren_ctx t))
           type_ordering
       in
       prg, type_ordering, Some ren_ctx
@@ -462,7 +448,34 @@ module Commands = struct
         scope
         ~suggestion:(Ident.Map.keys ctx.ctx_scope_index)
 
-  let get_scopelist_uids prg (scopes : string list) : ScopeName.t list =
+  let get_single_scope_uid prg (scopes : string list) =
+    match scopes with
+    | [s] -> get_scope_uid prg.decl_ctx s
+    | _ :: _ ->
+      Message.error "Expected at most one scope argument but got multiple ones."
+    | [] -> (
+      let exports = BoundList.last prg.code_items in
+      let prg_scopes =
+        List.filter_map
+          (function KScope scope, _ -> Some scope | _ -> None)
+          exports
+      in
+      match prg_scopes with
+      | [] ->
+        Message.error
+          "The program has no exported scopes.@ Please specify option \
+           @{<yellow>--scope@}@ to execute a private scope@ or add \
+           ```catala-metadata to a scope declaration."
+      | _ :: _ :: _ ->
+        Message.error
+          "The program defines multiple scopes but only one was expected.@ \
+           Please specify option @{<yellow>--scope@} to explicit what to \
+           execute.@ The program defines the following scopes:@ @[<hv 4>%a@]"
+          (Format.pp_print_list ~pp_sep:Format.pp_print_space ScopeName.format)
+          prg_scopes
+      | [h] -> h)
+
+  let get_test_scopes_uids prg (scopes : string list) : ScopeName.t list =
     match scopes with
     | _ :: _ -> List.map (get_scope_uid prg.decl_ctx) scopes
     | [] ->
@@ -755,8 +768,8 @@ module Commands = struct
     let prg = Passes.scopelang options ~allow_external:true ~includes ~stdlib in
     Message.debug "Typechecking...";
     let _type_ordering =
-      Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-        prg.program_ctx.ctx_enums
+      Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_abstract_types
+        prg.program_ctx.ctx_structs prg.program_ctx.ctx_enums
     in
     let prg = Scopelang.Ast.type_program prg in
     Message.debug "Translating to default calculus...";
@@ -884,12 +897,13 @@ module Commands = struct
       options
       ?(quiet = false)
       interpreter
-      scope_uid =
+      scope_uid
+      (ctx : decl_ctx) =
     try
       Message.debug "Starting interpretation...";
       let results, cov_opt = interpreter () in
       Message.debug "End of interpretation";
-      let results =
+      let sorted_results =
         List.sort
           (fun ((v1, _), _) ((v2, _), _) -> String.compare v1 v2)
           results
@@ -897,25 +911,54 @@ module Commands = struct
       let language =
         Cli.file_lang (Global.input_src_file options.Global.input_src)
       in
-      if quiet then begin
-        (* Caution: this output is parsed by Clerk *)
-        Format.fprintf (Message.std_ppf ()) "%a: @{<green>passed@}%t@."
-          ScopeName.format scope_uid (fun fmt ->
-            Option.iter
-              (Format.fprintf fmt "|%a" Coverage.format_coverage_hex_dump)
-              cov_opt)
-      end
-      else if results = [] then Message.result "Computation successful!"
-      else
-        Message.results
-          ~title:(ScopeName.to_string scope_uid)
-          (List.map
-             (fun ((var, _), result) ppf ->
-               Format.fprintf ppf "@[<hov 2>%s@ =@ %a@]" var
-                 (if options.Global.debug then Print.expr ~debug:false ()
-                  else Print.UserFacing.value language)
-                 result)
-             results);
+      (if quiet then begin
+         (* Caution: this output is parsed by Clerk *)
+         Format.fprintf (Message.std_ppf ()) "%a: @{<green>passed@}%t@."
+           ScopeName.format scope_uid (fun fmt ->
+             Option.iter
+               (Format.fprintf fmt "|%a" Coverage.format_coverage_hex_dump)
+               cov_opt)
+       end
+       else
+         match results, options.Global.output_format with
+         | [], Human -> Message.result "Computation successful!"
+         | _ :: _, Human ->
+           Message.results
+             ~title:(ScopeName.to_string scope_uid)
+             ((List.map (fun ((var, _), result) ppf ->
+                   Format.fprintf ppf "@[<hov 2>%s@ =@ %a@]" var
+                     (if options.Global.debug then Print.expr ~debug:false ()
+                      else Print.UserFacing.value language)
+                     result))
+                sorted_results)
+         | [], JSON ->
+           Format.fprintf (Message.std_ppf ()) "%a@."
+             (Yojson.Safe.pretty_print ~std:true)
+             (`Assoc [])
+         | (_, f_e) :: _, JSON ->
+           let { out_struct_name; _ } =
+             ScopeName.Map.find scope_uid ctx.ctx_scopes
+           in
+           let struct_result =
+             let fields =
+               List.fold_left
+                 (fun m (sf_s, e) ->
+                   StructField.Map.add (StructField.fresh sf_s) (Expr.box e) m)
+                 StructField.Map.empty results
+             in
+             Expr.estruct ~name:out_struct_name ~fields (Mark.get f_e)
+             |> Expr.unbox
+             |> Encoding.convert_from_gexpr ctx
+           in
+           let encoding =
+             Encoding.make_encoding ctx
+               (Mark.add Pos.void (TStruct out_struct_name))
+           in
+           let module Enc = Json_encoding.Make (Json_repr.Yojson) in
+           let json = Enc.construct encoding struct_result in
+           Format.fprintf (Message.std_ppf ()) "%a@."
+             (Yojson.Safe.pretty_print ~std:true)
+             json);
       true
     with
     | Message.CompilerError content ->
@@ -940,7 +983,8 @@ module Commands = struct
       optimize
       check_invariants
       quiet
-      ex_scopes =
+      ex_scopes
+      scope_input =
     let prg, _ =
       Passes.dcalc options ~includes ~stdlib ~optimize ~check_invariants
         ~autotest:false ~typed
@@ -948,6 +992,10 @@ module Commands = struct
     Interpreter.load_runtime_modules
       ~hashf:Hash.(finalise ~monomorphize_types:false)
       prg;
+    let scopes =
+      if Option.is_none scope_input then get_test_scopes_uids prg ex_scopes
+      else [get_single_scope_uid prg ex_scopes]
+    in
     let success =
       List.fold_left
         (fun success scope ->
@@ -960,13 +1008,16 @@ module Commands = struct
               res, Some cov
             in
             print_interpretation_results options ~quiet interp scope
+              prg.decl_ctx
           else
             let interp () =
-              Interpreter.interpret_program_dcalc prg scope, None
+              ( Interpreter.interpret_program_dcalc ?input:scope_input prg scope,
+                None )
             in
-            print_interpretation_results ~quiet options interp scope && success)
-        true
-        (get_scopelist_uids prg ex_scopes)
+            print_interpretation_results ~quiet options interp scope
+              prg.decl_ctx
+            && success)
+        true scopes
     in
     if not success then raise (Cli.Exit_with 123)
 
@@ -1043,7 +1094,8 @@ module Commands = struct
       optimize
       check_invariants
       quiet
-      ex_scopes =
+      ex_scopes
+      scope_input =
     let options = if closure_conversion then fix_trace options else options in
     let prg, _, _ =
       Passes.lcalc options ~includes ~stdlib ~optimize ~check_invariants
@@ -1053,13 +1105,20 @@ module Commands = struct
     Interpreter.load_runtime_modules
       ~hashf:(Hash.finalise ~monomorphize_types)
       prg;
+    let scopes =
+      if Option.is_none scope_input then get_test_scopes_uids prg ex_scopes
+      else [get_single_scope_uid prg ex_scopes]
+    in
     let success =
       List.fold_left
         (fun success scope ->
-          let interp () = Interpreter.interpret_program_lcalc prg scope, None in
-          print_interpretation_results ~quiet options interp scope && success)
-        true
-        (get_scopelist_uids prg ex_scopes)
+          let interp () =
+            ( Interpreter.interpret_program_lcalc ?input:scope_input prg scope,
+              None )
+          in
+          print_interpretation_results ~quiet options interp scope prg.decl_ctx
+          && success)
+        true scopes
     in
     if not success then raise (Cli.Exit_with 123)
 
@@ -1112,7 +1171,8 @@ module Commands = struct
         $ Cli.Flags.optimize
         $ Cli.Flags.check_invariants
         $ Cli.Flags.quiet
-        $ Cli.Flags.ex_scopes)
+        $ Cli.Flags.ex_scopes
+        $ Cli.Flags.scope_input)
 
   let ocaml
       options
@@ -1435,6 +1495,49 @@ module Commands = struct
                startup *))
         $ Cli.Flags.Global.options)
 
+  let json_schema_cmd =
+    let f options includes stdlib ex_scope =
+      let mark = Expr.typed in
+      let prg, _ =
+        Passes.dcalc options ~includes ~stdlib ~optimize:false
+          ~check_invariants:false ~autotest:false ~typed:mark
+      in
+      let scope = get_scope_uid prg.decl_ctx ex_scope in
+      let { in_struct_name; out_struct_name; _ } =
+        ScopeName.Map.find scope prg.decl_ctx.ctx_scopes
+      in
+      let module Schema_repr = Json_schema.Make (Json_repr.Yojson) in
+      let scope_input_schema_json =
+        let input_ty = TStruct in_struct_name, Expr.mark_pos mark in
+        let encoding =
+          Encoding.scope_input_encoding scope prg.decl_ctx input_ty
+        in
+        Json_encoding.schema encoding |> Schema_repr.to_json
+      in
+      let scope_output_schema_json =
+        let output_ty = TStruct out_struct_name, Expr.mark_pos mark in
+        let encoding =
+          Encoding.scope_output_encoding scope prg.decl_ctx output_ty
+        in
+        Json_encoding.schema encoding |> Schema_repr.to_json
+      in
+      Format.fprintf (Message.std_ppf ()) "%a@\n"
+        (Yojson.Safe.pretty_print ~std:true)
+        (`List [scope_input_schema_json; scope_output_schema_json])
+    in
+    Cmd.v
+      (Cmd.info "json-schema" ~man:Cli.man_base
+         ~doc:
+           "Display the JSON-schema of the input and output JSON objects of \
+            the given scope. Both schemas are contained in a JSON array of two \
+            elements: first one being the input, the second one the output.")
+      Term.(
+        const f
+        $ Cli.Flags.Global.options
+        $ Cli.Flags.include_dirs
+        $ Cli.Flags.stdlib_dir
+        $ Cli.Flags.ex_scope)
+
   let commands =
     [
       interpret_cmd;
@@ -1455,6 +1558,7 @@ module Commands = struct
       dependency_graph_cmd;
       depends_cmd;
       pygmentize_cmd;
+      json_schema_cmd;
     ]
 end
 

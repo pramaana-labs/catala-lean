@@ -273,6 +273,9 @@ let rec union
   | TEnum e1, TEnum e2 ->
     if not (EnumName.equal e1 e2) then record_type_error ();
     t2
+  | TAbstract a1, TAbstract a2 ->
+    if not (AbstractType.equal a1 a2) then record_type_error ();
+    t2
   | TOption t1', TOption t2' -> TOption (union t1' t2'), pos2
   | TArray t1', TArray t2' -> TArray (union t1' t2'), pos2
   | TDefault t1', TDefault t2' -> TDefault (union t1' t2'), pos2
@@ -342,8 +345,8 @@ let rec union
     Env.set_tvar env v2 t;
     t
   | TClosureEnv, TClosureEnv -> t2
-  | ( ( TLit _ | TArrow _ | TTuple _ | TStruct _ | TEnum _ | TOption _
-      | TArray _ | TDefault _ | TClosureEnv ),
+  | ( ( TLit _ | TArrow _ | TTuple _ | TStruct _ | TEnum _ | TAbstract _
+      | TOption _ | TArray _ | TDefault _ | TClosureEnv ),
       _ ) ->
     record_type_error ();
     t2
@@ -463,8 +466,7 @@ let error_expr () : (< .. >, typ custom) boxed_gexpr =
   Expr.ebad (Custom { custom = TError, Pos.void; pos = Pos.void })
 
 (** Infers the most permissive type from an expression *)
-let rec typecheck_expr_bottom_up :
-    type a m.
+let rec typecheck_expr_bottom_up : type a m.
     decl_ctx ->
     (a, m) gexpr Env.t ->
     (a, m) gexpr ->
@@ -473,8 +475,7 @@ let rec typecheck_expr_bottom_up :
   typecheck_expr_top_down ctx env (Type.fresh_var (Expr.pos e)) e
 
 (** Checks whether the expression can be typed with the provided type *)
-and typecheck_expr_top_down :
-    type a m.
+and typecheck_expr_top_down : type a m.
     decl_ctx ->
     (a, m) gexpr Env.t ->
     typ ->

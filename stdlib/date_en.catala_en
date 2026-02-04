@@ -3,6 +3,7 @@
 > Module Date_en
 
 > Using Date_internal as D
+> Using List_en as List
 
 ## Helper functions
 
@@ -244,4 +245,57 @@ declaration is_young_enough_rounding_up
     at_date content date
   equals
     not (is_old_enough_rounding_up of birth_date, age, at_date)
+```
+
+## Days of the week enumeration
+```catala-metadata
+declaration enumeration Day_of_week:
+  -- Monday
+  -- Tuesday
+  -- Wednesday
+  -- Thursday
+  -- Friday
+  -- Saturday
+  -- Sunday
+```
+
+## Find the Day of the week for a given date (Tomohiko Sakamoto Algorithm)
+
+```catala-metadata
+declaration day_of_week content Day_of_week
+  depends on given_date content date
+  equals
+  let weekdays equals [Sunday; Monday; Tuesday; Wednesday; Thursday; Friday; Saturday] in
+  let sakamoto_list equals [0; 3; 2; 5; 0; 3; 5; 1; 4; 6; 2; 4] in
+  let month_number equals get_month of given_date in
+  let year_number equals
+    if month_number < 3
+    then get_year of given_date - 1
+    else get_year of given_date
+  in
+  let n_number equals
+    match (List.nth_element of sakamoto_list, month_number) with pattern
+    -- Present content n: n
+    -- Absent: impossible
+  in
+  let day_number equals
+    (year_number
+     + integer of (year_number / 4)
+     - integer of (year_number / 100)
+     + integer of (year_number / 400)
+     + n_number
+     + get_day of given_date)
+    - 7 * integer of (
+      (year_number
+       + integer of (year_number / 4)
+       - integer of (year_number / 100)
+       + integer of (year_number / 400)
+       + n_number
+       + get_day of given_date)
+      / 7
+    )
+  in
+  match (List.nth_element of weekdays, (day_number + 1)) with pattern
+  -- Present content d: d
+  -- Absent: impossible
 ```

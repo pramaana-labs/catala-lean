@@ -90,7 +90,7 @@ val error_to_string : error -> string
 val error_message : error -> string
 (** Returns a short explanation message about the error *)
 
-exception Error of error * code_location list
+exception Error of error * code_location list * string option
 exception Empty
 
 (** {1 Value Embedding} *)
@@ -107,6 +107,7 @@ type runtime_value =
   | Struct of string * (string * runtime_value) list
   | Array of runtime_value Array.t
   | Tuple of runtime_value Array.t
+  | Position of (string * int * int * int * int)
   | Unembeddable
 
 val unembeddable : 'a -> runtime_value
@@ -118,6 +119,7 @@ val embed_decimal : decimal -> runtime_value
 val embed_date : date -> runtime_value
 val embed_duration : duration -> runtime_value
 val embed_array : ('a -> runtime_value) -> 'a Array.t -> runtime_value
+val format_value : Format.formatter -> runtime_value -> unit
 
 (** {1 Logging} *)
 
@@ -161,41 +163,41 @@ type raw_event =
 (** The corresponding grammar of the {!type: event} type, is the following:
 
     {v
-<event> := <fun_call>
+    <event> := <fun_call>
          | <subscope_call>
          | <var_def>
          | <var_def_with_fun>
          | VariableDefinition
 
-<fun_call> :=
-    VariableDefinition                      (function input)
-    <fun_call_beg>
-        <event>*
-        (<var_def> | <var_def_with_fun>)    (function output)
-    EndCall
+    <fun_call> :=
+        VariableDefinition                      (function input)
+        <fun_call_beg>
+            <event>*
+            (<var_def> | <var_def_with_fun>)    (function output)
+        EndCall
 
-<var_def_with_fun> :=
-       /-- DecisionTaken
-pos of |   <fun_call>+                      (function calls needed to compute the variable value)
-       \-> VariableDefinition
+    <var_def_with_fun> :=
+           /-- DecisionTaken
+    pos of |   <fun_call>+                      (function calls needed to compute the variable value)
+           \-> VariableDefinition
 
-<subscope_call> :=
-    <sub_var_def>*          (sub-scope attributes def)
-    <sub_call_beg>
-        <event>+
-    EndCall
+    <subscope_call> :=
+        <sub_var_def>*          (sub-scope attributes def)
+        <sub_call_beg>
+            <event>+
+        EndCall
 
-<var_def> := DecisionTaken VariableDefinition(info, _)
-  (when info.length = 2 && info[1] == "id")
+    <var_def> := DecisionTaken VariableDefinition(info, _)
+      (when info.length = 2 && info[1] == "id")
 
-<sub_var_def> := DecisionTaken VariableDefinition(info, _)
-  (when info.length = 3)
+    <sub_var_def> := DecisionTaken VariableDefinition(info, _)
+      (when info.length = 3)
 
-<fun_call_beg> := BeginCall(info)
-  (when info.length = 2)
+    <fun_call_beg> := BeginCall(info)
+      (when info.length = 2)
 
-<sub_call_beg> := BeginCall(info)
-  (when info.length = 2 and '.' in info[1])
+    <sub_call_beg> := BeginCall(info)
+      (when info.length = 2 and '.' in info[1])
     v} *)
 
 type event =
@@ -229,7 +231,8 @@ val retrieve_log : unit -> raw_event list
 
 module EventParser : sig
   val parse_raw_events : raw_event list -> event list
-  (** [parse_raw_events raw_events] parses raw events into {i structured} ones. *)
+  (** [parse_raw_events raw_events] parses raw events into {i structured} ones.
+  *)
 end
 
 (** {2 Helping functions} *)

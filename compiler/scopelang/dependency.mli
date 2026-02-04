@@ -15,7 +15,8 @@
    the License. *)
 
 (** Graph representation of the dependencies between scopes in the Catala
-    program. Vertices are functions, x -> y if x is used in the definition of y. *)
+    program. Vertices are functions, x -> y if x is used in the definition of y.
+*)
 
 open Catala_utils
 open Shared_ast
@@ -43,5 +44,8 @@ module TDependencies :
 
 val get_structs_or_enums_in_type : typ -> TypeIdent.Set.t
 val build_type_graph : struct_ctx -> enum_ctx -> TDependencies.t
-val check_type_cycles : struct_ctx -> enum_ctx -> TypeIdent.t list
+
+val check_type_cycles :
+  AbstractType.Set.t -> struct_ctx -> enum_ctx -> TypeIdent.t list
+
 val type_dependencies_graph_to_json : TDependencies.t -> Yojson.Safe.t

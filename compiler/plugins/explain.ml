@@ -757,8 +757,16 @@ let program_to_graph
         Some (vscope, name, fields)
       | e -> Expr.shallow_fold find_tested_scope e acc
   in
+  let tested_scope_opt = find_tested_scope e None in
   let tested_scope_v, in_struct, in_fields =
-    Option.get (find_tested_scope e None)
+    match tested_scope_opt with
+    | Some result -> result
+    | None ->
+      Message.error
+        "The explain plugin requires a test scope that calls another scope \
+         with struct inputs. The scope %a appears to be a standalone test \
+         scope. Please use a test scope that calls another scope."
+        ScopeName.format scope
   in
   log "The specified scope is detected to be testing scope %s"
     (Bindlib.name_of tested_scope_v);
@@ -947,8 +955,23 @@ let program_to_graph
         aux (Some v) (g, var_vertices, env0) e
       in
       (G.add_edge g v child, var_vertices, env), v
+    | EApp { f; args; _ }, _ ->
+      (* Handle general function applications *)
+      let v = G.V.create e in
+      let g = G.add_vertex g v in
+      let (g, var_vertices, env), children =
+        List.fold_left_map (aux (Some v)) (g, var_vertices, env0) args
+      in
+      ( (List.fold_left (fun g -> G.add_edge g v) g children, var_vertices, env),
+        v )
+    | ETuple _, _ | EDefault _, _ ->
+      (* Handle other expression types by creating a node without exploring
+         children *)
+      let v = G.V.create e in
+      (G.add_vertex g v, var_vertices, env0), v
     | _ ->
-      Format.eprintf "%a" Expr.format e;
+      Format.eprintf "Unhandled expression type in explain plugin: %a@."
+        Expr.format e;
       assert false
   in
   let (g, vmap, env), _ = aux None (G.empty, Var.Map.empty, env) e in
@@ -1202,8 +1225,7 @@ let rec graph_cleanup options g base_vars =
   in
   g
 
-let expr_to_dot_label0 :
-    type a.
+let expr_to_dot_label0 : type a.
     Global.backend_lang ->
     decl_ctx ->
     Env.t ->
@@ -1412,9 +1434,9 @@ let rec expr_to_dot_label (style : Style.theme) lang ctx env ppf e =
         "<table border=\"0\" cellborder=\"1\" \
          cellspacing=\"0\"><tr>%a</tr></table>"
         (Format.pp_print_list (fun ppf -> function
-           | ((EVar _ | ELit _), _) as e ->
-             Format.fprintf ppf "<td>%a</td>" print_expr e
-           | _ -> Format.pp_print_string ppf "<td>…</td>"))
+          | ((EVar _ | ELit _), _) as e ->
+            Format.fprintf ppf "<td>%a</td>" print_expr e
+          | _ -> Format.pp_print_string ppf "<td>…</td>"))
         elts
     in
     Format.pp_print_string ppf (Message.unformat pr)
@@ -1759,7 +1781,7 @@ let inline_used_modules global_options =
   let used_modules =
     prg.Surface.Ast.program_used_modules
     |> List.map (fun { Surface.Ast.mod_use_name; mod_use_alias; _ } ->
-           Mark.remove mod_use_name, Mark.remove mod_use_alias)
+        Mark.remove mod_use_name, Mark.remove mod_use_alias)
   in
   if used_modules = [] then ()
   else
@@ -1774,10 +1796,10 @@ let inline_used_modules global_options =
       Sys.readdir dir
       |> Array.map (Filename.concat dir)
       |> Array.find_map (fun path ->
-             let file = Filename.basename path in
-             if file = en_candidate then Some path
-             else if file = fr_candidate then Some path
-             else None)
+          let file = Filename.basename path in
+          if file = en_candidate then Some path
+          else if file = fr_candidate then Some path
+          else None)
     in
     let raw_prg, file =
       match global_options.input_src with

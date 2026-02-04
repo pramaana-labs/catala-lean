@@ -63,6 +63,7 @@
   val lex_builtin: string -> Ast.builtin_expression option
   val lex_primitive_type: string -> Ast.primitive_typ option
   val lex_builtin_constr: string -> Ast.builtin_constr option
+  val sum_string: string
 end>
 
 (* The token is returned for every line of law text, make them right-associative
@@ -199,10 +200,14 @@ let list_with_attr(x) ==
 
 let primitive_typ :=
 | DATE ; { Date }
-| name = LIDENT ; {
-  match Localisation.lex_primitive_type name with
+| name = addpos(LIDENT) ; {
+  match Localisation.lex_primitive_type (fst name) with
   | Some ty -> ty
-  | None -> External name
+  | None ->
+    Message.delayed_error ()
+      ~kind:Parsing
+      ~pos:(snd name) "Unknown built-in type";
+    Integer
 }
 | c = quident ; { let path, uid = c in Named (path, uid) }
 | WILDCARD; { Var None }
@@ -233,6 +238,12 @@ let lident :=
         "Reserved builtin name"
   | None ->
       (i, get_pos $sloc)
+}
+| SUM ; {
+  (* TEMPORARY: this is for backwards-compat with the deprecated
+     "sum integer of..." syntax.
+     When that is removed, the SUM keyword will go *)
+  (Localisation.sum_string, get_pos $sloc)
 }
 
 let scope_var == separated_nonempty_list(DOT, addpos(LIDENT))
@@ -392,6 +403,10 @@ let naked_expression ==
   default = opt_or_if_empty; {
   CollectionOp ((AggregateArgExtremum { max; default; f = ids, f }, pos), coll)
 }
+| p1 = pos(ASSERTION) ; check = expression ; IN ; next = expression ; {
+  let pos = Pos.join p1 (Mark.get check) in
+  Assert (check, next, pos)
+} %prec let_expr
 
 let opt_or_if_empty ==
 | OR_IF_LIST_EMPTY ; THEN ; default = expression ; <Some> %prec apply
@@ -622,14 +637,7 @@ let definition :=
 }
 
 let assertion :=
-| ASSERTION ;
-  cond = option(condition_consequence) ;
-  base = expression ; {
-  Assertion {
-    assertion_condition = cond;
-    assertion_content = base;
-  }
-}
+| ASSERTION ; e = expression ; <Assertion>
 
 let variation_type :=
 | INCREASING ; { Increasing }
@@ -882,6 +890,9 @@ let code_item :=
     topdef_expr;
   }, []
 }
+| DECLARATION ; TYPE; name = uident ; COLON ; EXTERNAL ; {
+  AbstractTypeDecl name, []
+}
 
 let opt_def ==
 | DEFINED_AS; expression
@@ -899,6 +910,7 @@ let code ==
       | StructDecl sd -> StructDecl { sd with struct_decl_name = set_attrs sd.struct_decl_name }
       | ScopeDecl sd -> ScopeDecl { sd with scope_decl_name = set_attrs sd.scope_decl_name }
       | EnumDecl ed -> EnumDecl { ed with enum_decl_name = set_attrs ed.enum_decl_name }
+      | AbstractTypeDecl ad -> AbstractTypeDecl (set_attrs ad)
       | Topdef td -> Topdef { td with topdef_name = set_attrs td.topdef_name }
     in
     (item, pos_noattr) :: acc, trailing_attrs
@@ -935,7 +947,7 @@ let directive :=
     LawInclude (Ast.CatalaFile (filename, pos))
 }
 | MODULE_DEF ; m = addpos(DIRECTIVE_ARG) ;
-  ext = option (MODULE_EXTERNAL) ; {
+  ext = option (EXTERNAL) ; {
   ModuleDef (m, ext <> None)
 }
 | MODULE_USE ; m = addpos(DIRECTIVE_ARG) ;

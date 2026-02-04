@@ -308,7 +308,7 @@ let rec translate_expr
     (ctxt : Name_resolution.context)
     (local_vars : Ast.expr Var.t Ident.Map.t)
     (expr : S.expression) : Ast.expr boxed =
-  let pos = Name_resolution.(translate_pos Expression (Mark.get expr)) in
+  let pos = Name_resolution.(translate_pos (Expression expr) (Mark.get expr)) in
   let emark = Untyped { pos } in
   Message.wrap_to_delayed_error (Expr.ebad emark) ~kind:Parsing
   @@ fun () ->
@@ -539,13 +539,20 @@ let rec translate_expr
       "Access to intermediate states is only allowed for variables of the \
        current scope."
   | Ident (path, name, None) -> (
-    let _, ctxt = Name_resolution.module_ctx ctxt path in
+    let ml, ctxt = Name_resolution.module_ctx ctxt path in
     match Ident.Map.find_opt (Mark.remove name) ctxt.local.topdefs with
-    | Some v ->
+    | Some topdef ->
+      let path : Uid.Path.t =
+        List.map2
+          (fun (_, pos) mname ->
+            ModuleName.map_info (fun (name, _) -> name, pos) mname)
+          path ml
+      in
+      let v = TopdefName.map_info (fun _ -> path, name) topdef in
       Expr.elocation
         (ToplevelVar
            {
-             name = v, Mark.get (TopdefName.get_info v);
+             name = v, Mark.get (TopdefName.get_info topdef);
              is_external = ctxt.local.is_external;
            })
         emark
@@ -819,7 +826,8 @@ let rec translate_expr
       try
         let c_uid =
           EnumName.Map.find e_uid possible_c_uids
-          |> (* Retain the correct position *)
+          |>
+          (* Retain the correct position *)
           EnumConstructor.map_info (fun (v, p) ->
               v, Pos.add_attrs pos_constructor (Pos.attrs p))
         in
@@ -1153,6 +1161,13 @@ let rec translate_expr
     Expr.eappop ~op:(Fold, opos)
       ~tys:[Type.any pos; Type.any pos; Type.any pos]
       ~args:[f; init; collection] emark
+  | Assert (e1, e2, apos) ->
+    Expr.make_let_in
+      (Var.make "_", Mark.get e1)
+      (TLit TUnit, Mark.get e1)
+      (Expr.eassert (rec_helper e1)
+         (Untyped { pos = Pos.set_attrs apos (Pos.attrs pos) }))
+      (rec_helper e2) apos
 
 and disambiguate_match_and_build_expression
     (scope : ScopeName.t option)
@@ -1255,9 +1270,9 @@ and disambiguate_match_and_build_expression
           EnumName.Map.find e_uid ctxt.Name_resolution.enums
           |> fst
           |> EnumConstructor.Map.filter_map (fun c_uid _ ->
-                 match EnumConstructor.Map.find_opt c_uid cases_d with
-                 | Some _ -> None
-                 | None -> Some c_uid)
+              match EnumConstructor.Map.find_opt c_uid cases_d with
+              | Some _ -> None
+              | None -> Some c_uid)
         in
         if EnumConstructor.Map.is_empty missing_constructors then
           Message.warning ~pos:case_pos
@@ -1525,31 +1540,25 @@ let process_assert
     (scope_uid : ScopeName.t)
     (ctxt : Name_resolution.context)
     (modul : Ast.modul)
-    (ass : S.assertion) : Ast.modul =
+    (asrt : S.expression)
+    (pos : Pos.t) : Ast.modul =
   let scope : Ast.scope = ScopeName.Map.find scope_uid modul.module_scopes in
-  let ass =
-    translate_expr (Some scope_uid) None ctxt Ident.Map.empty
-      (match ass.S.assertion_condition with
-      | None -> ass.S.assertion_content
-      | Some cond ->
-        ( S.IfThenElse
-            ( cond,
-              ass.S.assertion_content,
-              Mark.copy cond (S.Literal (S.LBool true)) ),
-          Mark.get cond ))
-  in
+  let asrt = translate_expr (Some scope_uid) None ctxt Ident.Map.empty asrt in
   let assertion =
     match precond with
     | Some precond ->
-      Expr.eifthenelse precond ass
+      Expr.eifthenelse precond asrt
         (Expr.elit (LBool true) (Mark.get precond))
         (Mark.get precond)
-    | None -> ass
+    | None -> asrt
   in
   (* The assertion name is not very relevant and should not be used in error
      messages, it is only a reference to designate the assertion instead of its
      expression. *)
-  let assertion_name = Ast.AssertionName.fresh ("assert", Expr.pos assertion) in
+  let assertion_name =
+    Ast.AssertionName.fresh
+      ("assert", Name_resolution.translate_pos Assertion pos)
+  in
   let new_scope =
     {
       scope with
@@ -1576,7 +1585,8 @@ let process_scope_use_item
   match Mark.remove item with
   | S.Rule rule -> process_rule precond scope ctxt modul rule
   | S.Definition def -> process_def precond scope ctxt modul def
-  | S.Assertion ass -> process_assert precond scope ctxt modul ass
+  | S.Assertion asrt ->
+    process_assert precond scope ctxt modul asrt (Mark.get item)
   | S.DateRounding (r, _) ->
     let scope_uid = scope in
     let scope : Ast.scope = ScopeName.Map.find scope_uid modul.module_scopes in
@@ -2014,7 +2024,17 @@ let translate_program
               let deps = aux mctx in
               let hash = snd (ModuleName.Map.find m program_modules) in
               ModuleName.Map.add m
-                { deps; intf_id = { hash; is_external = mctx.is_external } }
+                {
+                  deps;
+                  intf_id =
+                    {
+                      hash;
+                      is_external = mctx.is_external;
+                      is_stdlib =
+                        (ModuleName.Map.find m modules_contents)
+                          .S.module_is_stdlib;
+                    };
+                }
                 acc)
             mctx.used_modules ModuleName.Map.empty
         in
@@ -2032,11 +2052,19 @@ let translate_program
            (fun name (_, visibility) acc ->
              if visibility = Public then TypeIdent.Set.add (Enum name) acc
              else acc)
-           ctxt.enums TypeIdent.Set.empty
+           ctxt.enums
+      @@ AbstractType.Map.fold
+           (fun name visibility acc ->
+             if visibility = Public then TypeIdent.Set.add (Abstract name) acc
+             else acc)
+           ctxt.abstract_types TypeIdent.Set.empty
     in
     {
       ctx_structs = StructName.Map.map fst ctxt.structs;
       ctx_enums = EnumName.Map.map fst ctxt.enums;
+      ctx_abstract_types =
+        AbstractType.(
+          Map.fold (fun t _ -> Set.add t) ctxt.abstract_types Set.empty);
       ctx_scopes =
         ModuleName.Map.fold
           (fun _ -> ctx_scopes)
@@ -2049,8 +2077,7 @@ let translate_program
       ctx_scope_index =
         Ident.Map.filter_map
           (fun _ -> function
-            | Name_resolution.TScope (s, _) -> Some s
-            | _ -> None)
+            | Name_resolution.TScope (s, _) -> Some s | _ -> None)
           ctxt.local.typedefs;
       ctx_modules;
     }
@@ -2061,7 +2088,12 @@ let translate_program
        @@ fun { Surface.Ast.module_name; module_external } ->
        let mname = ModuleName.fresh module_name in
        let hash_placeholder = Hash.raw 0 in
-       mname, { hash = hash_placeholder; is_external = module_external }
+       ( mname,
+         {
+           hash = hash_placeholder;
+           is_external = module_external;
+           is_stdlib = false;
+         } )
   in
   let desugared =
     {
@@ -2079,7 +2111,9 @@ let translate_program
         | S.ScopeUse use -> process_scope_use ctxt modul use
         | S.Topdef def ->
           process_topdef ctxt modul is_meta ctxt.local.is_external def
-        | S.ScopeDecl _ | S.StructDecl _ | S.EnumDecl _ -> modul)
+        | S.ScopeDecl _ | S.StructDecl _ | S.EnumDecl _ | S.AbstractTypeDecl _
+          ->
+          modul)
       modul block
   in
   let rec process_structure ctxt (modul : Ast.modul) (item : S.law_structure) :
@@ -2103,13 +2137,18 @@ let translate_program
   in
   let desugared =
     match Global.options.gen_external, ctxt.local.is_external with
-    | true, false ->
-      let modname, _ = Option.get desugared.program_module_name in
-      Message.error
-        ~pos:(Mark.get (ModuleName.get_info modname))
-        "Flag @{<cyan>--gen-external@} was supplied, but %a is not marked as \
-         external"
-        ModuleName.format modname
+    | true, false -> (
+      match desugared.program_module_name with
+      | None ->
+        Message.error
+          "Flag @{<cyan>--gen-external@} was supplied, but the given file is \
+           not marked as an external module."
+      | Some (modname, _) ->
+        Message.error
+          ~pos:(Mark.get (ModuleName.get_info modname))
+          "Flag @{<cyan>--gen-external@} was supplied, but %a is not marked as \
+           external."
+          ModuleName.format modname)
     | false, false -> desugared
     | false, true ->
       if allow_external then desugared

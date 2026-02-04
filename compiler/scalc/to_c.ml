@@ -141,6 +141,8 @@ let rec format_typ
   | TDefault t -> format_typ decl_ctx ~const element_name fmt t
   | TEnum e ->
     Format.fprintf fmt "%s%s*%t" sconst (EnumName.base e) element_name
+  | TAbstract t ->
+    Format.fprintf fmt "%s%s*%t" sconst (AbstractType.base t) element_name
   | TArrow (t1, t2) ->
     Format.fprintf fmt "@[<hv 4>@[<hov 4>%a@]@,@[<hov 1>(%a)@]@]"
       (format_typ decl_ctx ~const (fun fmt ->
@@ -194,7 +196,8 @@ let format_ctx (type_ordering : TypeIdent.t list) ~ppc ~pph (ctx : decl_ctx) :
       "@,\
        @[<v 2>typedef struct %s {@ enum %s__code code;@ @[<v 2>union {@ %a@]@,\
        } payload;@]@,\
-       } %s;" (EnumName.base enum_name) (EnumName.base enum_name)
+       } %s;"
+      (EnumName.base enum_name) (EnumName.base enum_name)
       (Format.pp_print_list
          ~pp_sep:(fun fmt () -> Format.fprintf fmt "@ ")
          (fun fmt (enum_cons, typ) ->
@@ -209,8 +212,7 @@ let format_ctx (type_ordering : TypeIdent.t list) ~ppc ~pph (ctx : decl_ctx) :
   let scope_structs =
     List.fold_left
       (fun acc -> function
-        | TypeIdent.Struct s -> StructName.Map.remove s acc
-        | _ -> acc)
+        | TypeIdent.Struct s -> StructName.Map.remove s acc | _ -> acc)
       ctx.ctx_structs type_ordering
     |> StructName.Map.keys
     |> List.map (fun s -> TypeIdent.Struct s)
@@ -231,7 +233,10 @@ let format_ctx (type_ordering : TypeIdent.t list) ~ppc ~pph (ctx : decl_ctx) :
       | TypeIdent.Enum e ->
         if EnumName.path e = [] && not (EnumName.equal e Expr.option_enum) then
           let def = EnumName.Map.find e ctx.ctx_enums in
-          pp ppfs "@,%a" format_enum_decl (e, def))
+          pp ppfs "@,%a" format_enum_decl (e, def)
+      | TypeIdent.Abstract t ->
+        if AbstractType.path t = [] then
+          pp ppfs "@,@[<v 2>typedef %s;@]" (AbstractType.base t))
     (type_ordering @ scope_structs)
 
 let format_lit (fmt : Format.formatter) (l : lit Mark.pos) : unit =
@@ -521,10 +526,17 @@ let rec format_statement
       (format_expression ctx env)
       e
   | SFatalError { pos_expr; error } ->
-    Format.fprintf fmt "@,@[<hov 2>catala_error(catala_%s,@ %a,@ 1);@]"
+    Format.fprintf fmt "@,@[<hov 2>catala_error(catala_%s,@ %a,@ 1,@ %s);@]"
       (String.to_snake_case (Runtime.error_to_string error))
       (format_expression ctx env)
       pos_expr
+      (match
+         Pos.get_attr (Mark.get s) (function
+           | ErrorMessage m -> Some m
+           | _ -> None)
+       with
+      | None -> "NULL"
+      | Some m -> String.quote m)
   | SIfThenElse _ ->
     Format.fprintf fmt "@,@[<hv 2>%a@]" (format_ite ctx env) [s]
   | SSwitch { switch_var; enum_name = e_name; switch_cases = cases; _ } ->
@@ -563,12 +575,19 @@ let rec format_statement
     Format.fprintf fmt
       "@,\
        @[<v 2>@[<hov 2>if (%a != CATALA_TRUE) {@]@,\
-       @[<hov 2>catala_error(catala_assertion_failed,@ %a,@ 1);@]@;\
+       @[<hov 2>catala_error(catala_assertion_failed,@ %a,@ 1,@ %s);@]@;\
        <1 -2>}@]"
       (format_expression ctx env)
       expr
       (format_expression ctx env)
       pos_expr
+      (match
+         Pos.get_attr (Mark.get s) (function
+           | ErrorMessage m -> Some m
+           | _ -> None)
+       with
+      | None -> "NULL"
+      | Some m -> String.quote m)
   | _ -> .
 
 and format_ite (ctx : ctx) (env : env) (fmt : Format.formatter) (b : block) :
@@ -810,7 +829,8 @@ let format_main ctx env (fmt : Format.formatter) (p : Ast.program) =
            "@,\
             printf(\"\\x1b[32m[RESULT]\\x1b[m Scope %a executed \
             successfully.\\n\");@;\
-            <1 -2>}@]" ScopeName.format name)
+            <1 -2>}@]"
+           ScopeName.format name)
        tests);
   Format.fprintf fmt "@,return (void*)1;@;<1 -2>}@]@,";
   Format.fprintf fmt "@,@[<v 2>int main (int argc, char** argv)@;<0 -2>{";

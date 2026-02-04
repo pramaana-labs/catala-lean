@@ -65,6 +65,13 @@ module EnumConstructor =
     end)
     ()
 
+module AbstractType =
+  Uid.Gen_qualified
+    (struct
+      let style = Ocolor_types.(Fg (C4 cyan))
+    end)
+    ()
+
 (** Only used by surface *)
 
 module RuleName =
@@ -107,7 +114,8 @@ module StateName =
 
 (** {1 Abstract syntax tree} *)
 
-(** Define a common base type for the expressions in most passes of the compiler *)
+(** Define a common base type for the expressions in most passes of the compiler
+*)
 
 (** {2 Phantom types used to select relevant cases on the generic AST}
 
@@ -134,7 +142,6 @@ type desugared =
   ; scopeVarStates : yes
   ; scopeVarSimpl : no
   ; explicitScopes : yes
-  ; assertions : no
   ; defaultTerms : yes
   ; custom : no >
 (* Technically, desugared before name resolution has [syntacticNames: yes;
@@ -154,7 +161,6 @@ type scopelang =
   ; scopeVarStates : no
   ; scopeVarSimpl : yes
   ; explicitScopes : yes
-  ; assertions : no
   ; defaultTerms : yes
   ; custom : no >
 
@@ -167,7 +173,6 @@ type dcalc =
   ; scopeVarStates : no
   ; scopeVarSimpl : no
   ; explicitScopes : no
-  ; assertions : yes
   ; defaultTerms : yes
   ; custom : no >
 
@@ -180,7 +185,6 @@ type lcalc =
   ; scopeVarStates : no
   ; scopeVarSimpl : no
   ; explicitScopes : no
-  ; assertions : yes
   ; defaultTerms : no
   ; custom : no >
 
@@ -196,8 +200,7 @@ type dcalc_lcalc_features =
   ; syntacticNames : no
   ; scopeVarStates : no
   ; scopeVarSimpl : no
-  ; explicitScopes : no
-  ; assertions : yes >
+  ; explicitScopes : no >
 (** Features that are common to Dcalc and Lcalc *)
 
 type 'd dcalc_lcalc = < dcalc_lcalc_features ; defaultTerms : 'd ; custom : no >
@@ -221,6 +224,7 @@ and naked_typ =
   | TTuple of typ list
   | TStruct of StructName.t
   | TEnum of EnumName.t
+  | TAbstract of AbstractType.t
   | TOption of typ
   | TArray of typ
   | TDefault of typ
@@ -230,7 +234,10 @@ and naked_typ =
   | TClosureEnv  (** Hides an existential type needed for closure conversion *)
 
 module TypeIdent : sig
-  type t = Struct of StructName.t | Enum of EnumName.t
+  type t =
+    | Struct of StructName.t
+    | Enum of EnumName.t
+    | Abstract of AbstractType.t
 
   include Map.OrderedType with type t := t
 
@@ -242,25 +249,33 @@ module TypeIdent : sig
   module Map : Map.S with type key = t
 end = struct
   module Ordering = struct
-    type t = Struct of StructName.t | Enum of EnumName.t
+    type t =
+      | Struct of StructName.t
+      | Enum of EnumName.t
+      | Abstract of AbstractType.t
 
     let compare x y =
       match x, y with
       | Struct x, Struct y -> StructName.compare x y
       | Enum x, Enum y -> EnumName.compare x y
-      | Struct _, Enum _ -> 1
-      | Enum _, Struct _ -> -1
+      | Abstract x, Abstract y -> AbstractType.compare x y
+      | Struct _, _ -> 1
+      | _, Struct _ -> -1
+      | Enum _, _ -> 1
+      | _, Enum _ -> -1
 
     let equal x y =
       match x, y with
       | Struct x, Struct y -> StructName.compare x y = 0
       | Enum x, Enum y -> EnumName.compare x y = 0
+      | Abstract x, Abstract y -> AbstractType.compare x y = 0
       | _ -> false
 
     let format (fmt : Format.formatter) (x : t) : unit =
       match x with
       | Struct x -> StructName.format fmt x
       | Enum x -> EnumName.format fmt x
+      | Abstract x -> AbstractType.format fmt x
   end
 
   include Ordering
@@ -269,11 +284,13 @@ end = struct
     match x with
     | Struct x -> StructName.id x
     | Enum x -> Hashtbl.hash (`Enum (EnumName.id x))
+    | Abstract x -> Hashtbl.hash (`Abstract (AbstractType.id x))
 
   let get_info (x : t) =
     match x with
     | Struct x -> StructName.get_info x
     | Enum x -> EnumName.get_info x
+    | Abstract x -> AbstractType.get_info x
 
   module Set = Set.Make (Ordering)
   module Map = Map.Make (Ordering)
@@ -437,6 +454,7 @@ type Pos.attr +=
   | Test
   | Doc of string * Pos.t
   | ImplicitPosArg
+  | ErrorMessage of string
 
 (** {2 Markings} *)
 
@@ -462,7 +480,8 @@ type ('a, 'm) marked = ('a, 'm mark) Mark.ed
 
 (** {2 Generic expressions} *)
 
-(** Define a common base type for the expressions in most passes of the compiler *)
+(** Define a common base type for the expressions in most passes of the compiler
+*)
 
 (** Literals are the same throughout compilation. *)
 type lit =
@@ -575,6 +594,7 @@ and ('a, 'b, 'm) base_gexpr =
       size : int;
     }
       -> ('a, < .. >, 'm) base_gexpr
+  | EAssert : ('a, 'm) gexpr -> ('a, < .. >, 'm) base_gexpr
   (* Early stages *)
   | ELocation : 'b glocation -> ('a, (< .. > as 'b), 'm) base_gexpr
   | EScopeCall : {
@@ -608,7 +628,6 @@ and ('a, 'b, 'm) base_gexpr =
       name : external_ref Mark.pos;
     }
       -> ('a, < explicitScopes : no ; .. >, 't) base_gexpr
-  | EAssert : ('a, 'm) gexpr -> ('a, < assertions : yes ; .. >, 'm) base_gexpr
   | EFatalError : Catala_runtime.error -> ('a, < .. >, 'm) base_gexpr
   | EPos : Pos.t -> ('a, < .. >, 'm) base_gexpr
       (** Position literal, used along returned exceptions. Note that it's only
@@ -750,7 +769,7 @@ type scope_info = {
   visibility : visibility;
 }
 
-type module_intf_id = { hash : Hash.t; is_external : bool }
+type module_intf_id = { hash : Hash.t; is_stdlib : bool; is_external : bool }
 
 type module_tree_node = { deps : module_tree; intf_id : module_intf_id }
 
@@ -760,6 +779,7 @@ and module_tree = module_tree_node ModuleName.Map.t
 type decl_ctx = {
   ctx_enums : enum_ctx;
   ctx_structs : struct_ctx;
+  ctx_abstract_types : AbstractType.Set.t;
   ctx_scopes : scope_info ScopeName.Map.t;
   ctx_topdefs : (typ * visibility) TopdefName.Map.t;
   ctx_public_types : TypeIdent.Set.t;
@@ -768,7 +788,8 @@ type decl_ctx = {
       (** needed for disambiguation (desugared -> scope) *)
   ctx_enum_constrs : EnumConstructor.t EnumName.Map.t Ident.Map.t;
   ctx_scope_index : ScopeName.t Ident.Map.t;
-      (** only used to lookup scopes (in the root module) specified from the cli *)
+      (** only used to lookup scopes (in the root module) specified from the cli
+      *)
   ctx_modules : module_tree;
 }
 

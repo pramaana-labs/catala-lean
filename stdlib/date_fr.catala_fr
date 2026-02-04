@@ -3,6 +3,7 @@
 > Module Date_fr
 
 > Usage de Date_internal en tant que D
+> Usage de List_fr en tant que Liste
 
 ## Fonctions utilitaires
 
@@ -237,4 +238,58 @@ déclaration est_assez_jeune_arrondi_supérieur
     à_date contenu date
   égal à
     non (est_assez_âgé_arrondi_supérieur de date_de_naissance, âge, à_date)
+```
+
+
+## Gestion des jours de la semaine et des jours fériés
+```catala-metadata
+déclaration énumération Jour_de_la_semaine:
+  -- Lundi
+  -- Mardi
+  -- Mercredi
+  -- Jeudi
+  -- Vendredi
+  -- Samedi
+  -- Dimanche
+```
+
+## Détermination du jour de la semaine d'une date donnée (algorithme de Sakamoto)
+
+```catala-metadata
+déclaration jour_de_la_semaine contenu Jour_de_la_semaine
+  dépend de date_donnée contenu date
+  égal à
+  soit weekdays égal à [Lundi; Mardi; Mercredi; Jeudi; Vendredi; Samedi; Dimanche] dans
+  soit sakamoto_list égal à [0; 3; 2; 5; 0; 3; 5; 1; 4; 6; 2; 4] dans
+  soit month_number égal à accès_mois de date_donnée dans
+  soit year_number égal à
+    si month_number < 3
+    alors accès_année de date_donnée - 1
+    sinon accès_année de date_donnée
+  dans
+  soit n_number égal à
+    selon (Liste.nième_élément de sakamoto_list, month_number) sous forme
+    -- Présent contenu n: n
+    -- Absent: impossible
+  dans
+  soit day_number égal à
+    (year_number
+     + entier de (year_number / 4)
+     - entier de (year_number / 100)
+     + entier de (year_number / 400)
+     + n_number
+     + accès_jour de date_donnée)
+    - 7 * entier de (
+      (year_number
+       + entier de (year_number / 4)
+       - entier de (year_number / 100)
+       + entier de (year_number / 400)
+       + n_number
+       + accès_jour de date_donnée)
+      / 7
+    )
+  dans
+  selon (Liste.nième_élément de weekdays, (day_number + 1)) sous forme
+  -- Présent contenu d: d
+  -- Absent: impossible
 ```

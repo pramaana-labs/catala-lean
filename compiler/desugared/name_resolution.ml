@@ -38,7 +38,8 @@ type scope_context = {
   scope_in_struct : StructName.t;
   scope_out_struct : StructName.t;
   sub_scopes : ScopeName.Set.t;
-      (** Other scopes referred to by this scope. Used for dependency analysis *)
+      (** Other scopes referred to by this scope. Used for dependency analysis
+      *)
   scope_visibility : visibility;
 }
 (** Inside a scope, we distinguish between the variables and the subscopes. *)
@@ -64,6 +65,7 @@ type var_sig = {
 type typedef =
   | TStruct of StructName.t
   | TEnum of EnumName.t
+  | TAbstract of AbstractType.t
   | TScope of ScopeName.t * scope_info  (** Implicitly defined output struct *)
 
 type module_context = {
@@ -89,6 +91,7 @@ type context = {
       (** For each struct, its context *)
   enums : (enum_context * visibility) EnumName.Map.t;
       (** For each enum, its context *)
+  abstract_types : visibility AbstractType.Map.t;
   var_typs : var_sig ScopeVar.Map.t;
       (** The signatures of each scope variable declared *)
   modules : module_context ModuleName.Map.t;
@@ -102,18 +105,20 @@ type attribute_context =
   | ScopeDecl
   | StructDecl
   | EnumDecl
+  | AbstractTypeDecl
   | Topdef
   | ScopeDef
   | FieldDecl
   | ConstructorDecl
-  | Expression
+  | Expression of Surface.Ast.expression
   | Type
   | FunctionArgument
+  | Assertion
 
 let attribute_parsers :
     (string
     * string list
-    * attribute_context list
+    * (attribute_context -> bool)
     * (pos:Pos.t -> attr_value -> Pos.attr option))
     list
     ref =
@@ -139,9 +144,7 @@ let handle_extra_attributes context plugin path value pos =
         plugin;
       None
     | handlers -> (
-      match
-        List.find_opt (fun (_, _, ctx, _) -> List.mem context ctx) handlers
-      with
+      match List.find_opt (fun (_, _, ctx, _) -> ctx context) handlers with
       | None ->
         Message.warning ~pos
           "Attribute @{<magenta>#[%s.%s]@} is not allowed in this context"
@@ -155,12 +158,8 @@ let translate_attr ~context = function
     | "debug" -> (
       match ps with
       | ["print"] -> (
-        if context <> Expression then (
-          Message.warning ~pos
-            "Attribute @{<magenta>#[debug.print]@} is not allowed in this \
-             context";
-          None)
-        else
+        match context with
+        | Expression _ -> (
           match v with
           | Unit -> Some (DebugPrint { label = None })
           | String (s, _) -> Some (DebugPrint { label = Some s })
@@ -172,6 +171,11 @@ let translate_attr ~context = function
             Message.warning ~pos
               "Invalid value for attribute @{<magenta>#[debug.print]@}";
             None)
+        | _ ->
+          Message.warning ~pos
+            "Attribute @{<magenta>#[debug.print]@} is not allowed in this \
+             context";
+          None)
       | ps ->
         Message.warning ~pos:ppos ~suggestion:["print"]
           "Unknown debug attribute \"%s\"" (String.concat "." ps);
@@ -193,21 +197,44 @@ let translate_attr ~context = function
         Message.warning ~pos:ppos "Unknown test sub-attribute \"%s\""
           (String.concat "." ps);
         None)
+    | "error" -> (
+      match ps with
+      | ["message"] -> (
+        match context with
+        | Assertion | Expression ((Assert _ | Builtin Impossible), _) -> (
+          match v with
+          | String (s, _) -> Some (ErrorMessage s)
+          | _ ->
+            Message.warning ~pos
+              "Invalid value for attribute @{<magenta>#[error.message]@}: a \
+               string was expected";
+            None)
+        | _ ->
+          Message.warning ~pos
+            "Attribute @{<magenta>#[error.message]@} is not allowed in this \
+             context.@ It must be put before an @{<cyan>assertion@} or \
+             @{<cyan>impossible@}.";
+          None)
+      | ps ->
+        Message.warning ~pos:ppos "Unknown error sub-attribute \"%s\""
+          (String.concat "." ps);
+        None)
     | "doc" -> (
       match ps with
       | [] -> (
-        if context = Expression then (
+        match context with
+        | Expression _ ->
           Message.warning ~pos
             "Attribute @{<magenta>#[doc]@} is not allowed in this context";
-          None)
-        else
+          None
+        | _ -> (
           match v with
           | String (s, pos) -> Some (Doc (s, pos))
           | _ ->
             Message.warning ~pos
               "Invalid value for the @{<magenta>#[doc]@} attribute: expecting \
                a string";
-            None)
+            None))
       | ps ->
         Message.warning ~pos:ppos "Unknown doc sub-attribute \"%s\""
           (String.concat "." ps);
@@ -316,8 +343,7 @@ let belongs_to (ctxt : context) (uid : ScopeVar.t) (scope_uid : ScopeName.t) :
   let scope = get_scope_context ctxt scope_uid in
   Ident.Map.exists
     (fun _ -> function
-      | ScopeVar var_uid -> ScopeVar.equal uid var_uid
-      | _ -> false)
+      | ScopeVar var_uid -> ScopeVar.equal uid var_uid | _ -> false)
     scope.var_idmap
 
 let get_var_def (def : Ast.ScopeDef.t) : ScopeVar.t =
@@ -345,6 +371,14 @@ let get_enum ctxt id =
           "Structure defined at", Mark.get (StructName.get_info sid);
         ]
       "Expecting an enum, but found a structure"
+  | TAbstract tid ->
+    Message.error
+      ~extra_pos:
+        [
+          "", Mark.get id;
+          "Abstract type defined at", Mark.get (AbstractType.get_info tid);
+        ]
+      "Expecting an enum, but found an abstract type"
   | TScope (sid, _) ->
     Message.error
       ~extra_pos:
@@ -361,6 +395,14 @@ let get_struct ctxt id =
       ~extra_pos:
         ["", Mark.get id; "Enum defined at", Mark.get (EnumName.get_info eid)]
       "Expecting a struct, but found an enum"
+  | TAbstract tid ->
+    Message.error
+      ~extra_pos:
+        [
+          "", Mark.get id;
+          "Abstract type defined at", Mark.get (AbstractType.get_info tid);
+        ]
+      "Expecting a struct, but found an abstract type"
   | exception Ident.Map.Not_found _ ->
     Message.error ~pos:(Mark.get id) "No struct named %s found" (Mark.remove id)
 
@@ -371,7 +413,15 @@ let get_scope ctxt id =
     Message.error
       ~extra_pos:
         ["", Mark.get id; "Enum defined at", Mark.get (EnumName.get_info eid)]
-      "Expecting an scope, but found an enum"
+      "Expecting a scope, but found an enum"
+  | TAbstract tid ->
+    Message.error
+      ~extra_pos:
+        [
+          "", Mark.get id;
+          "Abstract type defined at", Mark.get (AbstractType.get_info tid);
+        ]
+      "Expecting a scope, but found an abstract type"
   | TStruct sid ->
     Message.error
       ~extra_pos:
@@ -488,8 +538,8 @@ let rec process_base_typ
     ~rev_path
     ~vars
     (ctxt : context)
-    ((typ, typ_pos) : Surface.Ast.base_typ Mark.pos) : typ =
-  let typ_pos = translate_pos Type typ_pos in
+    ((typ, typ_pos0) : Surface.Ast.base_typ Mark.pos) : typ =
+  let typ_pos = translate_pos Type typ_pos0 in
   match typ with
   | Surface.Ast.Condition -> TLit TBool, typ_pos
   | Surface.Ast.Data (Surface.Ast.Collection t) ->
@@ -519,9 +569,6 @@ let rec process_base_typ
     | Surface.Ast.Date -> TLit TDate, typ_pos
     | Surface.Ast.Boolean -> TLit TBool, typ_pos
     | Surface.Ast.Position -> TLit TPos, typ_pos
-    | Surface.Ast.External name ->
-      (* External types will be supported at some point *)
-      Message.error ~pos:typ_pos "Unrecognised type name '@{<red>%s@}'" name
     | Surface.Ast.Named ([], (ident, _pos)) -> (
       let path = List.rev rev_path in
       match Ident.Map.find_opt ident ctxt.local.typedefs with
@@ -531,6 +578,9 @@ let rec process_base_typ
       | Some (TEnum e_uid) ->
         let e_uid = EnumName.map_info (fun (_, x) -> path, x) e_uid in
         TEnum e_uid, typ_pos
+      | Some (TAbstract t_uid) ->
+        let t_uid = AbstractType.map_info (fun (_, x) -> path, x) t_uid in
+        TAbstract t_uid, typ_pos
       | Some (TScope (_, scope_str)) ->
         let s_uid =
           StructName.map_info (fun (_, x) -> path, x) scope_str.out_struct_name
@@ -798,6 +848,20 @@ let process_enum_decl
       { ctxt with enums })
     ctxt edecl.enum_decl_cases
 
+let process_abstract_typedecl
+    ?(visibility = Public)
+    (ctxt : context)
+    (name : string Mark.pos) : context =
+  let t_uid =
+    match Ident.Map.find (Mark.remove name) ctxt.local.typedefs with
+    | TAbstract id -> id
+    | _ -> Message.error ~pos:(Mark.get name) "Conflicting type declaration"
+  in
+  {
+    ctxt with
+    abstract_types = AbstractType.Map.add t_uid visibility ctxt.abstract_types;
+  }
+
 let process_topdef ?(visibility = Public) ctxt def =
   let uid =
     Ident.Map.find (Mark.remove def.Surface.Ast.topdef_name) ctxt.local.topdefs
@@ -939,8 +1003,8 @@ let process_scope_decl
         (Mark.remove decl.scope_decl_name)
         (function
           | Some
-              (TScope
-                (scope, { in_struct_name; out_struct_name; visibility; _ })) ->
+              (TScope (scope, { in_struct_name; out_struct_name; visibility; _ }))
+            ->
             Some
               (TScope
                  ( scope,
@@ -958,7 +1022,14 @@ let process_scope_decl
 let typedef_info = function
   | TStruct t -> StructName.get_info t
   | TEnum t -> EnumName.get_info t
+  | TAbstract t -> AbstractType.get_info t
   | TScope (s, _) -> ScopeName.get_info s
+
+let typedef_path = function
+  | TStruct t -> StructName.path t
+  | TEnum t -> EnumName.path t
+  | TAbstract t -> AbstractType.path t
+  | TScope (s, _) -> ScopeName.path s
 
 (** Process the names of all declaration items *)
 let process_name_item
@@ -988,7 +1059,8 @@ let process_name_item
     (* Checks if the name is already used *)
     Option.iter
       (fun use ->
-        raise_already_defined_error (typedef_info use) name pos "scope")
+        if typedef_path use = [] then
+          raise_already_defined_error (typedef_info use) name pos "scope")
       (Ident.Map.find_opt name ctxt.local.typedefs);
     let scope_uid = ScopeName.fresh path (name, pos) in
     let in_struct_name = StructName.fresh path (name ^ "_in", pos) in
@@ -1024,7 +1096,8 @@ let process_name_item
     let pos = translate_pos StructDecl pos in
     Option.iter
       (fun use ->
-        raise_already_defined_error (typedef_info use) name pos "struct")
+        if typedef_path use = [] then
+          raise_already_defined_error (typedef_info use) name pos "struct")
       (Ident.Map.find_opt name ctxt.local.typedefs);
     let s_uid = StructName.fresh path sdecl.struct_decl_name in
     let typedefs =
@@ -1038,7 +1111,8 @@ let process_name_item
     let pos = translate_pos EnumDecl pos in
     Option.iter
       (fun use ->
-        raise_already_defined_error (typedef_info use) name pos "enum")
+        if typedef_path use = [] then
+          raise_already_defined_error (typedef_info use) name pos "enum")
       (Ident.Map.find_opt name ctxt.local.typedefs);
     let e_uid = EnumName.fresh path (name, pos) in
     let typedefs =
@@ -1046,6 +1120,18 @@ let process_name_item
         (Mark.remove edecl.enum_decl_name)
         (TEnum e_uid) ctxt.local.typedefs
     in
+    { ctxt with local = { ctxt.local with typedefs } }
+  | AbstractTypeDecl tname ->
+    let name, pos = tname in
+    let pos = translate_pos AbstractTypeDecl pos in
+    Option.iter
+      (fun use ->
+        if typedef_path use = [] then
+          raise_already_defined_error (typedef_info use) name pos
+            "abstract type")
+      (Ident.Map.find_opt name ctxt.local.typedefs);
+    let t_uid = AbstractType.fresh path (name, pos) in
+    let typedefs = Ident.Map.add name (TAbstract t_uid) ctxt.local.typedefs in
     { ctxt with local = { ctxt.local with typedefs } }
   | ScopeUse s_use ->
     if is_external then
@@ -1073,6 +1159,7 @@ let process_decl_item
   | ScopeDecl decl -> process_scope_decl ~visibility ctxt decl
   | StructDecl sdecl -> process_struct_decl ~visibility ctxt sdecl
   | EnumDecl edecl -> process_enum_decl ~visibility ctxt edecl
+  | AbstractTypeDecl tdecl -> process_abstract_typedecl ~visibility ctxt tdecl
   | ScopeUse _ -> ctxt
   | Topdef def -> process_topdef ~visibility ctxt def
 
@@ -1209,7 +1296,9 @@ let update_def_key_ctx
             (Ambiguous
                ([Mark.get d.definition_name]
                @
-               match old with Ambiguous old -> old | Unique (_, pos) -> [pos]));
+               match old with
+               | Ambiguous old -> old
+               | Unique (_, pos) -> [pos]));
       }
     (* No definition has been set yet for this key *)
     | None -> (
@@ -1321,7 +1410,8 @@ let process_use_item
     (ctxt : context)
     ((item, _) : Surface.Ast.code_item Mark.pos * visibility) : context =
   match Mark.remove item with
-  | ScopeDecl _ | StructDecl _ | EnumDecl _ | Topdef _ -> ctxt
+  | ScopeDecl _ | StructDecl _ | EnumDecl _ | AbstractTypeDecl _ | Topdef _ ->
+    ctxt
   | ScopeUse suse -> (
     let pos = Mark.get suse.scope_use_name in
     match
@@ -1354,6 +1444,7 @@ let empty_ctxt lang =
     structs = StructName.Map.empty;
     enums =
       EnumName.Map.singleton Expr.option_enum (Expr.option_enum_config, Private);
+    abstract_types = AbstractType.Map.empty;
     modules = ModuleName.Map.empty;
     local = empty_module_ctxt lang;
   }
@@ -1400,6 +1491,28 @@ let form_context (surface, mod_uses) surface_modules : context =
           in
           let revpath = m :: revpath in
           let ctxt = process_modules ctxt revpath mod_uses in
+          let submodules_root_types =
+            (* This detects modules Foo defining a type Foo, to expose that type
+               directly. *)
+            Ident.Map.filter_map
+              (fun id modl ->
+                let mctx = ModuleName.Map.find modl ctxt.modules in
+                match Ident.Map.find_opt id mctx.typedefs with
+                | None | Some (TScope _) -> None
+                | Some tdef ->
+                  let defname, _ = typedef_info tdef in
+                  (* The feature is disabled if the module is aliased, except
+                     for the stdlib, for which we actually select the type with
+                     the name of the alias. This allows the implicit `using
+                     Period_en as Period` to expose type `Period_en.Period` as
+                     `Period`. *)
+                  if
+                    defname = ModuleName.to_string modl
+                    || module_content.Surface.Ast.module_is_stdlib
+                  then Some tdef
+                  else None)
+              mod_uses
+          in
           let ctxt =
             {
               ctxt with
@@ -1410,6 +1523,7 @@ let form_context (surface, mod_uses) surface_modules : context =
                   current_revpath = revpath;
                   is_external =
                     module_content.Surface.Ast.module_modname.module_external;
+                  typedefs = submodules_root_types;
                 };
             }
           in
@@ -1447,6 +1561,18 @@ let form_context (surface, mod_uses) surface_modules : context =
   let ctxt = process_modules empty_ctxt [] mod_uses in
   let ctxt =
     { ctxt with local = { empty_module_ctxt with used_modules = mod_uses } }
+  in
+  let submodules_root_types =
+    Ident.Map.filter_map
+      (fun id modl ->
+        let mctx = ModuleName.Map.find modl ctxt.modules in
+        match Ident.Map.find_opt id mctx.typedefs with
+        | None | Some (TScope _) -> None
+        | some -> some)
+      mod_uses
+  in
+  let ctxt =
+    { ctxt with local = { ctxt.local with typedefs = submodules_root_types } }
   in
   let ctxt =
     List.fold_left

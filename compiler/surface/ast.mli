@@ -40,7 +40,6 @@ type primitive_typ =
   | Duration
   | Date
   | Position
-  | External of lident
   | Named of path * uident Mark.pos
   | Var of lident Mark.pos option
 
@@ -190,6 +189,7 @@ and naked_expression =
   | Dotted of expression * (path * lident Mark.pos) Mark.pos
       (** Dotted is for both struct field projection and sub-scope variables *)
   | TupleAccess of expression * int Mark.pos
+  | Assert of expression * expression * Pos.t
 
 type exception_to =
   | NotAnException
@@ -220,15 +220,10 @@ type definition = {
 
 type variation_typ = Increasing | Decreasing
 
-type assertion = {
-  assertion_condition : expression option;
-  assertion_content : expression;
-}
-
 type scope_use_item =
   | Rule of rule
   | Definition of definition
-  | Assertion of assertion
+  | Assertion of expression
   | DateRounding of variation_typ Mark.pos
 
 type scope_use = {
@@ -281,6 +276,7 @@ type code_item =
   | ScopeDecl of scope_decl
   | StructDecl of struct_decl
   | EnumDecl of enum_decl
+  | AbstractTypeDecl of uident Mark.pos
   | Topdef of top_def
 
 type code_block = code_item Mark.pos list
@@ -338,4 +334,5 @@ type module_content = {
   module_modname : program_module;
   module_items : module_items;
   module_submodules : module_use list;
+  module_is_stdlib : bool;
 }

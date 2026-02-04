@@ -15,7 +15,8 @@
    the License. *)
 
 (** Graph representation of the dependencies between scopes in the Catala
-    program. Vertices are functions, x -> y if x is used in the definition of y. *)
+    program. Vertices are functions, x -> y if x is used in the definition of y.
+*)
 
 open Catala_utils
 open Shared_ast
@@ -109,7 +110,7 @@ let rec expr_used_defs modul e =
 let expr_used_defs e = expr_used_defs None e
 
 let rule_used_defs = function
-  | Ast.Assertion e
+  | Ast.Assertion { e; _ }
   | Ast.ScopeVarDefinition { e; _ }
   | Ast.SubScopeVarDefinition { e; _ } ->
     (* TODO: maybe this info could be passed on from previous passes without
@@ -272,7 +273,7 @@ let rec get_structs_or_enums_in_type (t : typ) : TypeIdent.Set.t =
       |> List.map get_structs_or_enums_in_type
       |> List.fold_left TypeIdent.Set.union TypeIdent.Set.empty)
       (get_structs_or_enums_in_type t2)
-  | TClosureEnv | TLit _ | TVar _ | TError -> TypeIdent.Set.empty
+  | TAbstract _ | TClosureEnv | TLit _ | TVar _ | TError -> TypeIdent.Set.empty
   | TForAll tb ->
     let _v, ty = Bindlib.unmbind tb in
     get_structs_or_enums_in_type ty
@@ -331,8 +332,10 @@ let build_type_graph (structs : struct_ctx) (enums : enum_ctx) : TDependencies.t
   in
   g
 
-let check_type_cycles (structs : struct_ctx) (enums : enum_ctx) :
-    TypeIdent.t list =
+let check_type_cycles
+    (abstract : AbstractType.Set.t)
+    (structs : struct_ctx)
+    (enums : enum_ctx) : TypeIdent.t list =
   let g = build_type_graph structs enums in
   (* if there is a cycle, there will be an strongly connected component of
      cardinality > 1 *)
@@ -361,7 +364,12 @@ let check_type_cycles (structs : struct_ctx) (enums : enum_ctx) :
             scc)
      in
      Message.error ~extra_pos:spans "Cyclic dependency detected between types.");
-  List.rev (TTopologicalTraversal.fold (fun v acc -> v :: acc) g [])
+  let abstract =
+    List.rev_map
+      (fun abs -> TypeIdent.Abstract abs)
+      (AbstractType.Set.elements abstract)
+  in
+  List.rev (TTopologicalTraversal.fold (fun v acc -> v :: acc) g abstract)
 
 module SDependenciesJSON =
   Catala_utils.Graphs.JSON_Graph (SVertex) (SDependencies)

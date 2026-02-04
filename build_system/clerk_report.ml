@@ -169,80 +169,72 @@ let diff_command =
     File.process_out ~check_exit:ignore "diff" ["--version"]
     |> Re.(execp (compile (str "GNU")))
   in
-  lazy
-    begin
-      match disp_flags.diff_command with
-      | None when Message.has_color stdout && has_gnu_diff () ->
-        let width = Message.terminal_columns () - 5 in
-        ( [
-            "diff";
-            "-y";
-            "-t";
-            "-W";
-            string_of_int (Message.terminal_columns () - 5);
-          ],
-          fun ppf s ->
-            let mid = (width - 1) / 2 in
-            Format.fprintf ppf "@{<blue;ul>%*sReference%*s│%*sResult%*s@}@,"
-              ((mid - 9) / 2)
-              ""
-              (mid - 9 - ((mid - 9) / 2))
-              ""
-              ((width - mid - 7) / 2)
-              ""
-              (width - mid - 7 - ((width - mid - 7) / 2))
-              "";
-            s
-            |> String.trim_end
-            |> String.split_on_char '\n'
-            |> Format.pp_print_list
-                 (fun ppf li ->
-                   let rec find_cut col index =
-                     if index >= String.length li then None
-                     else if col = mid then Some index
-                     else
-                       let c = String.get_utf_8_uchar li index in
-                       find_cut (col + 1) (index + Uchar.utf_decode_length c)
-                   in
-                   match find_cut 0 0 with
-                   | None ->
-                     if li = "" then Format.fprintf ppf "%*s@{<blue>│@}" mid ""
-                     else Format.pp_print_string ppf li
-                   | Some i -> (
-                     let l, c, r =
-                       ( String.sub li 0 i,
-                         li.[i],
-                         String.sub li (i + 1) (String.length li - i - 1) )
-                     in
-                     match c with
-                     | ' ' -> Format.fprintf ppf "%s@{<blue>│@}%s" l r
-                     | '>' ->
-                       if String.for_all (( = ) ' ') l then
-                         Format.fprintf ppf
-                           "%*s@{<red>-@}@{<blue>│@}@{<red>%s@}" (mid - 1) "" r
-                       else Format.fprintf ppf "%s@{<blue>│@}@{<red>%s@}" l r
-                     | '<' -> Format.fprintf ppf "%s@{<blue>│@}@{<red>-@}" l
-                     | '|' ->
-                       let ppleft, ppright = colordiff_str l r in
-                       Format.fprintf ppf "%a@{<blue>│@}%a" ppleft () ppright ()
-                     | _ -> Format.pp_print_string ppf li))
-                 ppf )
-      | Some cmd_opt | (None as cmd_opt) ->
-        let command =
-          match cmd_opt with
-          | Some str -> String.split_on_char ' ' str
-          | None ->
-            if Message.has_color stdout && has_command "patdiff" then
-              ["patdiff"; "-alt-old"; "Reference"; "-alt-new"; "Result"]
-            else ["diff"; "-u"; "-L"; "Reference"; "-L"; "Result"]
-        in
-        ( command,
-          fun ppf s ->
-            s
-            |> String.trim_end
-            |> String.split_on_char '\n'
-            |> Format.pp_print_list Format.pp_print_string ppf )
-    end
+  lazy begin match disp_flags.diff_command with
+  | None when Message.has_color stdout && has_gnu_diff () ->
+    let width = Message.terminal_columns () - 5 in
+    ( ["diff"; "-y"; "-t"; "-W"; string_of_int (Message.terminal_columns () - 5)],
+      fun ppf s ->
+        let mid = (width - 1) / 2 in
+        Format.fprintf ppf "@{<blue;ul>%*sReference%*s│%*sResult%*s@}@,"
+          ((mid - 9) / 2)
+          ""
+          (mid - 9 - ((mid - 9) / 2))
+          ""
+          ((width - mid - 7) / 2)
+          ""
+          (width - mid - 7 - ((width - mid - 7) / 2))
+          "";
+        s
+        |> String.trim_end
+        |> String.split_on_char '\n'
+        |> Format.pp_print_list
+             (fun ppf li ->
+               let rec find_cut col index =
+                 if index >= String.length li then None
+                 else if col = mid then Some index
+                 else
+                   let c = String.get_utf_8_uchar li index in
+                   find_cut (col + 1) (index + Uchar.utf_decode_length c)
+               in
+               match find_cut 0 0 with
+               | None ->
+                 if li = "" then Format.fprintf ppf "%*s@{<blue>│@}" mid ""
+                 else Format.pp_print_string ppf li
+               | Some i -> (
+                 let l, c, r =
+                   ( String.sub li 0 i,
+                     li.[i],
+                     String.sub li (i + 1) (String.length li - i - 1) )
+                 in
+                 match c with
+                 | ' ' -> Format.fprintf ppf "%s@{<blue>│@}%s" l r
+                 | '>' ->
+                   if String.for_all (( = ) ' ') l then
+                     Format.fprintf ppf "%*s@{<red>-@}@{<blue>│@}@{<red>%s@}"
+                       (mid - 1) "" r
+                   else Format.fprintf ppf "%s@{<blue>│@}@{<red>%s@}" l r
+                 | '<' -> Format.fprintf ppf "%s@{<blue>│@}@{<red>-@}" l
+                 | '|' ->
+                   let ppleft, ppright = colordiff_str l r in
+                   Format.fprintf ppf "%a@{<blue>│@}%a" ppleft () ppright ()
+                 | _ -> Format.pp_print_string ppf li))
+             ppf )
+  | Some cmd_opt | (None as cmd_opt) ->
+    let command =
+      match cmd_opt with
+      | Some str -> String.split_on_char ' ' str
+      | None ->
+        if Message.has_color stdout && has_command "patdiff" then
+          ["patdiff"; "-alt-old"; "Reference"; "-alt-new"; "Result"]
+        else ["diff"; "-u"; "-L"; "Reference"; "-L"; "Result"]
+    in
+    ( command,
+      fun ppf s ->
+        s
+        |> String.trim_end
+        |> String.split_on_char '\n'
+        |> Format.pp_print_list Format.pp_print_string ppf )
+  end
 
 let print_diff ppf p1 p2 =
   let get_str (pstart, pend) =
@@ -276,23 +268,21 @@ let pfile =
 let clean_command_line ~build_dir file cl =
   cl
   |> List.filter_map (fun s ->
-         if s = "--directory=" ^ build_dir then None
-         else if
-           String.starts_with ~prefix:"-" s
-           || not (String.contains s '/' || String.contains s '\\')
-         then Some s
-         else Some (pfile ~build_dir s))
+      if s = "--directory=" ^ build_dir then None
+      else if
+        String.starts_with ~prefix:"-" s
+        || not (String.contains s '/' || String.contains s '\\')
+      then Some s
+      else Some (pfile ~build_dir s))
   |> (function
-       | catala :: cmd :: args ->
-         catala
-         :: cmd
-         ::
-         (let rel_bindir =
-            File.make_relative_to ~dir:File.original_cwd build_dir
-          in
-          if rel_bindir = "_build" then [] else ["--bin=" ^ rel_bindir])
-         @ ("-I" :: pfile ~build_dir (Filename.dirname file) :: args)
-       | cl -> cl)
+  | catala :: cmd :: args ->
+    catala
+    :: cmd
+    ::
+    (let rel_bindir = File.make_relative_to ~dir:File.original_cwd build_dir in
+     if rel_bindir = "_build" then [] else ["--bin=" ^ rel_bindir])
+    @ ("-I" :: pfile ~build_dir (Filename.dirname file) :: args)
+  | cl -> cl)
   |> function
   | catala :: cmd :: args
     when List.mem (String.lowercase_ascii cmd) catala_commands_with_output_flag
@@ -498,12 +488,22 @@ let summary ~build_dir tests =
         ppf "ALL TESTS PASSED"
   in
   result_box (fun box ->
-      box.print_line "@{<ul>%-13s %10s %10s %10s %15s@}" "" "FAILED" "PASSED"
-        "TOTAL" "PERCENTAGE";
+      box.print_line "@{<ul>%-13s %10s %10s %10s %10s@}" "" "FAILED" "PASSED"
+        "TOTAL" "RATIO";
+      let ratio ppf (m, n) =
+        let color =
+          let open Ocolor_types in
+          if m >= n then C4 green
+          else C24 { r24 = 255; g24 = m * 255 / n; b24 = 0 }
+        in
+        Format.pp_open_stag ppf (Ocolor_format.Ocolor_style_tag (Fg color));
+        Format.fprintf ppf "%8d %%" (m * 100 / n);
+        Format.pp_close_stag ppf ()
+      in
       if files > 1 then
         box.print_line
           "%-13s @{<red;bold>%a@} @{<green;bold>%a@} @{<bold>%10d@} \
-           @{<hi_magenta;bold>%13d %%@}"
+           @{<bold>%a@}"
           "files"
           (fun ppf -> function
             | 0 -> Format.fprintf ppf "@{<green>%10d@}" 0
@@ -512,12 +512,9 @@ let summary ~build_dir tests =
           (fun ppf -> function
             | 0 -> Format.fprintf ppf "@{<red>%10d@}" 0
             | n -> Format.fprintf ppf "%10d" n)
-          success_files files
-          (int_of_float
-             (float_of_int success_files /. float_of_int files *. 100.));
+          success_files files ratio (success_files, files);
       box.print_line
-        "%-13s @{<red;bold>%a@} @{<green;bold>%a@} @{<bold>%10d@} \
-         @{<hi_magenta;bold>%13d %%@}"
+        "%-13s @{<red;bold>%a@} @{<green;bold>%a@} @{<bold>%10d@} @{<bold>%a@}"
         "tests"
         (fun ppf -> function
           | 0 -> Format.fprintf ppf "@{<green>%10d@}" 0
@@ -526,8 +523,7 @@ let summary ~build_dir tests =
         (fun ppf -> function
           | 0 -> Format.fprintf ppf "@{<red>%10d@}" 0
           | n -> Format.fprintf ppf "%10d" n)
-        success total
-        (int_of_float (float_of_int success /. float_of_int total *. 100.));
+        success total ratio (success, total);
       if disp_flags.coverage then
         box.print_line
           "%-13s @{<red;bold>%a@} @{<green;bold>%a@} @{<bold>%10d@} \
@@ -602,19 +598,20 @@ let print_json ~(build_dir : string) (tests : file list) =
                (fun (test : file) ->
                  Some
                    (`Assoc
-                     [
-                       ( "file",
-                         `String File.(cwd / remove_prefix build_dir test.name)
-                       );
-                       ( "tests",
-                         `Assoc
-                           [
-                             "scopes", `List (List.map scope_to_json test.scopes);
-                             ( "inline-tests",
-                               `List (List.map inline_tests_to_json test.tests)
-                             );
-                           ] );
-                     ]))
+                      [
+                        ( "file",
+                          `String File.(cwd / remove_prefix build_dir test.name)
+                        );
+                        ( "tests",
+                          `Assoc
+                            [
+                              ( "scopes",
+                                `List (List.map scope_to_json test.scopes) );
+                              ( "inline-tests",
+                                `List (List.map inline_tests_to_json test.tests)
+                              );
+                            ] );
+                      ]))
                tests) );
         ( "coverage",
           Clerk_coverage.coverage_to_json ~build_dir ~cwd full_coverage );

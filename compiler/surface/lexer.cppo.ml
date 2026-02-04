@@ -539,6 +539,9 @@ let rec lex_code (lexbuf : lexbuf) : token =
   | MR_TYPE ->
       L.update_acc lexbuf;
       TYPE
+  | MR_EXTERNAL ->
+      L.update_acc lexbuf;
+      EXTERNAL
   | MR_UNDER_CONDITION ->
       L.update_acc lexbuf;
       UNDER_CONDITION
@@ -801,7 +804,7 @@ let rec lex_directive_args (lexbuf : lexbuf) : token =
       let i = String.index s '.' in
       AT_PAGE (int_of_string (String.trim (String.sub s i (String.length s - i))))
   | MR_MODULE_ALIAS -> MODULE_ALIAS
-  | MR_EXTERNAL -> MODULE_EXTERNAL
+  | MR_EXTERNAL -> EXTERNAL
   | Plus (Compl white_space) -> DIRECTIVE_ARG (Utf8.lexeme lexbuf)
   | Plus hspace -> lex_directive_args lexbuf
   | eol | eof ->
@@ -1002,3 +1005,5 @@ let lex_line ~context (lexbuf : lexbuf) : (string * L.line_token) option =
      | eof -> None
      | Star any_but_eol, (eol | eof) -> Some (Utf8.lexeme lexbuf, LINE_ANY)
      | _ -> assert false)
+
+let sum_string = MS_SUM

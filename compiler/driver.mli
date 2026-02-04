@@ -138,9 +138,22 @@ module Plugin : sig
   val register_attribute :
     plugin:string ->
     path:string list ->
-    contexts:Desugared.Name_resolution.attribute_context list ->
+    contexts:(Desugared.Name_resolution.attribute_context -> bool) ->
     (pos:Catala_utils.Pos.t ->
     Shared_ast.attr_value ->
     Catala_utils.Pos.attr option) ->
     unit
 end
+
+val load_modules :
+  Global.options ->
+  Global.raw_file list ->
+  stdlib:Global.raw_file option ->
+  ?more_includes:string list ->
+  ?allow_notmodules:bool ->
+  Surface.Ast.program ->
+  Shared_ast.ModuleName.t Shared_ast.Ident.Map.t
+  * (Surface.Ast.module_content
+    * Shared_ast.ModuleName.t Shared_ast.Ident.Map.t)
+    Shared_ast.ModuleName.Map.t
+(** Retrieve and load modules contents necessary to compile the given program *)

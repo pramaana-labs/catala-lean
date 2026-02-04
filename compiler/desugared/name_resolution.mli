@@ -38,7 +38,8 @@ type scope_context = {
   scope_in_struct : StructName.t;
   scope_out_struct : StructName.t;
   sub_scopes : ScopeName.Set.t;
-      (** Other scopes referred to by this scope. Used for dependency analysis *)
+      (** Other scopes referred to by this scope. Used for dependency analysis
+      *)
   scope_visibility : visibility;
 }
 (** Inside a scope, we distinguish between the variables and the subscopes. *)
@@ -64,6 +65,7 @@ type var_sig = {
 type typedef =
   | TStruct of StructName.t
   | TEnum of EnumName.t
+  | TAbstract of AbstractType.t
   | TScope of ScopeName.t * scope_info  (** Implicitly defined output struct *)
 
 type module_context = {
@@ -95,6 +97,7 @@ type context = {
       (** For each struct, its context *)
   enums : (enum_context * visibility) EnumName.Map.t;
       (** For each enum, its context *)
+  abstract_types : visibility AbstractType.Map.t;
   var_typs : var_sig ScopeVar.Map.t;
       (** The signatures of each scope variable declared *)
   modules : module_context ModuleName.Map.t;
@@ -112,18 +115,20 @@ type attribute_context =
   | ScopeDecl
   | StructDecl
   | EnumDecl
+  | AbstractTypeDecl
   | Topdef
   | ScopeDef
   | FieldDecl
   | ConstructorDecl
-  | Expression
+  | Expression of Surface.Ast.expression
   | Type
   | FunctionArgument
+  | Assertion
 
 val register_attribute :
   plugin:string ->
   path:string list ->
-  contexts:attribute_context list ->
+  contexts:(attribute_context -> bool) ->
   (pos:Pos.t -> Shared_ast.attr_value -> Pos.attr option) ->
   unit
 (** Registers a new callback for the translation of the [#[plugin.path]]

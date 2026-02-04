@@ -143,6 +143,18 @@ let () =
   | Error h -> failwith "Hash mismatch for module Date_en, it may need recompiling"
 module Date_en = Date_en
 let () =
+  match Catala_runtime.check_module "List_en" "CMX|XXXXXXXX|XXXXXXXX|XXXXXXXX"
+    with
+  | Ok () -> ()
+  | Error h -> failwith "Hash mismatch for module List_en, it may need recompiling"
+module List_en = List_en
+let () =
+  match Catala_runtime.check_module "Duration_en" "CMX|XXXXXXXX|XXXXXXXX|XXXXXXXX"
+    with
+  | Ok () -> ()
+  | Error h -> failwith "Hash mismatch for module Duration_en, it may need recompiling"
+module Duration_en = Duration_en
+let () =
   match Catala_runtime.check_module "MonthYear_en" "CMX|XXXXXXXX|XXXXXXXX|XXXXXXXX"
     with
   | Ok () -> ()
@@ -172,12 +184,6 @@ let () =
   | Ok () -> ()
   | Error h -> failwith "Hash mismatch for module Decimal_en, it may need recompiling"
 module Decimal_en = Decimal_en
-let () =
-  match Catala_runtime.check_module "List_en" "CMX|XXXXXXXX|XXXXXXXX|XXXXXXXX"
-    with
-  | Ok () -> ()
-  | Error h -> failwith "Hash mismatch for module List_en, it may need recompiling"
-module List_en = List_en
 
 module Assert_in__1 = struct
   type t = {assert__1: integer}
@@ -229,7 +235,7 @@ let assert__1 : Assert_in.t -> Assert.t = fun _ ->
     | Optional.Absent -> (raise
         (Error (NoValue, [{filename="tests/name_resolution/good/conflicts.catala_en";
                            start_line=19; start_column=10;
-                           end_line=19; end_column=16; law_headings=[]}])))
+                           end_line=19; end_column=16; law_headings=[]}], None)))
     | Optional.Present arg -> (let x, _ = arg in x) in
   {Assert.assert__1 = assert__2}
 

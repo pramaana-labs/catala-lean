@@ -178,12 +178,18 @@ let format_qualified
     ctx
     ppf
     (s : id) =
-  match List.rev (Id.path s) with
-  | [] -> Format.pp_print_string ppf (Id.base s)
-  | m :: _ ->
-    Format.fprintf ppf "%a.%s" VarName.format
-      (ModuleName.Map.find m ctx.modules)
-      (Id.base s)
+  let rec shorten_rpath = function
+    | m :: _ when ModuleName.Map.mem m ctx.modules -> [m]
+    | m :: r -> m :: shorten_rpath r
+    | [] -> []
+  in
+  let path = List.rev (shorten_rpath (List.rev (Id.path s))) in
+  List.iter
+    (fun m ->
+      VarName.format ppf (ModuleName.Map.find m ctx.modules);
+      Format.pp_print_char ppf '.')
+    path;
+  Format.pp_print_string ppf (Id.base s)
 
 let format_struct = format_qualified (module StructName)
 let format_enum = format_qualified (module EnumName)
@@ -216,6 +222,7 @@ let rec format_typ ctx (fmt : Format.formatter) (typ : typ) : unit =
   | TOption some_typ -> Format.fprintf fmt "Option[%a]" format_typ some_typ
   | TDefault t -> format_typ fmt t
   | TEnum e -> format_enum ctx fmt e
+  | TAbstract t -> format_qualified (module AbstractType) ctx fmt t
   | TArrow (t1, t2) ->
     Format.fprintf fmt "Callable[[%a], %a]"
       (Format.pp_print_list
@@ -273,9 +280,10 @@ let rec format_expression ctx (fmt : Format.formatter) (e : expr) : unit =
       "@[<hov 4>SourcePosition(@,\
        filename=\"%s\",@ start_line=%d, start_column=%d,@ end_line=%d, \
        end_column=%d,@ law_headings=%a@;\
-       <0 -4>)@]" (Pos.get_file pos) (Pos.get_start_line pos)
-      (Pos.get_start_column pos) (Pos.get_end_line pos) (Pos.get_end_column pos)
-      format_string_list (Pos.get_law_info pos)
+       <0 -4>)@]"
+      (Pos.get_file pos) (Pos.get_start_line pos) (Pos.get_start_column pos)
+      (Pos.get_end_line pos) (Pos.get_end_column pos) format_string_list
+      (Pos.get_law_info pos)
   | EAppOp
       {
         op = ((HandleExceptions | Map | Filter), _) as op;
@@ -377,9 +385,16 @@ let rec format_statement ctx (fmt : Format.formatter) (s : stmt Mark.pos) : unit
     Format.fprintf fmt "@[<hv 4>%a = (%a)@]" VarName.format (Mark.remove v)
       (format_expression ctx) e
   | SFatalError { pos_expr; error } ->
-    Format.fprintf fmt "@[<hov 4>raise %s(%a)@]"
+    Format.fprintf fmt "@[<hov 4>raise %s(%a, %s)@]"
       (Runtime.error_to_string error)
       (format_expression ctx) pos_expr
+      (match
+         Pos.get_attr (Mark.get s) (function
+           | ErrorMessage m -> Some m
+           | _ -> None)
+       with
+      | None -> "None"
+      | Some m -> String.quote m)
   | SIfThenElse { if_expr; then_block; else_block } ->
     let rec pr_else = function
       | [(SIfThenElse { if_expr; then_block; else_block }, _)] ->
@@ -453,8 +468,15 @@ let rec format_statement ctx (fmt : Format.formatter) (s : stmt Mark.pos) : unit
   | SReturn e1 ->
     Format.fprintf fmt "@[<hov 4>return %a@]" (format_expression ctx) e1
   | SAssert { pos_expr; expr = e1 } ->
-    Format.fprintf fmt "@[<hv 4>if not (%a):@ raise AssertionFailed(%a)@]"
+    Format.fprintf fmt "@[<hv 4>if not (%a):@ raise AssertionFailed(%a, %s)@]"
       (format_expression ctx) e1 (format_expression ctx) pos_expr
+      (match
+         Pos.get_attr (Mark.get s) (function
+           | ErrorMessage m -> Some m
+           | _ -> None)
+       with
+      | None -> "None"
+      | Some m -> String.quote m)
   | SSpecialOp _ -> .
 
 and format_block ctx (fmt : Format.formatter) (b : block) : unit =
@@ -484,8 +506,8 @@ let format_ctx (type_ordering : TypeIdent.t list) (fmt : Format.formatter) ctx :
       \        return not (self == other)@,\
        @,\
       \    def __str__(self) -> str:@,\
-      \        @[<hov 4>return \"%a(%a)\".format(%a)@]" StructName.format
-      struct_name
+      \        @[<hov 4>return \"%a(%a)\".format(%a)@]"
+      StructName.format struct_name
       (Format.pp_print_list
          ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
          (fun fmt (struct_field, struct_field_type) ->
@@ -559,7 +581,7 @@ let format_ctx (type_ordering : TypeIdent.t list) (fmt : Format.formatter) ctx :
     List.exists
       (fun struct_or_enum ->
         match struct_or_enum with
-        | TypeIdent.Enum _ -> false
+        | TypeIdent.Enum _ | TypeIdent.Abstract _ -> false
         | TypeIdent.Struct s' -> s = s')
       type_ordering
   in
@@ -581,7 +603,10 @@ let format_ctx (type_ordering : TypeIdent.t list) (fmt : Format.formatter) ctx :
       | TypeIdent.Enum e ->
         if EnumName.path e = [] && not (EnumName.equal e Expr.option_enum) then
           Format.fprintf fmt "%a@,@," format_enum_decl
-            (e, EnumName.Map.find e ctx.decl_ctx.ctx_enums))
+            (e, EnumName.Map.find e ctx.decl_ctx.ctx_enums)
+      | TypeIdent.Abstract t ->
+        if AbstractType.path t = [] then
+          Format.fprintf fmt "class %a:@,@," AbstractType.format t)
     (type_ordering @ scope_structs)
 
 let format_code_item ctx fmt = function
@@ -663,12 +688,12 @@ let format_program
       ]
   in
   Format.pp_print_list Format.pp_print_string fmt header;
-  ModuleName.Map.iter
-    (fun m _ ->
+  List.iter
+    (fun (m, _) ->
       Format.fprintf fmt "from . import %a as %a@," ModuleName.format
         (ModuleName.normalise m) VarName.format
         (ModuleName.Map.find m p.ctx.modules))
-    p.ctx.decl_ctx.ctx_modules;
+    (Program.modules_to_list ~trim_stdlib:true p.ctx.decl_ctx.ctx_modules);
   Format.pp_print_cut fmt ();
   format_ctx type_ordering fmt p.ctx;
   Format.pp_print_cut fmt ();
