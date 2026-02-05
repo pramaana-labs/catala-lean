@@ -1,0 +1,109 @@
+> Module Section_3306_scenario_7
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_7:
+  output employer_status content IRC.OrganizationSection3306EmployerStatusOutput
+
+scope Section_3306_scenario_7:
+  # Scenario: §3306(a)(3), §3306(a)(1)(A), and §3306(a)(4) special rule
+  # The organization (a local college club) pays $1,000 cash wages for domestic service (§3306(a)(3))
+  # and also pays $1,500 cash wages for general service (§3306(a)(1)(A)) in the same calendar year (2024).
+  # Under §3306(a)(4), because the person is treated as an employer under (3) and also under (1),
+  # they are treated as an employer with respect to other services as well.
+
+  definition employer_status equals
+    let i7 equals IRC.Individual { -- id: 7 -- is_counterfactual: false } in
+    let i8 equals IRC.Individual { -- id: 8 -- is_counterfactual: false } in
+
+    let org7 equals IRC.Organization {
+      -- id: 7
+      -- organization_type: IRC.OrganizationType.Club  # Local college club under §3306(a)(3)
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationships within the United States
+    let er1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org7
+      -- employee: i7
+      -- start_date: Date.of_year_month_day of 2024, 8, 1
+      -- end_date: Date.of_year_month_day of 2024, 8, 31
+      -- employment_category: IRC.EmploymentCategory.DomesticService
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let er2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: org7
+      -- employee: i8
+      -- start_date: Date.of_year_month_day of 2024, 9, 1
+      -- end_date: Date.of_year_month_day of 2024, 9, 30
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Wage payments: $1,000 cash for domestic service in a local college club (meets §3306(a)(3))
+    # and $1,500 cash for general service (meets §3306(a)(1)(A))
+    let wp1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: org7
+      -- employee: i7
+      -- payment_date: Date.of_year_month_day of 2024, 8, 15
+      -- amount: $1000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.DomesticServiceNonBusiness
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wp2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: org7
+      -- employee: i8
+      -- payment_date: Date.of_year_month_day of 2024, 9, 15
+      -- amount: $1500
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Compute §3306(a) employer status for calendar year 2024
+    (output of IRC.OrganizationSection3306EmployerStatus with {
+      -- organization: org7
+      -- calendar_year: 2024
+      -- wage_payment_events: [ wp1 ] ++ [ wp2 ]
+      -- employment_relationship_events: [ er1 ] ++ [ er2 ]
+    }).main_output
+
+  # Assertions - Only reference the computed employer_status output
+
+  # Tests §3306(a)(3): Domestic service employer threshold met (cash wages >= $1,000)
+  assertion (employer_status.is_domestic_service_employer = true)
+
+  # Tests §3306(a)(1)(A): General employer threshold met (wages >= $1,500; excluding domestic service wages)
+  assertion (employer_status.is_general_employer = true)
+
+  # Tests §3306(a)(4): Special rule – since both (a)(3) and (a)(1)(A) are met,
+  # the person is treated as an employer with respect to other services as well.
+  # We assert overall employer status reflects being treated as employer for other (non-domestic) services.
+  assertion (employer_status.is_employer = true)
+```

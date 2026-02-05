@@ -1,0 +1,64 @@
+> Module Section_152_scenario_7
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_7:
+  output qr_result content IRC.IndividualSection152QualifyingRelativeOutput
+
+scope Section_152_scenario_7:
+  # Scenario: Qualifying relative fails due to income (§152(d)(1)(B))
+  # Tested law refs: §152(d)(2)(C) (relationship: mother), §152(d)(1)(B) (no income), §152(d)(1) (overall)
+  definition qr_result equals
+    let t7 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let m7 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let famrel_mother equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t7
+      -- relative: m7
+      -- start_date: Date.of_year_month_day of 1988, 5, 5
+      -- relationship_type: IRC.FamilyRelationshipType.Mother
+      -- is_counterfactual: false
+    } in
+
+    let income_m7_2023 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: m7
+      -- tax_year: 2023
+      -- has_income: true
+      -- earned_income: $5000
+      -- is_counterfactual: false
+    } in
+
+    let trevt_m7_2023 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: m7
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    (output of IRC.IndividualSection152QualifyingRelative with {
+      -- individual: m7
+      -- taxpayer: t7
+      -- tax_year: 2023
+      -- family_relationship_events: [ famrel_mother ]
+      -- residence_period_events: []
+      -- qualifying_child_results: []
+      -- tax_return_events: [ trevt_m7_2023 ]
+      -- income_events: [ income_m7_2023 ]
+      -- marriage_events: []
+    }).main_output
+
+  # Assertions - Only reference the computed scope output (qr_result)
+  # §152(d)(2)(C): Mother bears qualifying relationship
+  assertion (qr_result.bears_relationship_152_d_1_A = true)
+  # §152(d)(1)(B): "has no income" requirement fails due to income in calendar year
+  assertion (qr_result.has_no_income_152_d_1_B = false)
+  # §152(d)(1): Overall qualifying relative test is not met
+  assertion (qr_result.is_qualifying_relative = false)
+```

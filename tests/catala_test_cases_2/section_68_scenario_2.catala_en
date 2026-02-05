@@ -1,0 +1,134 @@
+> Module Section_68_scenario_2
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_68_scenario_2:
+  output itemized content IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput
+
+scope Section_68_scenario_2:
+  # Scenario: §68(b)(1)(B) applicable amount for Head of Household in 2026 and §68(a) reduction condition
+  # - Filing status: Head of household (as defined in §2(b))
+  # - Tax year: 2026 (outside the non-application window in §68(f), so §68 applies)
+  # - Adjusted gross income (assumed equal to earned income): $270,000, below the HOH applicable amount ($275,000)
+  # - Therefore, no reduction under §68(a) should apply
+
+  definition itemized equals
+    let i3 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+    let i4 equals IRC.Individual { -- id: 4 -- is_counterfactual: false } in
+    let h1 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Residence: child (i4) has principal place of abode with taxpayer's household for entire 2026
+    let res_i4 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: i4
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2026, 1, 1
+      -- end_date: Date.of_year_month_day of 2026, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Taxpayer furnishes over half of household cost (60%)
+    let hm_i3 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: i3
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2026, 1, 1
+      -- end_date: Date.of_year_month_day of 2026, 12, 31
+      -- cost_furnished_percentage: 0.6
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood and relationship to child
+    let par1 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: i3
+      -- child: i4
+      -- start_date: Date.of_year_month_day of 2012, 5, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+    let rel1 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: i3
+      -- relative: i4
+      -- start_date: Date.of_year_month_day of 2012, 5, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    # Residency status (resident in 2026)
+    let nra_i3 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: i3
+      -- start_date: Date.of_year_month_day of 2026, 1, 1
+      -- end_date: Date.of_year_month_day of 2026, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+
+    # Income event: earned income for 2026 (assumed AGI = earned income)
+    let inc_i3_2026 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: i3
+      -- tax_year: 2026
+      -- has_income: true
+      -- earned_income: $270000
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return: Head of Household with qualifying person i4
+    let hoh_details equals IRC.HeadOfHouseholdVariant {
+      -- taxpayer: i3
+      -- qualifying_person: i4
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let ind_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2026
+      -- details: IRC.FilingStatusVariant.HeadOfHousehold content hoh_details
+    } in
+
+    # Temporary marital status output for §7703 needed as input to §68 scope (we do NOT compute §7703 here)
+    let marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: i3
+        -- tax_year: 2026
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2026, 12, 31
+        -- is_married_7703_a_1: false
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: true
+        -- furnishes_over_one_half_cost_7703_b_2: true
+        -- spouse_not_member_last_6_months_7703_b_3: true
+        -- considered_not_married_7703_b: true
+        -- is_married_for_tax_purposes_7703: false
+      } in
+
+    # Compute §68 itemized deductions limitation
+    (output of IRC.IndividualTaxReturnSection68ItemizedDeductions with {
+      -- individual_tax_return: ind_return
+      -- adjusted_gross_income: $270000           # Assumed equal to earned income per scenario comments
+      -- itemized_deductions: $10000              # Any positive amount; reduction should still be $0 since AGI <= applicable amount
+      -- taxpayer_marital_status: marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: true
+    }).main_output
+
+  # Assertions - ONLY check the scope output (values correlated to §68)
+  # §68(b)(1)(B): HOH applicable amount = $275,000
+  assertion (itemized.applicable_amount_68_b_1 = $275000)
+
+  # §68(f): Section does not apply for years after 2017 and before 2026; here tax year is 2026, so §68 applies
+  assertion (not itemized.section_not_applicable_68_f)
+
+  # §68(a): AGI does not exceed applicable amount, so the 3%-of-excess term is $0 (implies AGI excess amount = 0 and agi_exceeds_applicable_amount = false)
+  assertion (itemized.three_percent_reduction_68_a_1 = $0)
+
+  # §68(a): No reduction actually applies when AGI ≤ applicable amount (min(3% excess, 80% of itemized) = $0)
+  assertion (itemized.reduction_amount_68_a = $0)
+```

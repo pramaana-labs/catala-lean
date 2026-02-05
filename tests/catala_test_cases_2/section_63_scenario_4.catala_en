@@ -1,0 +1,203 @@
+> Module Section_63_scenario_4
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_4:
+  output taxable_result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_4:
+  # Scenario: Surviving spouse in 2019 with qualifying dependent child.
+  # Tests §63(c)(7) substitutions (2018–2025) and §63(c)(2)(A)(ii) 200% multiplier for surviving spouse.
+  # Assumption: Qualifies as surviving spouse under §2(a) (passed via is_surviving_spouse = true).
+
+  definition taxable_result equals
+    let ss1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let d4 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let dec_sp1 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h4 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    let birth_ss1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: ss1
+      -- birth_date: Date.of_year_month_day of 1980, 4, 4
+      -- is_counterfactual: false
+    } in
+    let birth_d4 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: d4
+      -- birth_date: Date.of_year_month_day of 2012, 9, 9
+      -- is_counterfactual: false
+    } in
+    let birth_dec_sp1 equals IRC.BirthEvent {
+      -- id: 3
+      -- individual: dec_sp1
+      -- birth_date: Date.of_year_month_day of 1980, 3, 3
+      -- is_counterfactual: false
+    } in
+
+    let death_spouse equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: dec_sp1
+      -- death_date: Date.of_year_month_day of 2018, 6, 1
+      -- is_counterfactual: false
+    } in
+
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: ss1
+      -- spouse2: dec_sp1
+      -- marriage_date: Date.of_year_month_day of 2005, 8, 1
+      -- is_counterfactual: false
+    } in
+
+    let res_d4 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: d4
+      -- household: h4
+      -- start_date: Date.of_year_month_day of 2019, 1, 1
+      -- end_date: Date.of_year_month_day of 2019, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_ss1 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: ss1
+      -- household: h4
+      -- start_date: Date.of_year_month_day of 2019, 1, 1
+      -- end_date: Date.of_year_month_day of 2019, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    let maint_ss1 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: ss1
+      -- household: h4
+      -- start_date: Date.of_year_month_day of 2019, 1, 1
+      -- end_date: Date.of_year_month_day of 2019, 12, 31
+      -- cost_furnished_percentage: 0.55
+      -- is_counterfactual: false
+    } in
+
+    let parent1 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: ss1
+      -- child: d4
+      -- start_date: Date.of_year_month_day of 2012, 9, 9
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    let rel1 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: ss1
+      -- relative: d4
+      -- start_date: Date.of_year_month_day of 2012, 9, 9
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return (Surviving Spouse for 2019)
+    let ss_variant equals IRC.SurvivingSpouseVariant {
+      -- taxpayer: ss1
+      -- deceased_spouse: dec_sp1
+      -- qualifying_dependent: d4
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2019
+      -- details: IRC.FilingStatusVariant.SurvivingSpouse content ss_variant
+    } in
+
+    # Temporary marital status output for §7703 (assumed; not computed here)
+    let taxpayer_marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: ss1
+        -- tax_year: 2019
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2019, 12, 31
+        -- is_married_7703_a_1: false
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: true
+        -- furnishes_over_one_half_cost_7703_b_2: true
+        -- spouse_not_member_last_6_months_7703_b_3: true
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: false
+      } in
+
+    # Temporary §151 exemptions list output (assumed)
+    let taxpayer_exemptions_taxpayer_result equals
+      IRC.IndividualSection151ExemptionsListOutput {
+        -- individual: ss1
+        -- spouse_exemption_allowed_151_b: false
+        -- individuals_entitled_to_exemptions_under_151: [ ss1 ] ++ [ d4 ]
+      } in
+    let taxpayer_exemptions_list_result equals
+      IRC.TaxpayerExemptionsList151Output {
+        -- taxpayer_result: taxpayer_exemptions_taxpayer_result
+        -- spouse_result: Absent
+        -- individuals_entitled_to_exemptions_under_151: [ ss1 ] ++ [ d4 ]
+        -- spouse_exemption_allowed_151_b: false
+      } in
+
+    # Temporary §151 personal exemption output (assumed; zeros for 2019 under §151(d)(5))
+    let taxpayer_exemption_result equals
+      IRC.IndividualSection151PersonalExemptionOutput {
+        -- individual: ss1
+        -- exemption_amount_base: $0
+        -- exemption_amount_after_disallowance: $0
+        -- exemption_amount_after_phaseout: $0
+        -- personal_exemptions_deduction_151_a: $0
+        -- applicable_percentage_151_d_3_B: 0%
+        -- exemption_amount_zero_151_d_5: true
+      } in
+
+    # Temporary §68 itemized deductions output (assumed; no itemizing, section not applicable)
+    let itemized_deductions_result equals
+      IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+        -- individual_tax_return: individual_tax_return
+        -- applicable_amount_68_b_1: $0
+        -- three_percent_reduction_68_a_1: $0
+        -- eighty_percent_reduction_68_a_2: $0
+        -- reduction_amount_68_a: $0
+        -- itemized_deductions_after_68: $0
+        -- section_not_applicable_68_f: true
+      } in
+
+    # Call §63 taxable income/standard deduction scope
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ birth_ss1 ] ++ [ birth_d4 ] ++ [ birth_dec_sp1 ]
+      -- blindness_status_events: []
+      -- death_events: [ death_spouse ]
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: true
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_deductions_result
+    }).main_output
+
+  # Assertions correlating to law:
+  # - §63(c)(2)(A)(ii): Basic SD = 200% of subparagraph (C) amount for surviving spouse
+  # - §63(c)(7)(A)(ii): For 2018–2025, substitute "$12,000" for "$3,000" in (2)(C)
+  # - §63(c)(1): Standard deduction = basic + additional; here additional = $0
+  assertion (taxable_result.basic_standard_deduction_63_c_2_after_c_5 = $24000)
+  # Tests §63(c)(7): tax year 2019 is within 2018–2025 special rule window using only scope output
+  assertion ((taxable_result.individual_tax_return.tax_year >= 2018 and taxable_result.individual_tax_return.tax_year <= 2025) = true)
+  # Tests §63(c)(3) (via output): no additional amounts (not aged/blind)
+  assertion (taxable_result.additional_standard_deduction_63_c_3 = $0)
+  # Tests §63(c)(1): total standard deduction amount
+  assertion (taxable_result.standard_deduction_63_c_1 = $24000)
+```

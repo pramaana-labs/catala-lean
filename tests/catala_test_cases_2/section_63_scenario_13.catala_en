@@ -1,0 +1,205 @@
+> Module Section_63_scenario_13
+> Using Sections as IRC
+
+```catala
+declaration structure Section63Scenario13Output:
+  data tax_result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+  data basic_standard_deduction_amount content money
+  data additional_standard_deduction_amount content money
+  data standard_deduction_amount content money
+  data spouse_additional_amounts_allowed_under_151b content boolean
+  data spouse_blindness_determined_at_time_of_death content boolean
+
+#[test]
+declaration scope Section_63_scenario_13:
+  output computation content Section63Scenario13Output
+
+scope Section_63_scenario_13:
+  # Scenario: §63 standard deduction for 2017 joint return; taxpayer aged and blind; spouse aged and blind but spouse does NOT qualify for §151(b) exemption.
+  # Tested law refs: §63(c)(2)(A)(i), §63(f)(1)(A), §63(f)(2)(A), §63(f)(1)(B), §63(f)(2)(B), §63(c)(1)
+
+  definition computation equals
+    # Entities
+    let jt2 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let sp2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Events
+    let b_jt2 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: jt2
+      -- birth_date: Date.of_year_month_day of 1950, 5, 5
+      -- is_counterfactual: false
+    } in
+    let b_sp2 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: sp2
+      -- birth_date: Date.of_year_month_day of 1950, 4, 4
+      -- is_counterfactual: false
+    } in
+
+    let blind_jt2 equals IRC.BlindnessStatusEvent {
+      -- id: 1
+      -- individual: jt2
+      -- status_date: Date.of_year_month_day of 2017, 2, 1
+      -- is_blind: true
+      -- is_counterfactual: false
+    } in
+    let blind_sp2 equals IRC.BlindnessStatusEvent {
+      -- id: 2
+      -- individual: sp2
+      -- status_date: Date.of_year_month_day of 2017, 3, 1
+      -- is_blind: true
+      -- is_counterfactual: false
+    } in
+
+    let d_sp2 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: sp2
+      -- death_date: Date.of_year_month_day of 2017, 4, 1
+      -- is_counterfactual: false
+    } in
+
+    let m_evt equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: jt2
+      -- spouse2: sp2
+      -- marriage_date: Date.of_year_month_day of 1975, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    # Spouse has income in 2017 -> spouse exemption under §151(b) is not allowable
+    let inc_sp2 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: sp2
+      -- tax_year: 2017
+      -- has_income: true
+      -- earned_income: $10000
+      -- is_counterfactual: false
+    } in
+
+    # Return (Married Filing Jointly) for 2017
+    let joint_variant equals IRC.JointReturnVariant {
+      -- taxpayer: jt2
+      -- spouse: sp2
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let itr equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.JointReturn content joint_variant
+    } in
+
+    # Temporary marital status output for §7703 (assumed values for this test)
+    let marital_status_stub equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: jt2
+        -- tax_year: 2017
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+        -- is_married_7703_a_1: true
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: true
+      } in
+
+    # Temporary §68 itemized deductions output (not used in SD amount here)
+    let sec68_stub equals
+      IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+        -- individual_tax_return: itr
+        -- applicable_amount_68_b_1: $0
+        -- three_percent_reduction_68_a_1: $0
+        -- eighty_percent_reduction_68_a_2: $0
+        -- reduction_amount_68_a: $0
+        -- itemized_deductions_after_68: $0
+        -- section_not_applicable_68_f: true
+      } in
+
+    # Temporary §151 exemptions list output reflecting the assumption:
+    # spouse exemption under §151(b) is NOT allowable to the taxpayer.
+    let taxpayer_151_list equals
+      IRC.IndividualSection151ExemptionsListOutput {
+        -- individual: jt2
+        -- spouse_exemption_allowed_151_b: false
+        -- individuals_entitled_to_exemptions_under_151: [ jt2 ]
+      } in
+    let exemptions_list_stub equals
+      IRC.TaxpayerExemptionsList151Output {
+        -- taxpayer_result: taxpayer_151_list
+        -- spouse_result: Absent
+        -- individuals_entitled_to_exemptions_under_151: [ jt2 ]
+        -- spouse_exemption_allowed_151_b: false
+      } in
+
+    # Temporary §151 personal exemption output (values not material to this SD test)
+    let personal_exemption_stub equals
+      IRC.IndividualSection151PersonalExemptionOutput {
+        -- individual: jt2
+        -- exemption_amount_base: $0
+        -- exemption_amount_after_disallowance: $0
+        -- exemption_amount_after_phaseout: $0
+        -- personal_exemptions_deduction_151_a: $0
+        -- applicable_percentage_151_d_3_B: 0.0
+        -- exemption_amount_zero_151_d_5: false
+      } in
+
+    # Call §63 taxable income/standard deduction scope with context values per 2017 law and scenario
+    let sec63_result equals
+      (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+        -- individual_tax_return: itr
+        -- birth_events: [ b_jt2 ] ++ [ b_sp2 ]
+        -- blindness_status_events: [ blind_jt2 ] ++ [ blind_sp2 ]
+        -- death_events: [ d_sp2 ]
+        -- income_events: [ inc_sp2 ]
+        -- tax_return_events: []
+        -- nonresident_alien_status_period_events: []
+
+        -- taxpayer_marital_status: marital_status_stub
+        -- is_surviving_spouse: false
+        -- is_head_of_household: false
+
+        -- taxpayer_exemptions_list_result: exemptions_list_stub
+        -- taxpayer_exemption_result: personal_exemption_stub
+
+        -- adjusted_gross_income: $0
+        -- itemized_deductions_result: sec68_stub
+
+        # Context values per §63(c) and §63(f)
+        -- additional_amount_taxpayer_aged_63_f_1_A: $600
+        -- additional_amount_spouse_aged_63_f_1_B: $0
+        -- additional_amount_taxpayer_blind_63_f_2_A: $600
+        -- additional_amount_spouse_blind_63_f_2_B: $0
+        -- additional_standard_deduction_63_c_3: $1200
+        -- basic_standard_deduction_63_c_2: $6000
+        -- standard_deduction_eligible_63_c_6: true
+        -- standard_deduction_63_c_1: $7200
+        -- taxable_income: $0
+      }).main_output
+    in
+
+    # Compute spouse blindness determination at time of death per §63(f)(2)(B)
+    let spouse_blindness_determined_at_death equals
+      exists be among [ blind_sp2 ]
+        such that be.individual = sp2 and be.is_blind and be.status_date <= d_sp2.death_date
+    in
+
+    Section63Scenario13Output {
+      -- tax_result: sec63_result
+      -- basic_standard_deduction_amount: sec63_result.basic_standard_deduction_63_c_2_after_c_5
+      -- additional_standard_deduction_amount: sec63_result.additional_standard_deduction_63_c_3
+      -- standard_deduction_amount: sec63_result.standard_deduction_63_c_1
+      -- spouse_additional_amounts_allowed_under_151b: exemptions_list_stub.spouse_exemption_allowed_151_b
+      -- spouse_blindness_determined_at_time_of_death: spouse_blindness_determined_at_death
+    }
+
+  # Assertions - ONLY check the output fields of the computed scope result
+  assertion (computation.basic_standard_deduction_amount = $6000)
+  assertion (computation.spouse_blindness_determined_at_time_of_death = true)
+  assertion (computation.spouse_additional_amounts_allowed_under_151b = false)
+  assertion (computation.additional_standard_deduction_amount = $1200)
+  assertion (computation.standard_deduction_amount = $7200)
+```

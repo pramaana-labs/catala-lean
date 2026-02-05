@@ -1,0 +1,60 @@
+> Module Section_7703_scenario_1
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_7703_scenario_1:
+  output person_status content IRC.IndividualSection7703MaritalStatusOutput
+
+scope Section_7703_scenario_1:
+  # Scenario: Married at close of tax year with no death and no legal separation.
+  # Tested law refs: §7703(a)(1)
+  # Purpose: Verify determination at close of tax year and that individual is considered married.
+
+  definition person_status equals
+    let p1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let p2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: p1
+      -- spouse2: p2
+      -- marriage_date: Date.of_year_month_day of 2015, 6, 1
+      -- is_counterfactual: false
+    } in
+
+    let joint_variant equals IRC.JointReturnVariant {
+      -- taxpayer: p1
+      -- spouse: p2
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.JointReturn content joint_variant
+    } in
+
+    # Compute §7703 marital status. No death or legal separation events; married is determined at close of tax year.
+    (output of IRC.IndividualSection7703MaritalStatus with {
+      -- individual: p1
+      -- tax_year: 2023
+      -- marriage_events: [ marriage1 ]
+      -- divorce_or_legal_separation_events: []
+      -- death_events: []
+      -- individual_tax_return: individual_tax_return
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- qualifying_children: []
+      -- individuals_entitled_to_exemptions_under_151: []
+    }).main_output
+
+  # Assertions:
+  # §7703(a)(1): Determination of marital status is made as of the close of the taxable year (no spouse death in the year).
+  assertion (person_status.determination_date_7703_a_1 = Date.of_year_month_day of 2023, 12, 31)
+
+  # §7703(a)(1): Individual is considered married at the determination time (continuously married; no legal separation).
+  assertion (person_status.is_married_7703_a_1 = true)
+```

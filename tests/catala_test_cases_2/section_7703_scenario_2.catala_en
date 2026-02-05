@@ -1,0 +1,71 @@
+> Module Section_7703_scenario_2
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_7703_scenario_2:
+  output person_status content IRC.IndividualSection7703MaritalStatusOutput
+
+scope Section_7703_scenario_2:
+  # Scenario: Spouse dies during the taxable year; determination of marital status is as of time of death.
+  # Tested law refs: §7703(a)(1)
+  # Correlation:
+  # - marital_status_determination_time_under_7703a → determination_date_7703_a_1 (date of determination under §7703(a)(1))
+  # - is_considered_married_under_7703a → is_married_7703_a_1 (married status as of the determination date)
+
+  definition person_status equals
+    let p1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let p2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: p1
+      -- spouse2: p2
+      -- marriage_date: Date.of_year_month_day of 2010, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    let death_p2 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: p2
+      -- death_date: Date.of_year_month_day of 2023, 5, 10
+      -- is_counterfactual: false
+    } in
+
+    let single_variant equals IRC.SingleVariant {
+      -- taxpayer: p1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.Single content single_variant
+    } in
+
+    # Call §7703 marital status scope
+    (output of IRC.IndividualSection7703MaritalStatus with {
+      -- individual: p1
+      -- tax_year: individual_tax_return.tax_year
+      -- marriage_events: [ marriage1 ]
+      -- divorce_or_legal_separation_events: []
+      -- death_events: [ death_p2 ]
+      -- individual_tax_return: individual_tax_return
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- qualifying_children: []
+      -- individuals_entitled_to_exemptions_under_151: []
+    }).main_output
+
+  # Assertions:
+  # §7703(a)(1): If the spouse dies during the taxable year, determination is as of the time of such death.
+  assertion (
+    person_status.determination_date_7703_a_1
+    = Date.of_year_month_day of 2023, 5, 10
+  )
+
+  # §7703(a)(1): As of that time (time of death), the individual was married.
+  assertion (person_status.is_married_7703_a_1 = true)
+```

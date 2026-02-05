@@ -1,0 +1,153 @@
+> Module Section_151_scenario_5
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_151_scenario_5:
+  output computation content IRC.IRCSimplified
+
+scope Section_151_scenario_5:
+  # Scenario: 2017 MFS where spouse is claimed as dependent by another taxpayer
+  # Tested law refs: §151(a), §151(b), §151(d)(1)
+  # Assumption per scenario comments: spouse's dependent status is provided via another taxpayer's TaxReturnEvent dependents list
+
+  definition computation equals
+    let t5 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let s5 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let o5 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: t5
+      -- spouse2: s5
+      -- marriage_date: Date.of_year_month_day of 2014, 7, 1
+      -- is_counterfactual: false
+    } in
+
+    let income_s5_2017 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: s5
+      -- tax_year: 2017
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+    let income_t5_2017 equals IRC.IncomeEvent {
+      -- id: 2
+      -- individual: t5
+      -- tax_year: 2017
+      -- has_income: true
+      -- earned_income: $40000
+      -- is_counterfactual: false
+    } in
+
+    # Tax return events capture filing and dependent claims.
+    # o5 claims s5 as dependent → spouse exemption disallowed under §151(b).
+    let tre_t5 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: t5
+      -- tax_year: 2017
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+    let tre_o5 equals IRC.TaxReturnEvent {
+      -- id: 2
+      -- individual: o5
+      -- tax_year: 2017
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: [ s5 ]
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return (Married Filing Separate) for t5 in 2017
+    let mfs_details equals IRC.MarriedFilingSeparateVariant {
+      -- taxpayer: t5
+      -- spouse: s5
+      -- itemization_election: false
+      -- spouse_itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.MarriedFilingSeparate content mfs_details
+    } in
+
+    # Minimal FUTA return plumbing for IRCSimplified
+    let org1 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.EmployerVariant.GeneralEmployer content IRC.EmployerGeneralVariant { -- employer: org1 }
+    } in
+
+    output of IRC.IRCSimplified with {
+      -- individual_tax_return: individual_return
+      -- individuals: [ t5 ] ++ [ s5 ] ++ [ o5 ]
+      -- organizations: [ org1 ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: [ marriage1 ]
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ tre_t5 ] ++ [ tre_o5 ]
+      -- income_events: [ income_s5_2017 ] ++ [ income_t5_2017 ]
+      -- employment_relationship_events: []
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: futa_return
+      # Provide monetary inputs for §63/§68/§151; AGI below §68(b) so no §151(d)(3) phaseout; 2017 so §151(d)(5) not applicable
+      -- itemized_deductions: $0
+      -- adjusted_gross_income: $40000
+    }
+
+  # Assertions - only referencing the computed IRCSimplified output:
+
+  # exemption_amount_value (tested §151(d)(1)): $2,000 for 2017
+  assertion (computation.taxpayer_exemption_result.exemption_amount_base = $2000)
+
+  # taxpayer_exemption_allowed: taxpayer is in the entitled list under §151
+  assertion (
+    computation.taxpayer_exemptions_list_result.individuals_entitled_to_exemptions_under_151
+      contains (IRC.get_taxpayer of computation.taxable_income_result.individual_tax_return)
+  )
+
+  # taxpayer_exemption_deduction_amount (tested §151(a), §151(d)(1)): $2,000
+  assertion (computation.taxpayer_exemption_result.personal_exemptions_deduction_151_a = $2000)
+
+  # spouse_exemption_allowed (tested §151(b) disallowance when spouse is dependent of another taxpayer): false
+  assertion (computation.taxpayer_exemptions_list_result.spouse_exemption_allowed_151_b = false)
+
+  # spouse_exemption_deduction_amount: 0 → spouse not in the entitled list
+  assertion (
+    let spouse_opt equals IRC.get_spouse of computation.taxable_income_result.individual_tax_return in
+    (spouse_opt with pattern Absent)
+    or (spouse_opt with pattern Present content spouse_ind
+        and not (computation.taxpayer_exemptions_list_result.individuals_entitled_to_exemptions_under_151 contains spouse_ind))
+  )
+
+  # Also confirm only one exemption (taxpayer) is counted
+  assertion (number of computation.taxpayer_exemptions_list_result.individuals_entitled_to_exemptions_under_151 = 1)
+
+  # total_exemptions_deduction (tested §151(a), §151(d)(1)): $2,000 (taxpayer only)
+  assertion (computation.taxpayer_exemption_result.personal_exemptions_deduction_151_a = $2000)
+```

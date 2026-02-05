@@ -1,0 +1,103 @@
+> Module Section_151_scenario_9
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_151_scenario_9:
+  output computation content IRC.IRCSimplified
+
+scope Section_151_scenario_9:
+  # Scenario: 2026 Single filer with no dependents
+  # Tested law refs:
+  # - §151(a): allows the personal exemptions deduction
+  # - §151(d)(1): exemption amount is $2,000 (post-2025 general rule)
+  # - §151(d)(5): special rule for 2018–2025 no longer applies in 2026
+  # Notes: Phaseout under §151(d)(3) not engaged (AGI set to $0; applicable amount not provided)
+
+  definition computation equals
+    let i_t9 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: i_t9
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2026
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Tax return filing event for the taxpayer for 2026 (not joint, not refund-only, no dependents)
+    let tre1 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: i_t9
+      -- tax_year: 2026
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Minimal organization and FUTA return required by IRCSimplified inputs
+    let org1 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+    let employer_details equals IRC.EmployerGeneralVariant {
+      -- employer: org1
+    } in
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2026
+      -- details: IRC.EmployerVariant.GeneralEmployer content employer_details
+    } in
+
+    output of IRC.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ i_t9 ]
+      -- organizations: [ org1 ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ tre1 ]
+      -- income_events: []
+      -- employment_relationship_events: []
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: futa_return
+      -- itemized_deductions: $0
+      -- adjusted_gross_income: $0
+    }
+
+  # Assertions - correlate each with §151 legal text
+
+  # exemption_amount_value: Tests §151(d)(1) general rule for 2026 (post-§151(d)(5) period)
+  assertion (computation.taxpayer_exemption_result.exemption_amount_after_phaseout = $2000)
+
+  # taxpayer_exemption_allowed: taxpayer is included among individuals entitled to §151 exemptions
+  assertion (
+    exists ind among computation.taxpayer_exemptions_list_result.individuals_entitled_to_exemptions_under_151
+    such that ind = computation.taxpayer_exemptions_list_result.taxpayer_result.individual
+  )
+
+  # taxpayer_exemption_deduction_amount: §151(a) deduction equals one exemption amount for a single filer with no dependents
+  assertion (computation.taxpayer_exemption_result.personal_exemptions_deduction_151_a = $2000)
+
+  # total_exemptions_deduction: With no spouse or dependents, total personal exemptions deduction equals the taxpayer's deduction
+  assertion (computation.taxpayer_exemption_result.personal_exemptions_deduction_151_a = $2000)
+```

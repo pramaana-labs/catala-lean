@@ -1,0 +1,195 @@
+> Module Section_63_scenario_3
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_3:
+  output result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_3:
+  # Scenario: §63 standard deduction for 2017 joint return; both taxpayer and spouse are aged 65+ and blind.
+  # Spouse dies during the year; blindness determination for spouse at time of death per §63(f)(2)(B).
+  # Assumption: An additional exemption for the spouse is allowable under §151(b), enabling spouse additional amounts.
+  # Tested law refs: §63(c)(1), §63(c)(2)(A)(i), §63(f)(1)(A), §63(f)(1)(B), §63(f)(2)(A), §63(f)(2)(B)
+
+  definition result equals
+    # Entities
+    let jt1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let sp1 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Events
+    let b_jt1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: jt1
+      -- birth_date: Date.of_year_month_day of 1950, 1, 1
+      -- is_counterfactual: false
+    } in
+    let b_sp1 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: sp1
+      -- birth_date: Date.of_year_month_day of 1950, 6, 1
+      -- is_counterfactual: false
+    } in
+
+    let blind_jt1 equals IRC.BlindnessStatusEvent {
+      -- id: 1
+      -- individual: jt1
+      -- status_date: Date.of_year_month_day of 2017, 3, 1
+      -- is_blind: true
+      -- is_counterfactual: false
+    } in
+    let blind_sp1 equals IRC.BlindnessStatusEvent {
+      -- id: 2
+      -- individual: sp1
+      -- status_date: Date.of_year_month_day of 2017, 7, 1
+      -- is_blind: true
+      -- is_counterfactual: false
+    } in
+
+    let death_sp1 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: sp1
+      -- death_date: Date.of_year_month_day of 2017, 7, 15
+      -- is_counterfactual: false
+    } in
+
+    let m1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: jt1
+      -- spouse2: sp1
+      -- marriage_date: Date.of_year_month_day of 1970, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    let inc_sp1 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: sp1
+      -- tax_year: 2017
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return (Joint return for 2017)
+    let joint_variant equals IRC.JointReturnVariant {
+      -- taxpayer: jt1
+      -- spouse: sp1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let itr equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.JointReturn content joint_variant
+    } in
+
+    # Temporary marital status output for §7703 inputs (assumed married for tax purposes)
+    let marital_status_7703 equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: jt1
+      -- tax_year: 2017
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+      -- is_married_7703_a_1: true
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: true
+    } in
+
+    # Temporary §68 itemized deductions output (not itemizing; amounts set to $0)
+    let itemized_68 equals IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+      -- individual_tax_return: itr
+      -- applicable_amount_68_b_1: $0
+      -- three_percent_reduction_68_a_1: $0
+      -- eighty_percent_reduction_68_a_2: $0
+      -- reduction_amount_68_a: $0
+      -- itemized_deductions_after_68: $0
+      -- section_not_applicable_68_f: false
+    } in
+
+    # Temporary §151 exemptions list (assumption: spouse exemption allowable under §151(b))
+    let taxpayer_151 equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: jt1
+      -- spouse_exemption_allowed_151_b: true
+      -- individuals_entitled_to_exemptions_under_151: [ jt1 ] ++ [ sp1 ]
+    } in
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: taxpayer_151
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ jt1 ] ++ [ sp1 ]
+      -- spouse_exemption_allowed_151_b: true
+    } in
+
+    # Temporary §151 personal exemption output (values not material to this §63 test)
+    let taxpayer_personal_exemption equals IRC.IndividualSection151PersonalExemptionOutput {
+      -- individual: jt1
+      -- exemption_amount_base: $0
+      -- exemption_amount_after_disallowance: $0
+      -- exemption_amount_after_phaseout: $0
+      -- personal_exemptions_deduction_151_a: $0
+      -- applicable_percentage_151_d_3_B: 0.0
+      -- exemption_amount_zero_151_d_5: false
+    } in
+
+    # Compute §63 taxable income/standard deduction outputs with explicit context values per 2017 law
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: itr
+      -- birth_events: [ b_jt1 ] ++ [ b_sp1 ]
+      -- blindness_status_events: [ blind_jt1 ] ++ [ blind_sp1 ]
+      -- death_events: [ death_sp1 ]
+      -- income_events: [ inc_sp1 ]
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+      -- taxpayer_marital_status: marital_status_7703
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_personal_exemption
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_68
+
+      # §63(c)(2)(A)(i): Basic standard deduction for joint return in 2017 = 200% of $3,000 = $6,000
+      -- basic_standard_deduction_63_c_2: $6000
+
+      # §63(f)(1)(A) and (B): Additional $600 each for taxpayer and spouse aged 65+
+      -- additional_amount_taxpayer_aged_63_f_1_A: $600
+      -- additional_amount_spouse_aged_63_f_1_B: $600
+
+      # §63(f)(2)(A) and (B): Additional $600 each for blind; spouse determination at time of death
+      -- additional_amount_taxpayer_blind_63_f_2_A: $600
+      -- additional_amount_spouse_blind_63_f_2_B: $600
+
+      # §63(c)(3): Additional standard deduction (sum of eligible additional amounts) = $2,400
+      -- additional_standard_deduction_63_c_3: $2400
+
+      # §63(c)(1): Standard deduction = basic + additional = $6,000 + $2,400 = $8,400
+      -- standard_deduction_63_c_1: $8400
+
+      # §63(c)(6): Eligible for the standard deduction (none of the disqualifications apply)
+      -- standard_deduction_eligible_63_c_6: true
+
+      # Not material to this scenario
+      -- taxable_income: $0
+    }).main_output
+
+  # Assertions (only against the computed scope output):
+  # §63(c)(2)(A)(i): Basic standard deduction for joint return in 2017
+  assertion (result.basic_standard_deduction_63_c_2_after_c_5 = $6000)
+
+  # §63(c)(3) with §63(f)(1)-(2): Additional standard deduction (aged + blind for taxpayer and spouse)
+  assertion (result.additional_standard_deduction_63_c_3 = $2400)
+
+  # §63(c)(1): Standard deduction = basic + additional
+  assertion (result.standard_deduction_63_c_1 = $8400)
+
+  # §63(f)(2)(B): Spouse blind additional amount allowed (determination at time of death)
+  # Maps expected spouse_blindness_determined_at_time_of_death: true to the presence of the $600 spouse blind amount.
+  assertion (result.additional_amount_spouse_blind_63_f_2_B = $600)
+
+  # §63(f)(1)(B): Spouse aged additional amount allowed contingent on §151(b) spouse exemption
+  # Maps expected spouse_additional_amounts_allowed_under_151b: true to the presence of the $600 spouse aged amount.
+  assertion (result.additional_amount_spouse_aged_63_f_1_B = $600)
+```

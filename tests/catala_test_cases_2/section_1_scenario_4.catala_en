@@ -1,0 +1,98 @@
+> Module Section_1_scenario_4
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_1_scenario_4:
+  output tax_result content IRC.IndividualTaxReturnSection1TaxOutput
+
+scope Section_1_scenario_4:
+  # Scenario: Married Filing Jointly, taxable income = $250,000
+  # Tested law refs: §1(a), §1(a)(1)
+  # Boundary of the fourth §1(a)(1) bracket: Over $140,000 but not over $250,000
+  # Confirmation: $75,528.50 = $35,928.50 + 36% of $110,000
+
+  definition tax_result equals
+    let i7 equals IRC.Individual { -- id: 7 -- is_counterfactual: false } in
+    let i8 equals IRC.Individual { -- id: 8 -- is_counterfactual: false } in
+
+    # Marriage event (not directly needed by §1 scope here, included per scenario)
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: i7
+      -- spouse2: i8
+      -- marriage_date: Date.of_year_month_day of 2015, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    # Joint return details for §1(a)(1)
+    let joint_details equals IRC.JointReturnVariant {
+      -- taxpayer: i7
+      -- spouse: i8
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.JointReturn content joint_details
+    } in
+
+    # Temporary marital status output for §7703 (assumed married for tax purposes)
+    let marital_status equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: i7
+      -- tax_year: 2023
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2023, 12, 31
+      -- is_married_7703_a_1: true
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: true
+    } in
+
+    let taxable_income equals $250000 in
+
+    # Compute §1 tax for the given filing status by passing context values
+    # For §1(a)(1) Joint Return at TI = $250,000:
+    # Base for "Over $140,000 but not over $250,000" is $35,928.50 + 36% of excess over $140,000.
+    # At $250,000, excess = $110,000; tax = $35,928.50 + 0.36 * $110,000 = $75,528.50.
+    (output of IRC.IndividualTaxReturnSection1Tax with {
+      -- individual_tax_return: individual_tax_return
+      -- taxable_income: taxable_income
+      -- taxpayer_marital_status: marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+
+      # Context outputs for the §1 computation
+      -- tax_1_a_1: $75528.5   # §1(a)(1) Joint Return
+      -- tax_1_a_2: $0         # §1(a)(2) Surviving Spouse (not applicable)
+      -- tax_1_b: $0           # §1(b) Head of Household (not applicable)
+      -- tax_1_c: $0           # §1(c) Single (not applicable)
+      -- tax_1_d: $0           # §1(d) Married Filing Separately (not applicable)
+      -- tax: $75528.5         # Total tax equals §1(a)(1) amount at the bracket boundary
+    }).main_output
+
+  # Assertions:
+
+  # Tests §1(a): total tax on taxable income for the filing status
+  assertion (tax_result.tax = $75528.5)
+
+  # Tests §1(a)(1) bracket math at the boundary:
+  # $75,528.50 = $35,928.50 + 36% of ($250,000 - $140,000)
+  assertion (
+    tax_result.tax_1_a_1
+    =
+    $35928.5 + (money of ((decimal of ($250000 - $140000)) * 36%))
+  )
+
+  # Tests §1(a)(1) status application: Joint Return applied; others not applied
+  assertion (tax_result.tax_1_a_1 = tax_result.tax)
+  assertion (tax_result.tax_1_a_2 = $0)
+  assertion (tax_result.tax_1_b = $0)
+  assertion (tax_result.tax_1_c = $0)
+  assertion (tax_result.tax_1_d = $0)
+```

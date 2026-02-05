@@ -1,0 +1,195 @@
+> Module Section_2_scenario_11
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_2_scenario_11:
+  output hoh_status content IRC.IndividualTaxReturnSection2bHeadOfHouseholdOutput
+
+scope Section_2_scenario_11:
+  # Scenario: §2(b)(2)(C) — taxpayer is considered married at year-end because spouse died during the taxable year,
+  # disallowing head-of-household even though maintenance and abode requirements with a qualifying child are met.
+  # Tax year: 2025
+  # Tested law refs: §2(b)(2)(C), §2(b)(1)
+  # Assumption: c11 is a qualifying child under §152(c)
+
+  definition hoh_status equals
+    # Entities
+    let t11 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let s11 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let c11 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h11 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Events
+    let marriage_event equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: t11
+      -- spouse2: s11
+      -- marriage_date: Date.of_year_month_day of 2020, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    let death_s11 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: s11
+      -- death_date: Date.of_year_month_day of 2025, 6, 30
+      -- is_counterfactual: false
+    } in
+
+    let res_c11 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: c11
+      -- household: h11
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 9, 1
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    let hm_t11 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: t11
+      -- household: h11
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- cost_furnished_percentage: 0.6
+      -- is_counterfactual: false
+    } in
+
+    let parent_t11_c11 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: t11
+      -- child: c11
+      -- start_date: Date.of_year_month_day of 2012, 1, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    let resid_t11 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: t11
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+    let resid_s11 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 2
+      -- individual: s11
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 6, 30
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+
+    # Tax return (attempted Head of Household filing)
+    let hoh_variant equals IRC.HeadOfHouseholdVariant {
+      -- taxpayer: t11
+      -- qualifying_person: c11
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2025
+      -- details: IRC.FilingStatusVariant.HeadOfHousehold content hoh_variant
+    } in
+
+    # Temporary dependent results based on assumption that c11 is a qualifying child under §152(c)
+    let qc_c11 equals IRC.IndividualSection152QualifyingChildOutput {
+      -- individual: c11
+      -- taxpayer: t11
+      -- is_qualifying_child: true
+      -- bears_relationship_152_c_1_A: true
+      -- has_same_principal_place_of_abode_152_c_1_B: true
+      -- meets_age_requirements_152_c_1_C: true
+      -- has_not_filed_joint_return_152_c_1_E: true
+    } in
+
+    let taxpayer_dependents equals IRC.IndividualSection152DependentsOutput {
+      -- taxpayer: t11
+      -- dependents_initial: [ c11 ]
+      -- dependents_after_152b1: [ c11 ]
+      -- dependents_after_152b2: [ c11 ]
+      -- qualifying_children: [ qc_c11 ]
+      -- qualifying_relatives: []
+      -- individual_dependent_statuses: []
+    } in
+
+    let taxpayer_exemptions_list_result equals
+      IRC.TaxpayerExemptionsList151Output {
+        -- taxpayer_result:
+          IRC.IndividualSection151ExemptionsListOutput {
+            -- individual: t11
+            -- spouse_exemption_allowed_151_b: false
+            -- individuals_entitled_to_exemptions_under_151: []
+          }
+        -- spouse_result: Absent
+        -- individuals_entitled_to_exemptions_under_151: []
+        -- spouse_exemption_allowed_151_b: false
+      } in
+
+    # Call §2(b) Head of Household status scope with context flags per the legal scenario
+    (output of IRC.IndividualTaxReturnSection2bHeadOfHousehold with {
+      -- individual_tax_return: individual_tax_return
+      -- nonresident_alien_status_period_events: [ resid_t11 ] ++ [ resid_s11 ]
+      -- parenthood_events: [ parent_t11_c11 ]
+      -- household_maintenance_events: [ hm_t11 ]
+      -- residence_period_events: [ res_c11 ]
+      -- marriage_events: [ marriage_event ]
+      -- divorce_or_legal_separation_events: []
+      -- family_relationship_events: []
+      -- birth_events: []
+      -- tax_return_events: []
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_dependents_result: taxpayer_dependents
+      -- death_events: [ death_s11 ]
+      -- is_surviving_spouse_2_a: false
+
+      # §2(b)(2)(A): legally separated? No
+      -- is_legally_separated_2_b_2_A: false
+
+      # §2(b)(2)(B): spouse nonresident alien? No
+      -- spouse_is_nonresident_alien_2_b_2_B: false
+
+      # §2(b)(2)(C): spouse died during the taxable year → considered married at close
+      -- spouse_died_during_year_2_b_2_C: true
+      -- is_married_at_year_end_2_b_2: true
+
+      # §2(b)(3)(A): taxpayer nonresident alien? No
+      -- taxpayer_is_nonresident_alien_2_b_3_A: false
+
+      # §2(b)(3)(B): disqualified household member dependent? No
+      -- head_of_household_disqualified_household_member_dependent_2_b_3_B: false
+
+      # §2(b)(1)(A)(i) child disqualifiers: not married; not excluded by §152(b)(2)
+      -- is_married_at_year_end_2_b_1_A_i_I: false
+      -- is_not_dependent_by_152b2_2_b_1_A_i_II: false
+
+      # §2(b)(1)(A)(i): qualifying child requirement met (assumption)
+      -- qualifying_child_meets_2_b_1_A_i: true
+
+      # §2(b)(1)(A)(ii): not using other dependent route
+      -- other_dependent_2_b_1_A_ii: false
+
+      # §2(b)(1) maintenance + abode > 1/2 year (c11 is member Jan–Sep; t11 furnishes > 1/2 cost)
+      -- maintains_household_principal_place_of_abode_more_than_half_year_2_b_1_A: true
+
+      # §2(b)(1)(B) parent route not used
+      -- maintains_household_for_father_or_mother_2_b_1_B: false
+
+      # Final determination for §2(b): HOH disallowed due to being considered married at year end
+      -- is_head_of_household_2_b: false
+    }).main_output
+
+  # Assertions:
+  # Tests §2(b)(2)(C): spouse died during the taxable year → taxpayer considered married at the close of the taxable year
+  assertion (hoh_status.is_married_at_year_end_2_b_2 = true)
+
+  # Tests §2(b)(1): head-of-household status must fail because taxpayer is considered married at year end
+  assertion (hoh_status.is_head_of_household_2_b = false)
+```

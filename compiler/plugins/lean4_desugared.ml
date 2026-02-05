@@ -547,7 +547,7 @@ let rec format_expr
             Printf.sprintf "| %s.%s _ => %s" enum_name_str cons_name body_str
       ) cases_list in
       (* Generate match as single line to avoid indentation issues in struct literals *)
-      Printf.sprintf "(match %s with %s)" matched_str (String.concat " " formatted_cases)
+      Printf.sprintf "(match %s with %s)" matched_str (String.concat "" formatted_cases)
   | EAbs { binder; tys; _ } ->
       (* Lambda abstraction: fun {t : Type} (x : T) (y : U) => body *)
       let vars, body = Bindlib.unmbind binder in
@@ -623,11 +623,13 @@ and format_operator
     | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr ~scope_defs ~use_input_prefix arg)
     | _ -> "default -- wrong number of args for unop"
   in
-  (* Helper to wrap with decide only if not a boolean operator *)
+  (* Helper to wrap with decide only if not a boolean operator or match expression *)
   let format_bool_arg arg =
     let formatted = format_expr ~scope_defs ~use_input_prefix arg in
-    if is_bool_operator arg then formatted
-    else Printf.sprintf "(decide (%s))" formatted
+    let skip_decide = is_bool_operator arg || 
+      (match Mark.remove arg with EMatch _ -> true | _ -> false) in
+    if skip_decide then formatted
+    else Printf.sprintf "decide (%s)" formatted
   in
   match Mark.remove op with
   (* Overloaded operators in desugared AST *)
@@ -995,7 +997,7 @@ let rec format_rule_tree_method
           local_default
         else
           Printf.sprintf 
-            "(match processExceptions [%s] with\n    | none => %s\n    | some r => some r)"
+            "(match processExceptions2 [%s] with    | none => %s    | some r => some r)"
             (String.concat ", " exception_calls)
             local_default
       in
@@ -1550,7 +1552,7 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
     prgm.program_ctx.ctx_enums in
   
   (* Types to skip - they are defined elsewhere (e.g., in stdlib) *)
-  let skip_types = ["Date_en.Month"; "Period_en.Period"; "Date_en.MonthOfYear"; "Optional"] in
+  let skip_types = ["Date_en.Month"; "Period_en.Period"; "Date_en.MonthOfYear"; "Optional"; "MonthYear_en.Date_en.Month"; "MonthYear_en.MonthYear"] in
   
   (* Generate struct and enum declarations in dependency order *)
   let type_code = List.filter_map (fun type_id ->

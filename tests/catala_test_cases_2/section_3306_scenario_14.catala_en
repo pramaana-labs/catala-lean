@@ -1,0 +1,194 @@
+> Module Section_3306_scenario_14
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_14:
+  output employment_exclusions content
+    ( IRC.EmploymentRelationshipEventSection3306EmploymentOutput
+    , IRC.EmploymentRelationshipEventSection3306EmploymentOutput
+    , IRC.EmploymentRelationshipEventSection3306EmploymentOutput
+    , IRC.EmploymentRelationshipEventSection3306EmploymentOutput
+    , IRC.EmploymentRelationshipEventSection3306EmploymentOutput
+    )
+
+scope Section_3306_scenario_14:
+  # Scenario: §3306(c) employment exclusions for specified government/institutional employers
+  # Tested law refs: §3306(c)(6), §3306(c)(7), §3306(c)(11), §3306(c)(16), §3306(c)(21)
+  # Each employment relationship occurs in 2024 within the United States and should be excluded.
+
+  definition employment_exclusions equals
+    let g1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let g2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let g3 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+    let g4 equals IRC.Individual { -- id: 4 -- is_counterfactual: false } in
+    let g5 equals IRC.Individual { -- id: 5 -- is_counterfactual: false } in
+
+    let org14f equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.GovernmentFederal
+      -- is_counterfactual: false
+    } in
+    let org14s equals IRC.Organization {
+      -- id: 2
+      -- organization_type: IRC.OrganizationType.GovernmentState
+      -- is_counterfactual: false
+    } in
+    let org14fg equals IRC.Organization {
+      -- id: 3
+      -- organization_type: IRC.OrganizationType.ForeignGovernment
+      -- is_counterfactual: false
+    } in
+    let org14io equals IRC.Organization {
+      -- id: 4
+      -- organization_type: IRC.OrganizationType.InternationalOrganization
+      -- is_counterfactual: false
+    } in
+    let org14pi equals IRC.Organization {
+      -- id: 5
+      -- organization_type: IRC.OrganizationType.PenalInstitution
+      -- is_counterfactual: false
+    } in
+
+    let emp_f equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org14f
+      -- employee: g1
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.FederalGovernment
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_s equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: org14s
+      -- employee: g2
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.StateGovernment
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_fg equals IRC.EmploymentRelationshipEvent {
+      -- id: 3
+      -- employer: org14fg
+      -- employee: g3
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.ForeignGovernment
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_io equals IRC.EmploymentRelationshipEvent {
+      -- id: 4
+      -- employer: org14io
+      -- employee: g4
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.InternationalOrganization
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_pi equals IRC.EmploymentRelationshipEvent {
+      -- id: 5
+      -- employer: org14pi
+      -- employee: g5
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.PenalInstitution
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let employment_relationship_events_list equals [ emp_f; emp_s; emp_fg; emp_io; emp_pi ] in
+
+    # Compute §3306(c) employment determination for each relationship in 2024
+    ( (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+         -- employment_relationship_event: emp_f
+         -- calendar_year: 2024
+         -- wage_payment_events: []
+         -- employment_relationship_events: employment_relationship_events_list
+         -- student_enrollment_events: []
+         -- hospital_patient_events: []
+         -- immigration_admission_events: []
+         -- parenthood_events: []
+         -- birth_events: []
+         -- marriage_events: []
+       }).main_output
+    , (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+         -- employment_relationship_event: emp_s
+         -- calendar_year: 2024
+         -- wage_payment_events: []
+         -- employment_relationship_events: employment_relationship_events_list
+         -- student_enrollment_events: []
+         -- hospital_patient_events: []
+         -- immigration_admission_events: []
+         -- parenthood_events: []
+         -- birth_events: []
+         -- marriage_events: []
+       }).main_output
+    , (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+         -- employment_relationship_event: emp_fg
+         -- calendar_year: 2024
+         -- wage_payment_events: []
+         -- employment_relationship_events: employment_relationship_events_list
+         -- student_enrollment_events: []
+         -- hospital_patient_events: []
+         -- immigration_admission_events: []
+         -- parenthood_events: []
+         -- birth_events: []
+         -- marriage_events: []
+       }).main_output
+    , (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+         -- employment_relationship_event: emp_io
+         -- calendar_year: 2024
+         -- wage_payment_events: []
+         -- employment_relationship_events: employment_relationship_events_list
+         -- student_enrollment_events: []
+         -- hospital_patient_events: []
+         -- immigration_admission_events: []
+         -- parenthood_events: []
+         -- birth_events: []
+         -- marriage_events: []
+       }).main_output
+    , (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+         -- employment_relationship_event: emp_pi
+         -- calendar_year: 2024
+         -- wage_payment_events: []
+         -- employment_relationship_events: employment_relationship_events_list
+         -- student_enrollment_events: []
+         -- hospital_patient_events: []
+         -- immigration_admission_events: []
+         -- parenthood_events: []
+         -- birth_events: []
+         -- marriage_events: []
+       }).main_output
+    )
+
+  # Assertions - ONLY reference the scope output
+  # §3306(c)(6): service in the employ of the United States Government is excluded
+  assertion (employment_exclusions.1.is_excluded_federal_government = true)
+
+  # §3306(c)(7): service in the employ of a State (or political subdivision) is excluded
+  assertion (employment_exclusions.2.is_excluded_state_government = true)
+
+  # §3306(c)(11): service in the employ of a foreign government is excluded
+  assertion (employment_exclusions.3.is_excluded_foreign_government = true)
+
+  # §3306(c)(16): service in the employ of an international organization is excluded
+  assertion (employment_exclusions.4.is_excluded_international_organization = true)
+
+  # §3306(c)(21): service by a person committed to a penal institution is excluded
+  assertion (employment_exclusions.5.is_excluded_penal_institution = true)
+```

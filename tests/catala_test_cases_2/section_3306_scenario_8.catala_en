@@ -1,0 +1,196 @@
+> Module Section_3306_scenario_8
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_8:
+  # We return both:
+  # - the §3306(a)(2) organization employer status output for the tested organization
+  # - the §3306(b) total taxable wages calculation output
+  output computation content (IRC.OrganizationSection3306EmployerStatusOutput, IRC.TotalWages3306CalculationOutput)
+
+scope Section_3306_scenario_8:
+  # Scenario: Agricultural labor employer under §3306(a)(2)(A) based on cash wages ≥ $20,000 during the calendar year.
+  # Four farm workers each receive $6,000 cash in 2024 (total $24,000), all employment within the U.S. and agricultural labor.
+  # Tested law refs: §3306(a)(2)(A), §3306(b)
+  # Comment: All remuneration is cash and per-employee amounts ($6,000) are below the $7,000 FUTA cap, so full amounts count as wages.
+
+  definition computation equals
+    # Individuals (employees)
+    let a1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let a2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let a3 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+    let a4 equals IRC.Individual { -- id: 4 -- is_counterfactual: false } in
+
+    # Organization (employer)
+    let org8 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationship events (all agricultural labor within the United States)
+    let emp1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org8
+      -- employee: a1
+      -- start_date: Date.of_year_month_day of 2024, 4, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: org8
+      -- employee: a2
+      -- start_date: Date.of_year_month_day of 2024, 4, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 3
+      -- employer: org8
+      -- employee: a3
+      -- start_date: Date.of_year_month_day of 2024, 4, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 4
+      -- employer: org8
+      -- employee: a4
+      -- start_date: Date.of_year_month_day of 2024, 4, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let employment_relationship_events equals [ emp1; emp2; emp3; emp4 ] in
+
+    # Wage payment events: 4 employees each paid $6,000 cash on 2024-06-01
+    let w1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: org8
+      -- employee: a1
+      -- payment_date: Date.of_year_month_day of 2024, 6, 1
+      -- amount: $6000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let w2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: org8
+      -- employee: a2
+      -- payment_date: Date.of_year_month_day of 2024, 6, 1
+      -- amount: $6000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let w3 equals IRC.WagePaymentEvent {
+      -- id: 3
+      -- employer: org8
+      -- employee: a3
+      -- payment_date: Date.of_year_month_day of 2024, 6, 1
+      -- amount: $6000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let w4 equals IRC.WagePaymentEvent {
+      -- id: 4
+      -- employer: org8
+      -- employee: a4
+      -- payment_date: Date.of_year_month_day of 2024, 6, 1
+      -- amount: $6000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wage_payment_events equals [ w1; w2; w3; w4 ] in
+
+    # No terminations and no deaths in the scenario
+    let employment_termination_events equals [] in
+    let death_events equals [] in
+
+    # Compute §3306(a)(2) employer status for the organization for calendar year 2024
+    let org_status equals
+      (output of IRC.OrganizationSection3306EmployerStatus with {
+        -- organization: org8
+        -- calendar_year: 2024
+        -- wage_payment_events: wage_payment_events
+        -- employment_relationship_events: employment_relationship_events
+      }).main_output
+    in
+
+    # Compute §3306(b) wages results for each wage payment event
+    let wage_results equals
+      map each we among wage_payment_events to
+        (output of IRC.WagePaymentEventSection3306Wages with {
+          -- wage_payment_event: we
+          -- employment_termination_events: employment_termination_events
+          -- death_events: death_events
+        }).main_output
+    in
+
+    # Sum taxable wages applying §3306(b) rules (including the per-employee $7,000 cap)
+    let total_wages_output equals
+      (output of IRC.TotalWages3306Calculation with {
+        -- wage_results: wage_results
+      }).main_output
+    in
+
+    # Return both results as a tuple
+    (org_status, total_wages_output)
+
+  # Assertions - ONLY reference the scope output "computation"
+  # §3306(a)(2)(A): Employer for agricultural labor if paid ≥ $20,000 cash wages during the year or preceding year.
+  # Here, $6,000 × 4 = $24,000 in 2024 ⇒ threshold satisfied.
+  assertion (computation.1.is_agricultural_employer = true)
+
+  # §3306(b): Wages include all remuneration for employment, with per-employee cap at $7,000.
+  # Each worker received $6,000 (below cap), so full $24,000 is taxable wages.
+  assertion (computation.2.total_taxable_wages = $24000)
+```

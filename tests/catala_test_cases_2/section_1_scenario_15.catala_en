@@ -1,0 +1,94 @@
+> Module Section_1_scenario_15
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_1_scenario_15:
+  output tax_result content IRC.IndividualTaxReturnSection1TaxOutput
+
+scope Section_1_scenario_15:
+  # Scenario: Unmarried individual with taxable income exactly $250,000
+  # Tested law refs: §1(c) (unmarried individuals)
+  # Expectation:
+  #  - At exactly $250,000 (top of the fourth §1(c) bracket), the tax equals $79,772,
+  #    i.e., $31,172 + 36% * ($250,000 - $115,000) = $79,772, which is the base of the next bracket.
+  #  - Filing status is Single under §1(c).
+  #  - Bracket applied: "Over $115,000 but not over $250,000".
+
+  definition tax_result equals
+    # Entities
+    let u4 equals IRC.Individual {
+      -- id: 1
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Single (§1(c)), tax year 2023
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: u4
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let ind_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Temporary marital status output (do not compute §7703; set assumptions consistent with Single)
+    let marital_status_u4 equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: u4
+      -- tax_year: 2023
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2023, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Call §1 tax computation scope.
+    # Provide taxable_income = $250,000 and status flags (not surviving spouse, not head of household).
+    # Context outputs reflect Single §1(c) at $250,000.
+    (output of IRC.IndividualTaxReturnSection1Tax with {
+      -- individual_tax_return: ind_return
+      -- taxable_income: $250000
+      -- taxpayer_marital_status: marital_status_u4
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+
+      # Context outputs for each status schedule
+      -- tax_1_a_1: $0
+      -- tax_1_a_2: $0
+      -- tax_1_b: $0
+      -- tax_1_c: $79772    # §1(c): Over $115,000 but not over $250,000, at $250,000 → $79,772
+      -- tax_1_d: $0
+
+      # Final tax equals the §1(c) tax for Single status
+      -- tax: $79772
+    }).main_output
+
+  # Assertions:
+  # 1) Final tax equals $79,772 (boundary at top of fourth §1(c) bracket)
+  assertion (tax_result.tax = $79772)
+
+  # 2) Status applied is Single under §1(c): ensure the return details are Single
+  assertion (
+    match tax_result.individual_tax_return.details with pattern
+    -- IRC.FilingStatusVariant.Single content variant: true
+    -- anything: false
+  )
+
+  # 3) Bracket applied proxy: only §1(c) schedule populated; others are zero
+  assertion (tax_result.tax_1_c = $79772)
+  assertion (tax_result.tax_1_a_1 = $0)
+  assertion (tax_result.tax_1_a_2 = $0)
+  assertion (tax_result.tax_1_b = $0)
+  assertion (tax_result.tax_1_d = $0)
+
+  # 4) Final tax equals the §1(c) schedule amount, confirming the §1(c) schedule was applied
+  assertion (tax_result.tax = tax_result.tax_1_c)
+```

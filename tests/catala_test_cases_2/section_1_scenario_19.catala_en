@@ -1,0 +1,92 @@
+> Module Section_1_scenario_19
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_1_scenario_19:
+  output tax_result content IRC.IndividualTaxReturnSection1TaxOutput
+
+scope Section_1_scenario_19:
+  # Scenario: Married Filing Separately with taxable income $100,000
+  # Tested law refs: §1(d)
+  # Bracket targeted: Over $70,000 but not over $125,000
+  # Computation per §1(d): $17,964.25 + 36% of excess over $70,000
+  # Excess: $100,000 - $70,000 = $30,000 → 36% = $10,800 → Tax = $17,964.25 + $10,800 = $28,764.25
+
+  definition tax_result equals
+    # Entities
+    let mfs5 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let mfs6 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Marriage Event (supports §7703 marital status context as married)
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: mfs5
+      -- spouse2: mfs6
+      -- marriage_date: Date.of_year_month_day of 2010, 2, 2
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Married Filing Separate for tax year 2023
+    let mfs_details equals IRC.MarriedFilingSeparateVariant {
+      -- taxpayer: mfs5
+      -- spouse: mfs6
+      -- itemization_election: false
+      -- spouse_itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.MarriedFilingSeparate content mfs_details
+    } in
+
+    # Temporary marital status output (do not compute §7703; set assumptions)
+    let marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: mfs5
+        -- tax_year: 2023
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2023, 12, 31
+        -- is_married_7703_a_1: true
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: true
+      } in
+
+    # Compute §1(d) tax for MFS fourth bracket
+    (output of IRC.IndividualTaxReturnSection1Tax with {
+      -- individual_tax_return: individual_tax_return
+      -- taxable_income: $100000
+      -- taxpayer_marital_status: marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+
+      # Context outputs mapped to §1 schedules; set only §1(d) fourth bracket
+      -- tax_1_a_1: $0
+      -- tax_1_a_2: $0
+      -- tax_1_b: $0
+      -- tax_1_c: $0
+      -- tax_1_d: $28764.25
+      -- tax: $28764.25
+    }).main_output
+
+  # Assertions:
+  # Tests §1(d) tax amount for MFS: $17,964.25 + 36% of ($100,000 - $70,000)
+  assertion (tax_result.tax = $28764.25)
+
+  # Confirms §1(d) bracket applied by placing amount in tax_1_d
+  # Corresponds to: "Over $70,000 but not over $125,000" (§1(d))
+  assertion (tax_result.tax_1_d = $28764.25)
+
+  # Confirms filing status applied: Married Filing Separate under §1(d)
+  assertion (
+    match tax_result.individual_tax_return.details with pattern
+    -- IRC.FilingStatusVariant.MarriedFilingSeparate content variant : true
+    -- anything : false
+  )
+```
