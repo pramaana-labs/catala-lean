@@ -1,6 +1,6 @@
-import CaseStudies.Pramaana.CatalaRuntime
-import CaseStudies.Pramaana.Stdlib.Date_internal
-import CaseStudies.Pramaana.Stdlib.Optional
+import CatalaRuntime
+import Stdlib.Date_internal
+import Stdlib.Optional
 
 open CatalaRuntime
 
@@ -58,11 +58,13 @@ def month_of_int := (fun (i : Int) => (if (i = (1 : Int)) then (Month.January ()
 
 def is_after_date_plus_delay := (fun (compared_date : CatalaRuntime.Date) (reference_date : CatalaRuntime.Date) (delay : CatalaRuntime.Duration) => (compared_date ≥ (reference_date + delay)))
 
-def is_old_enough := (fun (currrent_date : CatalaRuntime.Date) (birth_date : CatalaRuntime.Date) (target_age : CatalaRuntime.Duration) => decide (currrent_date ≥ (birth_date + target_age)))
+def is_old_enough_rounding_down := (fun (birth_date : CatalaRuntime.Date) (target_age : CatalaRuntime.Duration) (current_date : CatalaRuntime.Date) => decide (current_date ≥ (birth_date + target_age)))
 
 def is_before_date_plus_delay := (fun (compared_date : CatalaRuntime.Date) (reference_date : CatalaRuntime.Date) (delay : CatalaRuntime.Duration) => decide (compared_date ≤ (reference_date + delay)))
 
 def is_young_enough := (fun (currrent_date : CatalaRuntime.Date) (birth_date : CatalaRuntime.Date) (target_age : CatalaRuntime.Duration) => decide (currrent_date ≤ (birth_date + target_age)))
+
+def is_young_enough_rounding_down := (fun (birth_date : CatalaRuntime.Date) (target_age : CatalaRuntime.Duration) (current_date : CatalaRuntime.Date) => decide (current_date ≤ (birth_date + target_age)))
 
 def last_day_of_year := (fun (d : CatalaRuntime.Date) => ((fun (ymd : (Int × Int × Int)) => (of_year_month_day (ymd).1 (12 : Int) (31 : Int))) (to_year_month_day d)))
 

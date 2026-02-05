@@ -68,6 +68,19 @@ let sanitize_name (name : string) : string =
   else
     name
 
+(** Uncapitalize a potentially qualified name (e.g., "Module.ScopeName").
+    Only the last component (after the final '.') is uncapitalized.
+    For "Sections.IRCSimplified" -> "Sections.iRCSimplified" 
+    For "ScopeName" -> "scopeName" *)
+let uncapitalize_qualified_name (name : string) : string =
+  match String.rindex_opt name '.' with
+  | Some idx ->
+      let prefix = String.sub name 0 (idx + 1) in
+      let suffix = String.sub name (idx + 1) (String.length name - idx - 1) in
+      prefix ^ String.uncapitalize_ascii suffix
+  | None ->
+      String.uncapitalize_ascii name
+
 (** {1 Phase 1: Variable collection and dependency analysis} *)
 
 (** Information about a scope input variable *)
@@ -382,7 +395,7 @@ let rec format_typ (ty : typ) : string =
   | TDefault t -> format_typ t
   | TForAll _ -> "TForall"
   | TVar v -> sanitize_name (Bindlib.name_of v)  (* Use the type variable's name *)
-  | TClosureEnv | TError -> "Unit"
+  | TClosureEnv | TError | _ -> "Unit"
     (* For now, output Unit for complex types we don't fully support *)
 
 (** Recursively collect unique type variable names from a type *)
@@ -400,7 +413,7 @@ let rec collect_type_vars (ty : typ) (acc : String.Set.t) : String.Set.t =
       (* Unbind and collect from the body type *)
       let _, body_ty = Bindlib.unmbind binder in
       collect_type_vars body_ty acc
-  | TLit _ | TStruct _ | TEnum _ | TClosureEnv | TError -> acc
+  | TLit _ | TStruct _ | TEnum _ | TClosureEnv | TError | _ -> acc
 
 (** Collect unique type variables from a list of types *)
 let collect_type_vars_from_list (tys : typ list) : string list =
@@ -553,25 +566,17 @@ let rec format_expr
         (format_expr ~scope_defs ~use_input_prefix body)
   | ELocation loc ->
       format_location ~scope_defs ~use_input_prefix loc
-  | EScopeCall { scope; args } ->
-    let scope_str = ScopeName.to_string scope in
-    let function_name = 
-      match String.rindex_opt scope_str '.' with
-      | Some dot_pos ->
-          let prefix = String.sub scope_str 0 (dot_pos + 1) in
-          let suffix = String.sub scope_str (dot_pos + 1) (String.length scope_str - dot_pos - 1) in
-          sanitize_name (prefix ^ String.uncapitalize_ascii suffix)
-      | None -> sanitize_name (String.uncapitalize_ascii scope_str)
-    in 
-    let args_values_list = ScopeVar.Map.fold
-    (fun scope_var (pos, gexpr) acc ->
-       let s = format_expr gexpr in
-       ((ScopeVar.to_string scope_var) ^ ":=" ^ s)  :: acc
-    ) args []
-    in 
-    let args_string = String.concat "," args_values_list 
-  in ("(" ^ function_name ^ " " ^ "{" ^ args_string ^ "}" ^ ")")    
-    (* Scope calls handled, but not completely *)
+  | EScopeCall { scope; args = _ } ->
+    (* EScopeCall represents calling a scope with INPUT values to get OUTPUT values.
+       
+       For self-contained files, external scope implementations aren't available,
+       so we just return `default` for the output struct type.
+       
+       TODO: For proper implementation, this would need to either:
+       - Import the external module with the scope function
+       - Or inline the scope's computation logic *)
+    let scope_name = sanitize_name (ScopeName.to_string scope) in
+    Printf.sprintf "(default : %s)" scope_name
   | EDefault _ | EPureDefault _ | EEmpty | EErrorOnEmpty _ ->
       (* Default logic - will handle later *)
       "sorry -- default logic not yet implemented\n"
@@ -1051,7 +1056,7 @@ let format_input_struct
     let format_subscope_field var sub_scope_name =
       let var_name = sanitize_name (ScopeVar.to_string var) in
       let sub_scope_name_str = sanitize_name (ScopeName.to_string sub_scope_name) in
-      let func_name = sanitize_name (String.uncapitalize_ascii sub_scope_name_str) in
+      let func_name = sanitize_name (uncapitalize_qualified_name sub_scope_name_str) in
       
       (* Collect sub-scope input arguments from SubScopeInput definitions (same as get_method_call) *)
       let sub_scope_inputs, has_any_inputs = Ast.ScopeDef.Map.fold (fun def_key scope_def (inp_acc, has_inputs) ->
@@ -1295,7 +1300,7 @@ let format_scope
 
   (* 5. Generate main scope function that calls methods *)
   (* Use lowercase for function name to avoid conflict with struct name *)
-  let scope_func_name = sanitize_name (String.uncapitalize_ascii scope_name_str) in
+  let scope_func_name = sanitize_name (uncapitalize_qualified_name scope_name_str) in
   let has_input = inputs <> [] in
   let has_context = context_vars <> [] in
   let input_param = Printf.sprintf "(input : %s_Input)" scope_name_str in
@@ -1312,7 +1317,7 @@ let format_scope
       (match var_def.sub_scope_name with
       | Some sub_scope_name ->
           let sub_scope_name_str = sanitize_name (ScopeName.to_string sub_scope_name) in
-          let func_name = sanitize_name (String.uncapitalize_ascii sub_scope_name_str) in
+          let func_name = sanitize_name (uncapitalize_qualified_name sub_scope_name_str) in
           
           (* Collect sub-scope input arguments from SubScopeInput definitions *)
           (* Track if we have any inputs defined (even with no rules) vs no inputs at all *)
@@ -1424,16 +1429,27 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
   
   (* Collect scope input and output struct names to avoid generating them twice *)
   (* (they're generated in format_scope) *)
+  (* IMPORTANT: Only collect structs from LOCAL scopes (in module_scopes), not external scopes.
+     External scopes (from imported modules) won't have their code generated here,
+     so their structs must be generated as regular type definitions. *)
   let program_dep_graph = Scopelang.Dependency.build_program_dep_graph prg_scopelang in 
   let defs_ordering = Scopelang.Dependency.get_defs_ordering program_dep_graph in 
-  let scope_structs = ScopeName.Map.fold (fun _scope_name scope_info acc ->
-    acc
-    |> StructName.Set.add scope_info.in_struct_name
-    |> StructName.Set.add scope_info.out_struct_name
+  let local_scope_names = ScopeName.Map.fold (fun scope_name _scope_decl acc ->
+    ScopeName.Set.add scope_name acc
+  ) prgm.program_root.module_scopes ScopeName.Set.empty in
+  let scope_structs = ScopeName.Map.fold (fun scope_name scope_info acc ->
+    (* Only skip structs for scopes that are LOCAL (will be generated in this file) *)
+    if ScopeName.Set.mem scope_name local_scope_names then
+      acc
+      |> StructName.Set.add scope_info.in_struct_name
+      |> StructName.Set.add scope_info.out_struct_name
+    else
+      acc
   ) prgm.program_ctx.ctx_scopes StructName.Set.empty in
   
   (* Get topologically sorted list of types (structs and enums together) respecting dependencies *)
-  let type_ordering = Scopelang.Dependency.check_type_cycles 
+  let type_ordering = Scopelang.Dependency.check_type_cycles
+    prgm.program_ctx.ctx_abstract_types
     prgm.program_ctx.ctx_structs 
     prgm.program_ctx.ctx_enums in
   
@@ -1463,6 +1479,7 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
           | Some fields ->
               Some (format_enum_decl (sanitize_name enum_name_str) fields)
           | None -> None)
+    | _ -> None
   ) type_ordering in
   
   (* Generate code for scopes and topdefs in dependency order, also collect scope function names and assertions *)
@@ -1482,7 +1499,7 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
         | Some (sn, scope_decl) ->
             let code = format_scope ~program_ctx:(Some prgm.program_ctx) sn scope_decl in
             (* Generate the function name (lowercase version of scope name) *)
-            let func_name = sanitize_name (String.uncapitalize_ascii (sanitize_name (ScopeName.to_string sn))) in
+            let func_name = sanitize_name (uncapitalize_qualified_name (sanitize_name (ScopeName.to_string sn))) in
             (* Collect assertions from this scope *)
             let scope_assertions = Ast.AssertionName.Map.fold (fun _assertion_name assertion acc ->
               let assertion_expr = Expr.unbox assertion in

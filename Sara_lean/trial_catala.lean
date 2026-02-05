@@ -1,6 +1,6 @@
-import CaseStudies.Pramaana.CatalaRuntime
+import CatalaRuntime
 
-import CaseStudies.Pramaana.Stdlib.Stdlib
+import Stdlib.Stdlib
 
 open CatalaRuntime
 namespace Sections
@@ -1218,4 +1218,3 @@ def iRCSimplified (input : IRCSimplified_Input) : IRCSimplified :=
     tax := input.tax }
 
 end Sections
-

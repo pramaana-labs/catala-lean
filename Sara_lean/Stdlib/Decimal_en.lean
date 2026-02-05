@@ -1,5 +1,5 @@
-import CaseStudies.Pramaana.CatalaRuntime
-import CaseStudies.Pramaana.Stdlib.Optional
+import CatalaRuntime
+import Stdlib.Optional
 
 
 open CatalaRuntime

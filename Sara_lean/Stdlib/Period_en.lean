@@ -1,6 +1,6 @@
-import CaseStudies.Pramaana.CatalaRuntime
-import CaseStudies.Pramaana.Stdlib.Date_en
-import CaseStudies.Pramaana.Stdlib.Optional
+import CatalaRuntime
+import Stdlib.Date_en
+import Stdlib.Optional
 
 open CatalaRuntime
 

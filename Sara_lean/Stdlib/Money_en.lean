@@ -1,4 +1,4 @@
-import CaseStudies.Pramaana.CatalaRuntime
+import CatalaRuntime
 
 open CatalaRuntime
 

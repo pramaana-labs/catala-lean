@@ -68,6 +68,19 @@ let sanitize_name (name : string) : string =
   else
     name
 
+(** Uncapitalize a potentially qualified name (e.g., "Module.ScopeName").
+    Only the last component (after the final '.') is uncapitalized.
+    For "Sections.IRCSimplified" -> "Sections.iRCSimplified" 
+    For "ScopeName" -> "scopeName" *)
+let uncapitalize_qualified_name (name : string) : string =
+  match String.rindex_opt name '.' with
+  | Some idx ->
+      let prefix = String.sub name 0 (idx + 1) in
+      let suffix = String.sub name (idx + 1) (String.length name - idx - 1) in
+      prefix ^ String.uncapitalize_ascii suffix
+  | None ->
+      String.uncapitalize_ascii name
+
 (** {1 Phase 1: Variable collection and dependency analysis} *)
 
 (** Information about a scope input variable *)
@@ -382,7 +395,7 @@ let rec format_typ (ty : typ) : string =
   | TDefault t -> format_typ t
   | TForAll _ -> "TForall"
   | TVar v -> sanitize_name (Bindlib.name_of v)  (* Use the type variable's name *)
-  | TClosureEnv | TError -> "Unit"
+  | TClosureEnv | TError | _ -> "Unit"
     (* For now, output Unit for complex types we don't fully support *)
 
 (** Recursively collect unique type variable names from a type *)
@@ -400,7 +413,7 @@ let rec collect_type_vars (ty : typ) (acc : String.Set.t) : String.Set.t =
       (* Unbind and collect from the body type *)
       let _, body_ty = Bindlib.unmbind binder in
       collect_type_vars body_ty acc
-  | TLit _ | TStruct _ | TEnum _ | TClosureEnv | TError -> acc
+  | TLit _ | TStruct _ | TEnum _ | TClosureEnv | TError | _ -> acc
 
 (** Collect unique type variables from a list of types *)
 let collect_type_vars_from_list (tys : typ list) : string list =
@@ -460,7 +473,12 @@ let is_bool_operator (e : (desugared, untyped) gexpr) : bool =
   | EAppOp { op; _ } ->
       (match Mark.remove op with
       | Op.And | Op.Or | Op.Xor | Op.Not -> true
+      (* Comparison operators now return Bool (wrapped with decide) *)
+      | Op.Lt | Op.Lte | Op.Gt | Op.Gte | Op.Eq -> true
       | _ -> false)
+  | ELit (LBool _) -> true  (* Boolean literals are already Bool *)
+  | EMatch _ -> true  (* Match expressions that return Bool shouldn't be wrapped with decide *)
+  | EIfThenElse _ -> true  (* If-then-else expressions that return Bool *)
   | _ -> false
 
 (** Format an expression to Lean code *)
@@ -521,14 +539,15 @@ let rec format_expr
             let params = Array.to_list vars in
             let param_names = List.map (fun var -> sanitize_name (Bindlib.name_of var)) params in
             let body_str = format_expr ~scope_defs ~use_input_prefix body in
-            Printf.sprintf "  | %s.%s %s => %s" 
+            Printf.sprintf "| %s.%s %s => %s" 
               enum_name_str cons_name (String.concat " " param_names) body_str
         | _ ->
             (* Not a lambda - just format the expression directly *)
             let body_str = format_expr ~scope_defs ~use_input_prefix case_expr in
-            Printf.sprintf "  | %s.%s _ => %s" enum_name_str cons_name body_str
+            Printf.sprintf "| %s.%s _ => %s" enum_name_str cons_name body_str
       ) cases_list in
-      Printf.sprintf "(match %s with\n%s)" matched_str (String.concat "\n" formatted_cases)
+      (* Generate match as single line to avoid indentation issues in struct literals *)
+      Printf.sprintf "(match %s with %s)" matched_str (String.concat " " formatted_cases)
   | EAbs { binder; tys; _ } ->
       (* Lambda abstraction: fun {t : Type} (x : T) (y : U) => body *)
       let vars, body = Bindlib.unmbind binder in
@@ -554,16 +573,20 @@ let rec format_expr
   | ELocation loc ->
       format_location ~scope_defs ~use_input_prefix loc
   | EScopeCall { scope; args } ->
-    let function_name = sanitize_name (String.uncapitalize_ascii (ScopeName.to_string scope)) in 
+    (* EScopeCall represents calling a scope with INPUT values to get OUTPUT values.
+       Generate: (scopeFunction ({ input_field := val, ... } : ScopeName_Input))
+       where scopeFunction is the lowercase version of the scope name. *)
+    let scope_name = sanitize_name (ScopeName.to_string scope) in
+    let func_name = sanitize_name (uncapitalize_qualified_name scope_name) in
+    let input_struct_name = scope_name ^ "_Input" in
     let args_values_list = ScopeVar.Map.fold
-    (fun scope_var (pos, gexpr) acc ->
-       let s = format_expr gexpr in
-       ((ScopeVar.to_string scope_var) ^ ":=" ^ s)  :: acc
-    ) args []
+      (fun scope_var (_, gexpr) acc ->
+         let s = format_expr gexpr in
+         (sanitize_name (ScopeVar.to_string scope_var) ^ " := " ^ s) :: acc
+      ) args []
     in 
-    let args_string = String.concat "," args_values_list 
-  in ("(" ^ function_name ^ " " ^ "{" ^ args_string ^ "}" ^ ")")    
-    (* Scope calls handled, but not completely *)
+    let args_string = String.concat ", " args_values_list in
+    Printf.sprintf "(%s ({ %s } : %s))" func_name args_string input_struct_name
   | EDefault _ | EPureDefault _ | EEmpty | EErrorOnEmpty _ ->
       (* Default logic - will handle later *)
       "default -- default logic not yet implemented\n"
@@ -587,6 +610,14 @@ and format_operator
           (format_expr ~scope_defs ~use_input_prefix arg1) sym (format_expr ~scope_defs ~use_input_prefix arg2)
     | _ -> "default -- wrong number of args for binop"
   in
+  (* Comparison operators return Prop in Lean 4, so wrap with decide to get Bool *)
+  let compop sym =
+    match args with
+    | [arg1; arg2] ->
+        Printf.sprintf "(decide (%s %s %s))"
+          (format_expr ~scope_defs ~use_input_prefix arg1) sym (format_expr ~scope_defs ~use_input_prefix arg2)
+    | _ -> "default -- wrong number of args for compop"
+  in
   let unop sym =
     match args with
     | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr ~scope_defs ~use_input_prefix arg)
@@ -596,7 +627,7 @@ and format_operator
   let format_bool_arg arg =
     let formatted = format_expr ~scope_defs ~use_input_prefix arg in
     if is_bool_operator arg then formatted
-    else Printf.sprintf "decide (%s)" formatted
+    else Printf.sprintf "(decide (%s))" formatted
   in
   match Mark.remove op with
   (* Overloaded operators in desugared AST *)
@@ -613,11 +644,12 @@ and format_operator
       | _ -> "default -- wrong number of args for Mult")
   | Div -> binop "/"
   | Minus -> unop "-"
-  | Lt -> binop "<"
-  | Lte -> binop "≤"
-  | Gt -> binop ">"
-  | Gte -> binop "≥"
-  | Eq -> binop "="
+  (* Comparison operators - wrap with decide to convert Prop to Bool *)
+  | Lt -> compop "<"
+  | Lte -> compop "≤"
+  | Gt -> compop ">"
+  | Gte -> compop "≥"
+  | Eq -> compop "="
   (* Boolean operators - wrap base propositions with decide *)
   | And ->
       (match args with
@@ -829,7 +861,7 @@ let context_to_input (ctx : context_var_info) : input_info = {
 (** Generate a Lean method from a rule tree node.
     Each node becomes its own method that:
     1. Computes local "default" from base rules
-    2. Calls processExceptions2 with exception child methods
+    2. Calls processExceptions with exception child methods
     3. Returns the combined result
 *)
 let rec format_rule_tree_method
@@ -868,7 +900,7 @@ let rec format_rule_tree_method
         | multiple_rules ->
             (* Multiple piecewise rules in leaf *)
             let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs)) multiple_rules in
-            Printf.sprintf "processExceptions2 [%s]" (String.concat ", " rule_bodies)
+            Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies)
       in
       
       let method_def = Printf.sprintf "def %s %s : %s :=\n  %s\n" 
@@ -906,7 +938,7 @@ let rec format_rule_tree_method
         | multiple_rules ->
             (* Multiple piecewise rules - process them first *)
             let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs)) multiple_rules in
-            Printf.sprintf "(processExceptions2 [%s])"
+            Printf.sprintf "(processExceptions [%s])"
               (String.concat ", " rule_bodies)
       in
       
@@ -963,7 +995,7 @@ let rec format_rule_tree_method
           local_default
         else
           Printf.sprintf 
-            "(match processExceptions2 [%s] with\n    | none => %s\n    | some r => some r)"
+            "(match processExceptions [%s] with\n    | none => %s\n    | some r => some r)"
             (String.concat ", " exception_calls)
             local_default
       in
@@ -1004,7 +1036,7 @@ let format_var_methods
     This follows the same logic as format_rule_tree_method but generates inline expressions
     instead of method definitions.
     - Leaf nodes: return Option from base rules
-    - Node nodes: recursively process exception trees, combine with processExceptions2 *)
+    - Node nodes: recursively process exception trees, combine with processExceptions *)
 let rec format_rule_tree_inline
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     (tree : Scopelang.From_desugared.rule_tree)
@@ -1017,7 +1049,7 @@ let rec format_rule_tree_inline
       | [single_rule] -> format_rule_body ~scope_defs ~use_input_prefix:false single_rule
       | multiple_rules ->
           let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false) multiple_rules in
-          Printf.sprintf "processExceptions2 [%s]" (String.concat ", " rule_bodies))
+          Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies))
   | Scopelang.From_desugared.Node (exception_trees, base_rules) ->
       (* Node: process exceptions first, then fall back to base rules *)
       (* Build local_default as Option value *)
@@ -1033,7 +1065,7 @@ let rec format_rule_tree_inline
                      (format_expr ~scope_defs ~use_input_prefix:false cons_expr))
         | multiple_rules ->
             let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false) multiple_rules in
-            Printf.sprintf "(processExceptions2 [%s])"
+            Printf.sprintf "(processExceptions [%s])"
               (String.concat ", " rule_bodies)
       in
       (* Recursively format exception trees as Option expressions *)
@@ -1042,7 +1074,7 @@ let rec format_rule_tree_inline
         local_default
       else
         (* Exceptions take priority: try exceptions first, then fall back to local default *)
-        Printf.sprintf "(match processExceptions2 [%s] with | none => %s | some r => some r)"
+        Printf.sprintf "(match processExceptions [%s] with | none => %s | some r => some r)"
           (String.concat ", " exception_calls) local_default
 
 (** Generate input struct for a scope *)
@@ -1090,7 +1122,7 @@ let format_input_struct
     let format_subscope_field var sub_scope_name =
       let var_name = sanitize_name (ScopeVar.to_string var) in
       let sub_scope_name_str = sanitize_name (ScopeName.to_string sub_scope_name) in
-      let func_name = sanitize_name (String.uncapitalize_ascii sub_scope_name_str) in
+      let func_name = sanitize_name (uncapitalize_qualified_name sub_scope_name_str) in
       
       (* Collect sub-scope input arguments from SubScopeInput definitions (same as get_method_call) *)
       let sub_scope_inputs, has_any_inputs = Ast.ScopeDef.Map.fold (fun def_key scope_def (inp_acc, has_inputs) ->
@@ -1180,12 +1212,12 @@ let format_input_struct
                         let opt_expr = format_rule_tree_inline ~scope_defs:(Some scope_defs) single_tree in
                         Some (Printf.sprintf "(match %s with | some r => r | _ => default)" opt_expr)
                     | multiple_trees ->
-                        (* Multiple independent trees - combine with processExceptions2 *)
+                        (* Multiple independent trees - combine with processExceptions *)
                         let tree_exprs = List.map (format_rule_tree_inline ~scope_defs:(Some scope_defs)) multiple_trees in
-                        Some (Printf.sprintf "(match (processExceptions2 [%s]) with | some r => r | _ => default)"
+                        Some (Printf.sprintf "(match (processExceptions [%s]) with | some r => r | _ => default)"
                           (String.concat ", " tree_exprs)))
                 | None ->
-                    (* No exception graph but has exception rules - use simple processExceptions2 *)
+                    (* No exception graph but has exception rules - use simple processExceptions *)
                     let exception_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) exception_rules in
                     let local_default = match base_rules with
                       | [] -> "default /- no base case -/"
@@ -1199,10 +1231,10 @@ let format_input_struct
                                    (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr))
                       | multiple_rules ->
                           let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) multiple_rules in
-                          Printf.sprintf "(match (processExceptions2 [%s]) with | some r => r | _ => default)"
+                          Printf.sprintf "(match (processExceptions [%s]) with | some r => r | _ => default)"
                             (String.concat ", " rule_bodies)
                     in
-                    Some (Printf.sprintf "(match processExceptions2 [%s] with | none => %s | some r => r)"
+                    Some (Printf.sprintf "(match processExceptions [%s] with | none => %s | some r => r)"
                       (String.concat ", " exception_bodies) local_default)
               else
                 (* No exceptions - use simple direct formatting *)
@@ -1221,7 +1253,7 @@ let format_input_struct
                              (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:false cons_expr)))
                 | multiple_rules ->
                     let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~use_input_prefix:false) multiple_rules in
-                    Some (Printf.sprintf "(match (processExceptions2 [%s]) with | some r => r | _ => default)"
+                    Some (Printf.sprintf "(match (processExceptions [%s]) with | some r => r | _ => default)"
                       (String.concat ", " rule_bodies)))
       in
       
@@ -1289,7 +1321,7 @@ let format_struct_decl (name : string) (fields : typ StructField.Map.t) : string
       (sanitize_name (StructField.to_string field))
       (format_typ ty)
   ) field_list in
-  Printf.sprintf "structure %s where\n%s\nderiving DecidableEq, Inhabited"
+  Printf.sprintf "structure %s where\n%s\nderiving Repr, DecidableEq, Inhabited"
     name
     (String.concat "\n" formatted_fields)
 
@@ -1311,7 +1343,7 @@ let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string
       name 
       ) constructor_list )
       in
-      Printf.sprintf "inductive %s : Type where\n%s\nderiving DecidableEq, Inhabited"
+      Printf.sprintf "inductive %s : Type where\n%s\nderiving Repr, DecidableEq, Inhabited"
         name
         (String.concat "\n" formatted_fields))
     else 
@@ -1322,7 +1354,7 @@ let format_enum_decl (name: string) (fields: typ EnumConstructor.Map.t) : string
       name 
       ) constructor_list)
       in 
-      Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s\nderiving DecidableEq, Inhabited"
+      Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s\nderiving Repr, DecidableEq, Inhabited"
         name
         (String.concat "\n" formatted_fields))
 
@@ -1373,7 +1405,7 @@ let format_scope
 
   (* 5. Generate main scope function that calls methods *)
   (* Use lowercase for function name to avoid conflict with struct name *)
-  let scope_func_name = sanitize_name (String.uncapitalize_ascii scope_name_str) in
+  let scope_func_name = sanitize_name (uncapitalize_qualified_name scope_name_str) in
   let has_input = inputs <> [] in
   let has_context = context_vars <> [] in
   let input_param = Printf.sprintf "(input : %s_Input)" scope_name_str in
@@ -1390,7 +1422,7 @@ let format_scope
       (match var_def.sub_scope_name with
       | Some sub_scope_name ->
           let sub_scope_name_str = sanitize_name (ScopeName.to_string sub_scope_name) in
-          let func_name = sanitize_name (String.uncapitalize_ascii sub_scope_name_str) in
+          let func_name = sanitize_name (uncapitalize_qualified_name sub_scope_name_str) in
           
           (* Collect sub-scope input arguments from SubScopeInput definitions *)
           (* Track if we have any inputs defined (even with no rules) vs no inputs at all *)
@@ -1497,13 +1529,15 @@ let format_scope
 
 (** Generate a complete Lean file from a desugared program *)
 let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.program) : string =
-  let header = "import CaseStudies.Pramaana.CatalaRuntime\n\nimport CaseStudies.Pramaana.Stdlib.Stdlib\n\nopen CatalaRuntime" in
+  let header = "import CatalaRuntime\n\nimport Stdlib\n\nopen CatalaRuntime" in
   
   (* Collect scope input and output struct names to avoid generating them twice *)
   (* (they're generated in format_scope) *)
+  (* Since we now generate ALL scopes (local + imported/unfolded), skip all scope structs *)
   let program_dep_graph = Scopelang.Dependency.build_program_dep_graph prg_scopelang in 
   let defs_ordering = Scopelang.Dependency.get_defs_ordering program_dep_graph in 
   let scope_structs = ScopeName.Map.fold (fun _scope_name scope_info acc ->
+    (* Skip all scope input/output structs - they're generated in format_scope *)
     acc
     |> StructName.Set.add scope_info.in_struct_name
     |> StructName.Set.add scope_info.out_struct_name
@@ -1511,7 +1545,8 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
   
   (* Get topologically sorted list of types (structs and enums together) respecting dependencies *)
   let type_ordering = Scopelang.Dependency.check_type_cycles 
-    prgm.program_ctx.ctx_structs 
+    prgm.program_ctx.ctx_abstract_types
+    prgm.program_ctx.ctx_structs
     prgm.program_ctx.ctx_enums in
   
   (* Types to skip - they are defined elsewhere (e.g., in stdlib) *)
@@ -1540,56 +1575,131 @@ let generate_lean_code (prgm : Ast.program) (prg_scopelang : 'm Scopelang.Ast.pr
           | Some fields ->
               Some (format_enum_decl (sanitize_name enum_name_str) fields)
           | None -> None)
+    | _ -> None
   ) type_ordering in
   
-  (* Generate code for scopes and topdefs in dependency order, also collect scope function names *)
-  let (scope_code, toplevel_function_code, scope_func_names) = List.fold_left (fun (scopes_acc, topdefs_acc, func_names_acc) vertex ->
-    match vertex with
-    | Scopelang.Dependency.Scope (scope_name, _module_opt) -> 
-        (* Check if this scope exists in our program root by matching string name *)
-        let scope_name_str = ScopeName.to_string scope_name in
-        let matching_scope = ScopeName.Map.fold (fun sn scope_decl acc ->
+  (* Helper: find a scope by name in a module's scopes *)
+  let find_scope_in_module scope_name_str module_scopes =
+    ScopeName.Map.fold (fun sn scope_decl acc ->
+      match acc with
+      | Some _ -> acc
+      | None ->
+          if ScopeName.to_string sn = scope_name_str then Some (sn, scope_decl)
+          else None
+    ) module_scopes None
+  in
+  
+  (* Helper: find a scope by name in program_root and all program_modules (unfold imports) *)
+  let find_scope_anywhere scope_name_str =
+    (* First try program_root *)
+    match find_scope_in_module scope_name_str prgm.program_root.module_scopes with
+    | Some result -> Some result
+    | None ->
+        (* Then try all imported modules in program_modules *)
+        ModuleName.Map.fold (fun _mod_name modul acc ->
           match acc with
           | Some _ -> acc
-          | None ->
-              if ScopeName.to_string sn = scope_name_str then Some (sn, scope_decl)
-              else None
-        ) prgm.program_root.module_scopes None in
-        (match matching_scope with
-        | Some (sn, scope_decl) ->
-            let code = format_scope ~program_ctx:(Some prgm.program_ctx) sn scope_decl in
-            (* Generate the function name (lowercase version of scope name) *)
-            let func_name = sanitize_name (String.uncapitalize_ascii (sanitize_name (ScopeName.to_string sn))) in
-            (code :: scopes_acc, topdefs_acc, func_name :: func_names_acc)
-        | None -> (scopes_acc, topdefs_acc, func_names_acc))
-    | Scopelang.Dependency.Topdef topdef_name ->
-        (* Check if this topdef exists in our program root by matching string name *)
-        let topdef_name_str = TopdefName.to_string topdef_name in
-        let matching_topdef = TopdefName.Map.fold (fun tn topdef_decl acc ->
+          | None -> find_scope_in_module scope_name_str modul.Ast.module_scopes
+        ) prgm.program_modules None
+  in
+  
+  (* Helper: find a topdef by name in a module's topdefs *)
+  let find_topdef_in_module topdef_name_str module_topdefs =
+    TopdefName.Map.fold (fun tn topdef_decl acc ->
+      match acc with
+      | Some _ -> acc
+      | None ->
+          if TopdefName.to_string tn = topdef_name_str then Some (tn, topdef_decl)
+          else None
+    ) module_topdefs None
+  in
+  
+  (* Helper: find a topdef by name in program_root and all program_modules (unfold imports) *)
+  let find_topdef_anywhere topdef_name_str =
+    (* First try program_root *)
+    match find_topdef_in_module topdef_name_str prgm.program_root.module_topdefs with
+    | Some result -> Some result
+    | None ->
+        (* Then try all imported modules in program_modules *)
+        ModuleName.Map.fold (fun _mod_name modul acc ->
           match acc with
           | Some _ -> acc
-          | None ->
-              if TopdefName.to_string tn = topdef_name_str then Some (tn, topdef_decl)
-              else None
-        ) prgm.program_root.module_topdefs None in
-        (match matching_topdef with
-        | Some (tn, topdef_decl) ->
-            let code = format_toplevel ~program_ctx:(Some prgm.program_ctx) tn topdef_decl in
-            (scopes_acc, code :: topdefs_acc, func_names_acc)
-        | None -> (scopes_acc, topdefs_acc, func_names_acc))
-  ) ([], [], []) defs_ordering in
+          | None -> find_topdef_in_module topdef_name_str modul.Ast.module_topdefs
+        ) prgm.program_modules None
+  in
+  
+  (* Stdlib module prefixes to skip (already imported via "import Stdlib") *)
+  let stdlib_prefixes = [
+    "Stdlib_en."; "Date_en."; "Date_internal."; "List_en."; "List_internal.";
+    "Duration_en."; "MonthYear_en."; "Period_en."; "Period_internal.";
+    "Money_en."; "Money_internal."; "Integer_en."; "Decimal_en."; "Decimal_internal."
+  ] in
+  let is_stdlib_topdef name_str = 
+    List.exists (fun prefix -> String.length name_str >= String.length prefix && 
+                                String.sub name_str 0 (String.length prefix) = prefix) stdlib_prefixes 
+  in
+  
+  (* Generate code for scopes and topdefs in dependency order, tracking generated scopes *)
+  let (scope_code, toplevel_function_code, scope_func_names, generated_scope_names) = 
+    List.fold_left (fun (scopes_acc, topdefs_acc, func_names_acc, generated_scopes) vertex ->
+      match vertex with
+      | Scopelang.Dependency.Scope (scope_name, _module_opt) -> 
+          (* Find this scope in program_root or any imported module *)
+          let scope_name_str = ScopeName.to_string scope_name in
+          (match find_scope_anywhere scope_name_str with
+          | Some (sn, scope_decl) ->
+              let code = format_scope ~program_ctx:(Some prgm.program_ctx) sn scope_decl in
+              (* Generate the function name (lowercase version of scope name) *)
+              let func_name = sanitize_name (uncapitalize_qualified_name (sanitize_name (ScopeName.to_string sn))) in
+              (code :: scopes_acc, topdefs_acc, func_name :: func_names_acc, 
+               ScopeName.Set.add sn generated_scopes)
+          | None -> (scopes_acc, topdefs_acc, func_names_acc, generated_scopes))
+      | Scopelang.Dependency.Topdef topdef_name ->
+          (* Skip stdlib topdefs - they're already imported via "import Stdlib" *)
+          let topdef_name_str = TopdefName.to_string topdef_name in
+          if is_stdlib_topdef topdef_name_str then
+            (scopes_acc, topdefs_acc, func_names_acc, generated_scopes)
+          else
+            (match find_topdef_anywhere topdef_name_str with
+            | Some (tn, topdef_decl) ->
+                let code = format_toplevel ~program_ctx:(Some prgm.program_ctx) tn topdef_decl in
+                (scopes_acc, code :: topdefs_acc, func_names_acc, generated_scopes)
+            | None -> (scopes_acc, topdefs_acc, func_names_acc, generated_scopes))
+    ) ([], [], [], ScopeName.Set.empty) defs_ordering 
+  in
+  
+  (* Generate ALL remaining scopes from imported modules that weren't in defs_ordering.
+     This ensures subscope scopes that aren't in the direct dependency chain are still generated. *)
+  let (additional_scope_code, additional_scope_func_names) = 
+    ModuleName.Map.fold (fun _mod_name modul (scopes_acc, func_names_acc) ->
+      ScopeName.Map.fold (fun sn scope_decl (inner_scopes_acc, inner_func_names_acc) ->
+        if ScopeName.Set.mem sn generated_scope_names then
+          (* Already generated via defs_ordering *)
+          (inner_scopes_acc, inner_func_names_acc)
+        else
+          (* Generate this scope that was missing from defs_ordering *)
+          let code = format_scope ~program_ctx:(Some prgm.program_ctx) sn scope_decl in
+          let func_name = sanitize_name (uncapitalize_qualified_name (sanitize_name (ScopeName.to_string sn))) in
+          (code :: inner_scopes_acc, func_name :: inner_func_names_acc)
+      ) modul.Ast.module_scopes (scopes_acc, func_names_acc)
+    ) prgm.program_modules ([], [])
+  in
+  
+  (* Combine scope code from defs_ordering and additional scopes *)
+  let all_scope_code = scope_code @ additional_scope_code in
+  let all_scope_func_names = scope_func_names @ additional_scope_func_names in
   
   (* Generate #eval! statements for each scope *)
   let eval_statements = List.map (fun func_name ->
     Printf.sprintf "#reduce %s {}" func_name
-  ) (List.rev scope_func_names) in
+  ) (List.rev all_scope_func_names) in
   
-  (* Combine: header, types (structs and enums in dependency order), topdefs, scopes, then eval statements *)
+  (* Combine: header, types, topdefs, then scopes *)
   let all_parts = List.filter (fun s -> s <> "") [
     header;
     String.concat "\n\n" type_code;
     String.concat "\n\n" (List.rev toplevel_function_code);
-    String.concat "\n\n" (List.rev scope_code);
+    String.concat "\n\n" (List.rev all_scope_code);
     (* String.concat "\n" eval_statements *)
   ] in
   String.concat "\n\n" all_parts
