@@ -1,6 +1,6 @@
-import CaseStudies.Pramaana.Stdlib.Date_en
-import CaseStudies.Pramaana.Stdlib.List_en
-import CaseStudies.Pramaana.Stdlib.Decimal_en
-import CaseStudies.Pramaana.Stdlib.Period_en
-import CaseStudies.Pramaana.Stdlib.Money_en
-import CaseStudies.Pramaana.Stdlib.Optional
+import Stdlib.Date_en
+import Stdlib.List_en
+import Stdlib.Decimal_en
+import Stdlib.Period_en
+import Stdlib.Money_en
+import Stdlib.Optional

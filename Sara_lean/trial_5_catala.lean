@@ -1,11 +1,10 @@
-import CaseStudies.Pramaana.CatalaRuntime
-import CaseStudies.Pramaana.SmtTranslator.Solver
-import CaseStudies.Pramaana.Stdlib.Stdlib
+import CatalaRuntime
+import Stdlib.Stdlib
 
 open CatalaRuntime
 namespace Sections
 
-@[smt_translate] inductive MonthYear_en.Date_en.Month : Type where
+ inductive MonthYear_en.Date_en.Month : Type where
  | January : Unit -> MonthYear_en.Date_en.Month
  | February : Unit -> MonthYear_en.Date_en.Month
  | March : Unit -> MonthYear_en.Date_en.Month
@@ -20,7 +19,7 @@ namespace Sections
  | December : Unit -> MonthYear_en.Date_en.Month
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive FilingStatus : Type where
+ inductive FilingStatus : Type where
  | JointReturn : Unit -> FilingStatus
  | SurvivingSpouse : Unit -> FilingStatus
  | HeadOfHousehold : Unit -> FilingStatus
@@ -28,23 +27,23 @@ deriving DecidableEq, Inhabited
  | MarriedFilingSeparately : Unit -> FilingStatus
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive ResidencyStatus : Type where
+ inductive ResidencyStatus : Type where
  | Resident : Unit -> ResidencyStatus
  | NonresidentAlien : Unit -> ResidencyStatus
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive DecreeType : Type where
+ inductive DecreeType : Type where
  | Divorce : Unit -> DecreeType
  | SeparateMaintenance : Unit -> DecreeType
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive ParentType : Type where
+ inductive ParentType : Type where
  | Biological : Unit -> ParentType
  | Step : Unit -> ParentType
  | Adoptive : Unit -> ParentType
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive FamilyRelationshipType : Type where
+ inductive FamilyRelationshipType : Type where
  | Child : Unit -> FamilyRelationshipType
  | DescendantOfChild : Unit -> FamilyRelationshipType
  | Brother : Unit -> FamilyRelationshipType
@@ -67,7 +66,7 @@ deriving DecidableEq, Inhabited
  | SisterInLaw : Unit -> FamilyRelationshipType
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive OrganizationType : Type where
+ inductive OrganizationType : Type where
  | Business : Unit -> OrganizationType
  | GovernmentFederal : Unit -> OrganizationType
  | GovernmentState : Unit -> OrganizationType
@@ -80,7 +79,7 @@ deriving DecidableEq, Inhabited
  | PenalInstitution : Unit -> OrganizationType
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive EmploymentCategory : Type where
+ inductive EmploymentCategory : Type where
  | General : Unit -> EmploymentCategory
  | AgriculturalLabor : Unit -> EmploymentCategory
  | DomesticService : Unit -> EmploymentCategory
@@ -93,17 +92,17 @@ deriving DecidableEq, Inhabited
  | PenalInstitution : Unit -> EmploymentCategory
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive ServiceLocation : Type where
+ inductive ServiceLocation : Type where
  | WithinUnitedStates : Unit -> ServiceLocation
  | OutsideUnitedStates : Unit -> ServiceLocation
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive PaymentMedium : Type where
+ inductive PaymentMedium : Type where
  | Cash : Unit -> PaymentMedium
  | NonCash : Unit -> PaymentMedium
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive PaymentReason : Type where
+ inductive PaymentReason : Type where
  | RegularCompensation : Unit -> PaymentReason
  | SicknessOrAccidentDisability : Unit -> PaymentReason
  | Death : Unit -> PaymentReason
@@ -112,39 +111,39 @@ deriving DecidableEq, Inhabited
  | DomesticServiceNonBusiness : Unit -> PaymentReason
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive VisaCategory : Type where
+ inductive VisaCategory : Type where
  | H2A : Unit -> VisaCategory
  | Other : Unit -> VisaCategory
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive TerminationReason : Type where
+ inductive TerminationReason : Type where
  | Death : Unit -> TerminationReason
  | DisabilityRetirement : Unit -> TerminationReason
  | Other : Unit -> TerminationReason
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure Individual where
+ structure Individual where
   id : Int
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure Household where
+ structure Household where
   id : Int
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure MonthYear_en.MonthYear where
+ structure MonthYear_en.MonthYear where
   year_number : Int
   month_name : MonthYear_en.Date_en.Month
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure Organization where
+ structure Organization where
   id : Int
   organization_type : OrganizationType
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualSection7703MaritalStatusOutput where
+ structure IndividualSection7703MaritalStatusOutput where
   individual : Individual
   tax_year : Int
   determination_date_7703_a_1 : CatalaRuntime.Date
@@ -157,7 +156,7 @@ deriving DecidableEq, Inhabited
   is_married_for_tax_purposes_7703 : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualSection152QualifyingRelativeOutput where
+ structure IndividualSection152QualifyingRelativeOutput where
   individual : Individual
   taxpayer : Individual
   is_qualifying_relative : Bool
@@ -167,7 +166,7 @@ deriving DecidableEq, Inhabited
   is_not_qualifying_child_152_d_1_D : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualSection152QualifyingChildOutput where
+ structure IndividualSection152QualifyingChildOutput where
   individual : Individual
   taxpayer : Individual
   is_qualifying_child : Bool
@@ -177,7 +176,7 @@ deriving DecidableEq, Inhabited
   has_not_filed_joint_return_152_c_1_E : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualDependentStatus where
+ structure IndividualDependentStatus where
   individual : Individual
   is_qualifying_child : Bool
   is_qualifying_relative : Bool
@@ -185,7 +184,7 @@ deriving DecidableEq, Inhabited
   is_ineligible_under_152_b_1 : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualSection151PersonalExemptionOutput where
+ structure IndividualSection151PersonalExemptionOutput where
   individual : Individual
   exemption_amount_base : CatalaRuntime.Money
   exemption_amount_after_disallowance : CatalaRuntime.Money
@@ -195,13 +194,13 @@ deriving DecidableEq, Inhabited
   exemption_amount_zero_151_d_5 : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualSection151ExemptionsListOutput where
+ structure IndividualSection151ExemptionsListOutput where
   individual : Individual
   spouse_exemption_allowed_151_b : Bool
   individuals_entitled_to_exemptions_under_151 : (List Individual)
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure ImmigrationAdmissionEvent where
+ structure ImmigrationAdmissionEvent where
   id : Int
   individual : Individual
   visa_category : VisaCategory
@@ -209,7 +208,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure TaxReturnEvent where
+ structure TaxReturnEvent where
   id : Int
   individual : Individual
   tax_year : Int
@@ -220,7 +219,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IncomeEvent where
+ structure IncomeEvent where
   id : Int
   individual : Individual
   tax_year : Int
@@ -229,7 +228,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure FamilyRelationshipEvent where
+ structure FamilyRelationshipEvent where
   id : Int
   person : Individual
   relative : Individual
@@ -238,7 +237,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure ParenthoodEvent where
+ structure ParenthoodEvent where
   id : Int
   parent : Individual
   child : Individual
@@ -247,7 +246,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure DivorceOrLegalSeparationEvent where
+ structure DivorceOrLegalSeparationEvent where
   id : Int
   person1 : Individual
   person2 : Individual
@@ -256,14 +255,14 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure RemarriageEvent where
+ structure RemarriageEvent where
   id : Int
   individual : Individual
   remarriage_date : CatalaRuntime.Date
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure MarriageEvent where
+ structure MarriageEvent where
   id : Int
   spouse1 : Individual
   spouse2 : Individual
@@ -271,7 +270,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure MarriedFilingSeparateVariant where
+ structure MarriedFilingSeparateVariant where
   taxpayer : Individual
   spouse : Individual
   itemization_election : Bool
@@ -281,7 +280,7 @@ deriving DecidableEq, Inhabited
   is_partnership : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure SingleVariant where
+ structure SingleVariant where
   taxpayer : Individual
   itemization_election : Bool
   is_estate_or_trust : Bool
@@ -289,7 +288,7 @@ deriving DecidableEq, Inhabited
   is_partnership : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure HeadOfHouseholdVariant where
+ structure HeadOfHouseholdVariant where
   taxpayer : Individual
   qualifying_person : Individual
   itemization_election : Bool
@@ -298,7 +297,7 @@ deriving DecidableEq, Inhabited
   is_partnership : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure SurvivingSpouseVariant where
+ structure SurvivingSpouseVariant where
   taxpayer : Individual
   deceased_spouse : Individual
   qualifying_dependent : Individual
@@ -308,7 +307,7 @@ deriving DecidableEq, Inhabited
   is_partnership : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure JointReturnVariant where
+ structure JointReturnVariant where
   taxpayer : Individual
   spouse : Individual
   itemization_election : Bool
@@ -317,7 +316,7 @@ deriving DecidableEq, Inhabited
   is_partnership : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure NonresidentAlienStatusPeriodEvent where
+ structure NonresidentAlienStatusPeriodEvent where
   id : Int
   individual : Individual
   start_date : CatalaRuntime.Date
@@ -326,14 +325,14 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure DeathEvent where
+ structure DeathEvent where
   id : Int
   decedent : Individual
   death_date : CatalaRuntime.Date
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure BlindnessStatusEvent where
+ structure BlindnessStatusEvent where
   id : Int
   individual : Individual
   status_date : CatalaRuntime.Date
@@ -341,14 +340,14 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure BirthEvent where
+ structure BirthEvent where
   id : Int
   individual : Individual
   birth_date : CatalaRuntime.Date
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure HouseholdMaintenanceEvent where
+ structure HouseholdMaintenanceEvent where
   id : Int
   individual : Individual
   household : Household
@@ -358,7 +357,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure ResidencePeriodEvent where
+ structure ResidencePeriodEvent where
   id : Int
   individual : Individual
   household : Household
@@ -369,7 +368,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure OrganizationSection3306EmployerStatusOutput where
+ structure OrganizationSection3306EmployerStatusOutput where
   organization : Organization
   is_employer : Bool
   is_general_employer : Bool
@@ -377,19 +376,19 @@ deriving DecidableEq, Inhabited
   is_domestic_service_employer : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmployerDomesticServiceVariant where
+ structure EmployerDomesticServiceVariant where
   employer : Organization
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmployerAgriculturalLaborVariant where
+ structure EmployerAgriculturalLaborVariant where
   employer : Organization
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmployerGeneralVariant where
+ structure EmployerGeneralVariant where
   employer : Organization
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmploymentTerminationEvent where
+ structure EmploymentTerminationEvent where
   id : Int
   employer : Organization
   employee : Individual
@@ -398,7 +397,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure HospitalPatientEvent where
+ structure HospitalPatientEvent where
   id : Int
   patient : Individual
   hospital : Organization
@@ -407,7 +406,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure StudentEnrollmentEvent where
+ structure StudentEnrollmentEvent where
   id : Int
   student : Individual
   institution : Organization
@@ -417,7 +416,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure WagePaymentEvent where
+ structure WagePaymentEvent where
   id : Int
   employer : Organization
   employee : Individual
@@ -435,7 +434,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmploymentRelationshipEvent where
+ structure EmploymentRelationshipEvent where
   id : Int
   employer : Organization
   employee : Individual
@@ -448,7 +447,7 @@ deriving DecidableEq, Inhabited
   is_counterfactual : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualSection152DependentsOutput where
+ structure IndividualSection152DependentsOutput where
   taxpayer : Individual
   dependents_initial : (List Individual)
   dependents_after_152b1 : (List Individual)
@@ -458,14 +457,14 @@ deriving DecidableEq, Inhabited
   individual_dependent_statuses : (List IndividualDependentStatus)
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure TaxpayerExemptionsList151Output where
+ structure TaxpayerExemptionsList151Output where
   taxpayer_result : IndividualSection151ExemptionsListOutput
   spouse_result : (Optional IndividualSection151ExemptionsListOutput)
   individuals_entitled_to_exemptions_under_151 : (List Individual)
   spouse_exemption_allowed_151_b : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive FilingStatusVariant : Type where
+ inductive FilingStatusVariant : Type where
  | JointReturn : JointReturnVariant -> FilingStatusVariant
  | SurvivingSpouse : SurvivingSpouseVariant -> FilingStatusVariant
  | HeadOfHousehold : HeadOfHouseholdVariant -> FilingStatusVariant
@@ -473,13 +472,13 @@ deriving DecidableEq, Inhabited
  | MarriedFilingSeparate : MarriedFilingSeparateVariant -> FilingStatusVariant
 deriving DecidableEq, Inhabited
 
-@[smt_translate] inductive EmployerVariant : Type where
+ inductive EmployerVariant : Type where
  | GeneralEmployer : EmployerGeneralVariant -> EmployerVariant
  | AgriculturalEmployer : EmployerAgriculturalLaborVariant -> EmployerVariant
  | DomesticServiceEmployer : EmployerDomesticServiceVariant -> EmployerVariant
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure WagePaymentEventSection3306WagesOutput where
+ structure WagePaymentEventSection3306WagesOutput where
   wage_payment_event : WagePaymentEvent
   is_excluded_by_sickness_disability_death : Bool
   is_excluded_by_nonbusiness_service : Bool
@@ -489,7 +488,7 @@ deriving DecidableEq, Inhabited
   taxable_amount_before_7000_cap : CatalaRuntime.Money
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmploymentRelationshipEventSection3306EmploymentOutput where
+ structure EmploymentRelationshipEventSection3306EmploymentOutput where
   employment_relationship_event : EmploymentRelationshipEvent
   is_employment : Bool
   is_excluded_agricultural_labor : Bool
@@ -505,24 +504,24 @@ deriving DecidableEq, Inhabited
   is_excluded_penal_institution : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualTaxReturn where
+ structure IndividualTaxReturn where
   id : Int
   tax_year : Int
   details : FilingStatusVariant
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmployerUnemploymentExciseTaxReturn where
+ structure EmployerUnemploymentExciseTaxReturn where
   id : Int
   tax_year : Int
   details : EmployerVariant
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure TotalWages3306CalculationOutput where
+ structure TotalWages3306CalculationOutput where
   total_taxable_wages : CatalaRuntime.Money
   wage_results_with_cap : (List WagePaymentEventSection3306WagesOutput)
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualTaxReturnSection68ItemizedDeductionsOutput where
+ structure IndividualTaxReturnSection68ItemizedDeductionsOutput where
   individual_tax_return : IndividualTaxReturn
   applicable_amount_68_b_1 : CatalaRuntime.Money
   three_percent_reduction_68_a_1 : CatalaRuntime.Money
@@ -532,7 +531,7 @@ deriving DecidableEq, Inhabited
   section_not_applicable_68_f : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualTaxReturnSection63TaxableIncomeOutput where
+ structure IndividualTaxReturnSection63TaxableIncomeOutput where
   individual_tax_return : IndividualTaxReturn
   taxable_income : CatalaRuntime.Money
   standard_deduction_63_c_1 : CatalaRuntime.Money
@@ -546,7 +545,7 @@ deriving DecidableEq, Inhabited
   additional_amount_spouse_blind_63_f_2_B : CatalaRuntime.Money
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualTaxReturnSection2bHeadOfHouseholdOutput where
+ structure IndividualTaxReturnSection2bHeadOfHouseholdOutput where
   individual_tax_return : IndividualTaxReturn
   is_legally_separated_2_b_2_A : Bool
   spouse_is_nonresident_alien_2_b_2_B : Bool
@@ -563,7 +562,7 @@ deriving DecidableEq, Inhabited
   is_head_of_household_2_b : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualTaxReturnSection2aSurvivingSpouseOutput where
+ structure IndividualTaxReturnSection2aSurvivingSpouseOutput where
   individual_tax_return : IndividualTaxReturn
   spouse_died_within_two_years_2_a_1_A : Bool
   maintains_household_qualifying_dependent_principal_abode_section151_2_a_1_B : Bool
@@ -572,7 +571,7 @@ deriving DecidableEq, Inhabited
   is_surviving_spouse_2_a : Bool
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure IndividualTaxReturnSection1TaxOutput where
+ structure IndividualTaxReturnSection1TaxOutput where
   individual_tax_return : IndividualTaxReturn
   tax_1_a_1 : CatalaRuntime.Money
   tax_1_a_2 : CatalaRuntime.Money
@@ -582,27 +581,27 @@ deriving DecidableEq, Inhabited
   tax : CatalaRuntime.Money
 deriving DecidableEq, Inhabited
 
-@[smt_translate] structure EmployerUnemploymentExciseTaxFilerSection3301TaxOutput where
+ structure EmployerUnemploymentExciseTaxFilerSection3301TaxOutput where
   employer_unemployment_excise_tax_return : EmployerUnemploymentExciseTaxReturn
   total_taxable_wages : CatalaRuntime.Money
   excise_tax : CatalaRuntime.Money
   tax_rate : Rat
 deriving DecidableEq, Inhabited
 
-@[smt_translate] def get_year_end := (fun (tax_year_arg : Int) => (Date_en.of_year_month_day (tax_year_arg) ((12 : Int)) ((31 : Int))))
+ def get_year_end := (fun (tax_year_arg : Int) => (Date_en.of_year_month_day (tax_year_arg) ((12 : Int)) ((31 : Int))))
 
-@[smt_translate] def get_taxpayer := (fun (individual_tax_return_arg : IndividualTaxReturn) => (match (individual_tax_return_arg).details with   | FilingStatusVariant.JointReturn variant => (variant).taxpayer  | FilingStatusVariant.SurvivingSpouse variant => (variant).taxpayer  | FilingStatusVariant.HeadOfHousehold variant => (variant).taxpayer  | FilingStatusVariant.Single variant => (variant).taxpayer  | FilingStatusVariant.MarriedFilingSeparate variant => (variant).taxpayer))
+ def get_taxpayer := (fun (individual_tax_return_arg : IndividualTaxReturn) => (match (individual_tax_return_arg).details with   | FilingStatusVariant.JointReturn variant => (variant).taxpayer  | FilingStatusVariant.SurvivingSpouse variant => (variant).taxpayer  | FilingStatusVariant.HeadOfHousehold variant => (variant).taxpayer  | FilingStatusVariant.Single variant => (variant).taxpayer  | FilingStatusVariant.MarriedFilingSeparate variant => (variant).taxpayer))
 
-@[smt_translate] def get_spouse := (fun (individual_tax_return_arg : IndividualTaxReturn) => (match (individual_tax_return_arg).details with   | FilingStatusVariant.JointReturn variant => (Optional.Present (variant).spouse)  | FilingStatusVariant.SurvivingSpouse variant => (Optional.Present (variant).deceased_spouse)  | FilingStatusVariant.HeadOfHousehold variant => (Optional.Absent ())  | FilingStatusVariant.Single variant => (Optional.Absent ())  | FilingStatusVariant.MarriedFilingSeparate variant => (Optional.Present (variant).spouse)))
+ def get_spouse := (fun (individual_tax_return_arg : IndividualTaxReturn) => (match (individual_tax_return_arg).details with   | FilingStatusVariant.JointReturn variant => (Optional.Present (variant).spouse)  | FilingStatusVariant.SurvivingSpouse variant => (Optional.Present (variant).deceased_spouse)  | FilingStatusVariant.HeadOfHousehold variant => (Optional.Absent ())  | FilingStatusVariant.Single variant => (Optional.Absent ())  | FilingStatusVariant.MarriedFilingSeparate variant => (Optional.Present (variant).spouse)))
 
-@[smt_translate] def is_tax_year_2018_through_2025 := (fun (tax_year_arg : Int) => (decide ((tax_year_arg ≥ (2018 : Int))) && decide ((tax_year_arg ≤ (2025 : Int)))))
+ def is_tax_year_2018_through_2025 := (fun (tax_year_arg : Int) => (decide ((tax_year_arg ≥ (2018 : Int))) && decide ((tax_year_arg ≤ (2025 : Int)))))
 
-@[smt_translate] def get_last_spouse_from_marriage_events := (fun (individual_arg : Individual) (marriage_events_arg : (List MarriageEvent)) (year_end_arg : CatalaRuntime.Date) => ((fun (valid_marriages : (List (Individual × CatalaRuntime.Date))) => (if ((valid_marriages).length > (0 : Int)) then ((fun (most_recent_marriage_date : CatalaRuntime.Date) => (List_en.first_element ((List.map ((fun (marriage_tuple : (Individual × CatalaRuntime.Date)) => (marriage_tuple).1)) (List.filter ((fun (marriage_tuple : (Individual × CatalaRuntime.Date)) => ((marriage_tuple).2 = most_recent_marriage_date))) valid_marriages))))) ((match (List.map ((fun (marriage_tuple : (Individual × CatalaRuntime.Date)) => (marriage_tuple).2)) valid_marriages) with | [] => (fun () => default /-unsupported expression-/) () | x0 :: xn => List.foldl (fun (max1 : CatalaRuntime.Date) (max2 : CatalaRuntime.Date) => (if (max1 > max2) then max1 else max2)) x0 xn))) else (Optional.Absent ()))) ((List.map ((fun (marriage_event : MarriageEvent) => ((if ((marriage_event).spouse1 = individual_arg) then (marriage_event).spouse2 else (marriage_event).spouse1), (marriage_event).marriage_date))) (List.filter ((fun (marriage_event : MarriageEvent) => ((decide (((marriage_event).spouse1 = individual_arg)) || decide (((marriage_event).spouse2 = individual_arg))) && decide (((marriage_event).marriage_date ≤ year_end_arg))))) marriage_events_arg)))))
+ def get_last_spouse_from_marriage_events := (fun (individual_arg : Individual) (marriage_events_arg : (List MarriageEvent)) (year_end_arg : CatalaRuntime.Date) => ((fun (valid_marriages : (List (Individual × CatalaRuntime.Date))) => (if ((valid_marriages).length > (0 : Int)) then ((fun (most_recent_marriage_date : CatalaRuntime.Date) => (List_en.first_element ((List.map ((fun (marriage_tuple : (Individual × CatalaRuntime.Date)) => (marriage_tuple).1)) (List.filter ((fun (marriage_tuple : (Individual × CatalaRuntime.Date)) => ((marriage_tuple).2 = most_recent_marriage_date))) valid_marriages))))) ((match (List.map ((fun (marriage_tuple : (Individual × CatalaRuntime.Date)) => (marriage_tuple).2)) valid_marriages) with | [] => (fun () => default /-unsupported expression-/) () | x0 :: xn => List.foldl (fun (max1 : CatalaRuntime.Date) (max2 : CatalaRuntime.Date) => (if (max1 > max2) then max1 else max2)) x0 xn))) else (Optional.Absent ()))) ((List.map ((fun (marriage_event : MarriageEvent) => ((if ((marriage_event).spouse1 = individual_arg) then (marriage_event).spouse2 else (marriage_event).spouse1), (marriage_event).marriage_date))) (List.filter ((fun (marriage_event : MarriageEvent) => ((decide (((marriage_event).spouse1 = individual_arg)) || decide (((marriage_event).spouse2 = individual_arg))) && decide (((marriage_event).marriage_date ≤ year_end_arg))))) marriage_events_arg)))))
 
-@[smt_translate] def period_spans_more_than_half_year :   Date → Date → Int → Bool
+ def period_spans_more_than_half_year :   Date → Date → Int → Bool
  := (fun (start_date_arg : CatalaRuntime.Date) (end_date_arg : CatalaRuntime.Date) (tax_year_arg : Int) => ((fun (year_start : CatalaRuntime.Date) => ((fun (year_end : CatalaRuntime.Date) => ((fun (overlap_start : CatalaRuntime.Date) => ((fun (overlap_end : CatalaRuntime.Date) => (if (overlap_start ≤ overlap_end) then ((fun (overlap_duration : CatalaRuntime.Duration) => (overlap_duration > (CatalaRuntime.Duration.create 0 0 182))) ((overlap_end - overlap_start))) else false)) ((Date_en.min (end_date_arg) (year_end))))) ((Date_en.max (start_date_arg) (year_start))))) ((Date_en.of_year_month_day (tax_year_arg) ((12 : Int)) ((31 : Int)))))) ((Date_en.of_year_month_day (tax_year_arg) ((1 : Int)) ((1 : Int))))))
 
-@[smt_translate] structure IndividualTaxReturnSection1Tax_Input where
+ structure IndividualTaxReturnSection1Tax_Input where
   is_head_of_household : Bool
   is_surviving_spouse : Bool
   taxpayer_marital_status : IndividualSection7703MaritalStatusOutput
@@ -615,17 +614,17 @@ deriving DecidableEq, Inhabited
   tax_1_a_1 : CatalaRuntime.Money := (if (taxable_income ≤ (CatalaRuntime.Money.ofCents 3690000)) then (CatalaRuntime.multiply taxable_income (Rat.mk 3 20)) else (if (taxable_income ≤ (CatalaRuntime.Money.ofCents 8915000)) then ((CatalaRuntime.Money.ofCents 553500) + (CatalaRuntime.multiply (taxable_income - (CatalaRuntime.Money.ofCents 3690000)) (Rat.mk 7 25))) else (if (taxable_income ≤ (CatalaRuntime.Money.ofCents 14000000)) then ((CatalaRuntime.Money.ofCents 2016500) + (CatalaRuntime.multiply (taxable_income - (CatalaRuntime.Money.ofCents 8915000)) (Rat.mk 31 100))) else (if (taxable_income ≤ (CatalaRuntime.Money.ofCents 25000000)) then ((CatalaRuntime.Money.ofCents 3592850) + (CatalaRuntime.multiply (taxable_income - (CatalaRuntime.Money.ofCents 14000000)) (Rat.mk 9 25))) else ((CatalaRuntime.Money.ofCents 7552850) + (CatalaRuntime.multiply (taxable_income - (CatalaRuntime.Money.ofCents 25000000)) (Rat.mk 99 250)))))))
   tax : CatalaRuntime.Money := (match (match processExceptions2 [(match processExceptions2 [(match processExceptions2 [(match processExceptions2 [(match processExceptions2 [if is_head_of_household then some (tax_1_b) else none] with | none => if is_surviving_spouse then some (tax_1_a_2) else none | some r => some r)] with | none => if (decide ((taxpayer_marital_status).is_married_for_tax_purposes_7703) && (match (individual_tax_return).details with   | FilingStatusVariant.JointReturn variant => true  | FilingStatusVariant.SurvivingSpouse variant => false  | FilingStatusVariant.HeadOfHousehold variant => false  | FilingStatusVariant.Single variant => false  | FilingStatusVariant.MarriedFilingSeparate variant => false)) then some (tax_1_a_1) else none | some r => some r)] with | none => if (decide ((taxpayer_marital_status).is_married_for_tax_purposes_7703) && (match (individual_tax_return).details with   | FilingStatusVariant.JointReturn variant => false  | FilingStatusVariant.SurvivingSpouse variant => false  | FilingStatusVariant.HeadOfHousehold variant => false  | FilingStatusVariant.Single variant => false  | FilingStatusVariant.MarriedFilingSeparate variant => true)) then some (tax_1_d) else none | some r => some r)] with | none => if ((!decide ((taxpayer_marital_status).is_married_for_tax_purposes_7703)) && ((!decide (is_head_of_household)) && (!decide (is_surviving_spouse)))) then some (tax_1_c) else none | some r => some r)] with | none => some ((CatalaRuntime.Money.ofCents 0)) | some r => some r) with | some r => r | _ => default)
 
-@[smt_translate] def IndividualTaxReturnSection1Tax_main_output_leaf_0 (input : IndividualTaxReturnSection1Tax_Input) : Option IndividualTaxReturnSection1TaxOutput :=
+ def IndividualTaxReturnSection1Tax_main_output_leaf_0 (input : IndividualTaxReturnSection1Tax_Input) : Option IndividualTaxReturnSection1TaxOutput :=
   some (({ individual_tax_return := input.individual_tax_return, tax_1_a_1 := input.tax_1_a_1, tax_1_a_2 := input.tax_1_a_2, tax_1_b := input.tax_1_b, tax_1_c := input.tax_1_c, tax_1_d := input.tax_1_d, tax := input.tax } : IndividualTaxReturnSection1TaxOutput))
 
-@[smt_translate] structure IndividualTaxReturnSection1Tax where
+ structure IndividualTaxReturnSection1Tax where
   main_output : IndividualTaxReturnSection1TaxOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualTaxReturnSection1Tax (input : IndividualTaxReturnSection1Tax_Input) : IndividualTaxReturnSection1Tax :=
+ def individualTaxReturnSection1Tax (input : IndividualTaxReturnSection1Tax_Input) : IndividualTaxReturnSection1Tax :=
   let main_output := match IndividualTaxReturnSection1Tax_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualSection151ExemptionsList_Input where
+ structure IndividualSection151ExemptionsList_Input where
   is_joint_or_surviving_spouse : Bool
   dependents : (List Individual)
   income_events : (List IncomeEvent)
@@ -636,17 +635,17 @@ deriving DecidableEq, Inhabited
   spouse_personal_exemption_allowed : Bool := (if is_joint_or_surviving_spouse then false else (match spouse with   | Optional.Absent _ => false  | Optional.Present s => ((fun (spouse_has_no_income : Bool) => ((fun (spouse_is_not_dependent_of_another : Bool) => (decide (spouse_has_no_income) && decide (spouse_is_not_dependent_of_another))) ((!decide ((List.foldl ((fun (acc : Bool) (event : TaxReturnEvent) => (decide (acc) || ((!decide (((event).individual = individual))) && (decide (((event).tax_year = tax_year)) && decide ((List.foldl ((fun (acc : Bool) (dependent : Individual) => (decide (acc) || decide ((dependent = s))))) false (event).dependents))))))) false tax_return_events)))))) ((!decide ((List.foldl ((fun (acc : Bool) (income_event : IncomeEvent) => (decide (acc) || (decide (((income_event).individual = s)) && (decide (((income_event).tax_year = tax_year)) && decide ((income_event).has_income)))))) false income_events)))))))
   individuals_entitled_to_exemptions_under_151 : (List Individual) := ((fun (individual_list : (List Individual)) => ((fun (spouse_list : (List Individual)) => ((individual_list ++ spouse_list) ++ dependents)) ((match spouse with   | Optional.Absent _ => []  | Optional.Present s => (if spouse_personal_exemption_allowed then [s] else []))))) ([individual]))
 
-@[smt_translate] def IndividualSection151ExemptionsList_main_output_leaf_0 (input : IndividualSection151ExemptionsList_Input) : Option IndividualSection151ExemptionsListOutput :=
+ def IndividualSection151ExemptionsList_main_output_leaf_0 (input : IndividualSection151ExemptionsList_Input) : Option IndividualSection151ExemptionsListOutput :=
   some (({ individual := input.individual, spouse_exemption_allowed_151_b := input.spouse_personal_exemption_allowed, individuals_entitled_to_exemptions_under_151 := input.individuals_entitled_to_exemptions_under_151 } : IndividualSection151ExemptionsListOutput))
 
-@[smt_translate] structure IndividualSection151ExemptionsList where
+ structure IndividualSection151ExemptionsList where
   main_output : IndividualSection151ExemptionsListOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualSection151ExemptionsList (input : IndividualSection151ExemptionsList_Input) : IndividualSection151ExemptionsList :=
+ def individualSection151ExemptionsList (input : IndividualSection151ExemptionsList_Input) : IndividualSection151ExemptionsList :=
   let main_output := match IndividualSection151ExemptionsList_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualSection152QualifyingRelative_Input where
+ structure IndividualSection152QualifyingRelative_Input where
   marriage_events : (List MarriageEvent)
   income_events : (List IncomeEvent)
   tax_return_events : (List TaxReturnEvent)
@@ -662,17 +661,17 @@ deriving DecidableEq, Inhabited
   relationship_requirement_met : Bool := (decide ((List.foldl ((fun (acc : Bool) (rel_event : FamilyRelationshipEvent) => (decide (acc) || (decide (((rel_event).person = taxpayer)) && (decide (((rel_event).relative = individual)) && (decide (((rel_event).start_date ≤ (Date_en.of_year_month_day (tax_year) ((12 : Int)) ((31 : Int))))) && (decide (((rel_event).relationship_type = (FamilyRelationshipType.Child ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.DescendantOfChild ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Brother ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Sister ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Stepbrother ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Stepsister ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Father ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Mother ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.AncestorOfFatherOrMother ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Stepmother ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.Stepfather ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.NieceOrNephew ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.UncleOrAunt ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.SonInLaw ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.DaughterInLaw ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.FatherInLaw ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.MotherInLaw ()))) || (decide (((rel_event).relationship_type = (FamilyRelationshipType.BrotherInLaw ()))) || decide (((rel_event).relationship_type = (FamilyRelationshipType.SisterInLaw ()))))))))))))))))))))))))))) false family_relationship_events)) || decide (relationship_requirement_met_H))
   is_qualifying_relative : Bool := (decide (relationship_requirement_met) && (decide (no_income_requirement_met) && decide (not_qualifying_child_requirement_met)))
 
-@[smt_translate] def IndividualSection152QualifyingRelative_main_output_leaf_0 (input : IndividualSection152QualifyingRelative_Input) : Option IndividualSection152QualifyingRelativeOutput :=
+ def IndividualSection152QualifyingRelative_main_output_leaf_0 (input : IndividualSection152QualifyingRelative_Input) : Option IndividualSection152QualifyingRelativeOutput :=
   some (({ individual := input.individual, taxpayer := input.taxpayer, is_qualifying_relative := input.is_qualifying_relative, is_household_member_152_d_2_H := input.relationship_requirement_met_H, bears_relationship_152_d_1_A := input.relationship_requirement_met, has_no_income_152_d_1_B := input.no_income_requirement_met, is_not_qualifying_child_152_d_1_D := input.not_qualifying_child_requirement_met } : IndividualSection152QualifyingRelativeOutput))
 
-@[smt_translate] structure IndividualSection152QualifyingRelative where
+ structure IndividualSection152QualifyingRelative where
   main_output : IndividualSection152QualifyingRelativeOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualSection152QualifyingRelative (input : IndividualSection152QualifyingRelative_Input) : IndividualSection152QualifyingRelative :=
+ def individualSection152QualifyingRelative (input : IndividualSection152QualifyingRelative_Input) : IndividualSection152QualifyingRelative :=
   let main_output := match IndividualSection152QualifyingRelative_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure OrganizationSection3306EmployerStatus_Input where
+ structure OrganizationSection3306EmployerStatus_Input where
   employment_relationship_events : (List EmploymentRelationshipEvent)
   wage_payment_events : (List WagePaymentEvent)
   calendar_year : Int
@@ -691,17 +690,17 @@ deriving DecidableEq, Inhabited
   is_general_employer : Bool := (match (match processExceptions2 [if ((fun (relevant_employment_events : (List EmploymentRelationshipEvent)) => (section_3306_has_ten_days_in_different_weeks relevant_employment_events calendar_year (1 : Int))) (List.filter ((fun (emp_event : EmploymentRelationshipEvent) => (decide ((((emp_event).employer).id = (organization).id)) && ((decide (((Date_en.get_year (emp_event).start_date) = calendar_year)) || (decide (((Date_en.get_year (emp_event).start_date) = (calendar_year - (1 : Int)))) || (decide (((Date_en.get_year (emp_event).end_date) = calendar_year)) || decide (((Date_en.get_year (emp_event).end_date) = (calendar_year - (1 : Int))))))) && (!decide (((emp_event).employment_category = (EmploymentCategory.DomesticService ())))))))) employment_relationship_events)) then some (true) else none] with | none => some (decide ((fun (relevant_wage_events : (List WagePaymentEvent)) => ((fun (total_wages : CatalaRuntime.Money) => (total_wages ≥ (CatalaRuntime.Money.ofCents 150000))) (match (List.map ((fun (wage_event : WagePaymentEvent) => (wage_event).amount)) relevant_wage_events) with | [] => (fun () => (CatalaRuntime.Money.ofCents 0)) () | x0 :: xn => List.foldl (fun (sum1 : CatalaRuntime.Money) (sum2 : CatalaRuntime.Money) => (sum1 + sum2)) x0 xn))) (List.filter ((fun (wage_event : WagePaymentEvent) => (decide ((((wage_event).employer).id = (organization).id)) && ((decide (((Date_en.get_year (wage_event).payment_date) = calendar_year)) || decide (((Date_en.get_year (wage_event).payment_date) = (calendar_year - (1 : Int))))) && (!decide ((List.foldl ((fun (acc : Bool) (emp_event : EmploymentRelationshipEvent) => (decide (acc) || (decide ((((emp_event).employer).id = (organization).id)) && (decide ((((emp_event).employee).id = ((wage_event).employee).id)) && decide (((emp_event).employment_category = (EmploymentCategory.DomesticService ())))))))) false employment_relationship_events))))))) wage_payment_events))) | some r => some r) with | some r => r | _ => default)
   is_employer : Bool := (decide (is_general_employer) || (decide (is_agricultural_employer) || decide (is_domestic_service_employer)))
 
-@[smt_translate] def OrganizationSection3306EmployerStatus_main_output_leaf_0 (input : OrganizationSection3306EmployerStatus_Input) : Option OrganizationSection3306EmployerStatusOutput :=
+ def OrganizationSection3306EmployerStatus_main_output_leaf_0 (input : OrganizationSection3306EmployerStatus_Input) : Option OrganizationSection3306EmployerStatusOutput :=
   some (({ organization := input.organization, is_employer := input.is_employer, is_general_employer := input.is_general_employer, is_agricultural_employer := input.is_agricultural_employer, is_domestic_service_employer := input.is_domestic_service_employer } : OrganizationSection3306EmployerStatusOutput))
 
-@[smt_translate] structure OrganizationSection3306EmployerStatus where
+ structure OrganizationSection3306EmployerStatus where
   main_output : OrganizationSection3306EmployerStatusOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def organizationSection3306EmployerStatus (input : OrganizationSection3306EmployerStatus_Input) : OrganizationSection3306EmployerStatus :=
+ def organizationSection3306EmployerStatus (input : OrganizationSection3306EmployerStatus_Input) : OrganizationSection3306EmployerStatus :=
   let main_output := match OrganizationSection3306EmployerStatus_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure WagePaymentEventSection3306Wages_Input where
+ structure WagePaymentEventSection3306Wages_Input where
   death_events : (List DeathEvent)
   employment_termination_events : (List EmploymentTerminationEvent)
   wage_payment_event : WagePaymentEvent
@@ -712,31 +711,31 @@ deriving DecidableEq, Inhabited
   is_excluded_by_survivor_payment : Bool := ((fun (is_paid_to_survivor_or_estate : Bool) => ((fun (payment_year : Int) => ((fun (employee_local : Individual) => ((fun (employee_died_in_previous_year : Bool) => (decide (is_paid_to_survivor_or_estate) && decide (employee_died_in_previous_year))) ((List.foldl ((fun (acc : Bool) (death_event : DeathEvent) => (decide (acc) || (decide ((((death_event).decedent).id = (employee_local).id)) && decide (((Date_en.get_year ((death_event).death_date)) < payment_year)))))) false death_events)))) ((wage_payment_event).employee))) ((Date_en.get_year ((wage_payment_event).payment_date))))) ((wage_payment_event).is_paid_to_survivor_or_estate))
   taxable_amount_before_7000_cap : CatalaRuntime.Money := (if (decide (is_excluded_by_sickness_disability_death) || (decide (is_excluded_by_nonbusiness_service) || (decide (is_excluded_by_termination_payment) || (decide (is_excluded_by_agricultural_noncash) || decide (is_excluded_by_survivor_payment))))) then (CatalaRuntime.Money.ofCents 0) else (wage_payment_event).amount)
 
-@[smt_translate] def WagePaymentEventSection3306Wages_main_output_leaf_0 (input : WagePaymentEventSection3306Wages_Input) : Option WagePaymentEventSection3306WagesOutput :=
+ def WagePaymentEventSection3306Wages_main_output_leaf_0 (input : WagePaymentEventSection3306Wages_Input) : Option WagePaymentEventSection3306WagesOutput :=
   some (({ wage_payment_event := input.wage_payment_event, is_excluded_by_sickness_disability_death := input.is_excluded_by_sickness_disability_death, is_excluded_by_nonbusiness_service := input.is_excluded_by_nonbusiness_service, is_excluded_by_termination_payment := input.is_excluded_by_termination_payment, is_excluded_by_agricultural_noncash := input.is_excluded_by_agricultural_noncash, is_excluded_by_survivor_payment := input.is_excluded_by_survivor_payment, taxable_amount_before_7000_cap := input.taxable_amount_before_7000_cap } : WagePaymentEventSection3306WagesOutput))
 
-@[smt_translate] structure WagePaymentEventSection3306Wages where
+ structure WagePaymentEventSection3306Wages where
   main_output : WagePaymentEventSection3306WagesOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def wagePaymentEventSection3306Wages (input : WagePaymentEventSection3306Wages_Input) : WagePaymentEventSection3306Wages :=
+ def wagePaymentEventSection3306Wages (input : WagePaymentEventSection3306Wages_Input) : WagePaymentEventSection3306Wages :=
   let main_output := match WagePaymentEventSection3306Wages_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure TotalWages3306Calculation_Input where
+ structure TotalWages3306Calculation_Input where
   wage_results : (List WagePaymentEventSection3306WagesOutput)
   total_taxable_wages : CatalaRuntime.Money := ((fun (total_before_cap : CatalaRuntime.Money) => (if (total_before_cap > (CatalaRuntime.Money.ofCents 700000)) then (CatalaRuntime.Money.ofCents 700000) else total_before_cap)) ((match (List.map ((fun (wage_result : WagePaymentEventSection3306WagesOutput) => (wage_result).taxable_amount_before_7000_cap)) wage_results) with | [] => (fun () => (CatalaRuntime.Money.ofCents 0)) () | x0 :: xn => List.foldl (fun (sum1 : CatalaRuntime.Money) (sum2 : CatalaRuntime.Money) => (sum1 + sum2)) x0 xn)))
 
-@[smt_translate] def TotalWages3306Calculation_main_output_leaf_0 (input : TotalWages3306Calculation_Input) : Option TotalWages3306CalculationOutput :=
+ def TotalWages3306Calculation_main_output_leaf_0 (input : TotalWages3306Calculation_Input) : Option TotalWages3306CalculationOutput :=
   some (({ total_taxable_wages := input.total_taxable_wages, wage_results_with_cap := input.wage_results } : TotalWages3306CalculationOutput))
 
-@[smt_translate] structure TotalWages3306Calculation where
+ structure TotalWages3306Calculation where
   main_output : TotalWages3306CalculationOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def totalWages3306Calculation (input : TotalWages3306Calculation_Input) : TotalWages3306Calculation :=
+ def totalWages3306Calculation (input : TotalWages3306Calculation_Input) : TotalWages3306Calculation :=
   let main_output := match TotalWages3306Calculation_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure EmploymentRelationshipEventSection3306Employment_Input where
+ structure EmploymentRelationshipEventSection3306Employment_Input where
   marriage_events : (List MarriageEvent)
   birth_events : (List BirthEvent)
   parenthood_events : (List ParenthoodEvent)
@@ -761,17 +760,17 @@ deriving DecidableEq, Inhabited
   is_excluded_agricultural_labor : Bool := (if ((employment_relationship_event).employment_category = (EmploymentCategory.AgriculturalLabor ())) then ((fun (employer_local : Organization) => ((fun (employer_is_agricultural_employer : Bool) => ((fun (is_h2a_alien : Bool) => ((!decide (employer_is_agricultural_employer)) || decide (is_h2a_alien))) ((List.foldl ((fun (acc : Bool) (iae : ImmigrationAdmissionEvent) => (decide (acc) || (decide ((((iae).individual).id = ((employment_relationship_event).employee).id)) && decide (((iae).visa_category = (VisaCategory.H2A ()))))))) false immigration_admission_events)))) ((employer_status).is_agricultural_employer))) ((employment_relationship_event).employer)) else false)
   is_employment : Bool := ((fun (is_within_us : Bool) => ((fun (is_outside_us_by_us_citizen : Bool) => ((decide (is_within_us) || decide (is_outside_us_by_us_citizen)) && ((!decide (is_excluded_agricultural_labor)) && ((!decide (is_excluded_domestic_service)) && ((!decide (is_excluded_family_employment)) && ((!decide (is_excluded_federal_government)) && ((!decide (is_excluded_state_government)) && ((!decide (is_excluded_student_service)) && ((!decide (is_excluded_hospital_patient_service)) && ((!decide (is_excluded_foreign_government)) && ((!decide (is_excluded_student_nurse)) && ((!decide (is_excluded_international_organization)) && (!decide (is_excluded_penal_institution)))))))))))))) ((decide (((employment_relationship_event).service_location = (ServiceLocation.OutsideUnitedStates ()))) && (decide ((employment_relationship_event).employee_is_us_citizen) && decide ((employment_relationship_event).is_american_employer)))))) (((employment_relationship_event).service_location = (ServiceLocation.WithinUnitedStates ()))))
 
-@[smt_translate] def EmploymentRelationshipEventSection3306Employment_main_output_leaf_0 (input : EmploymentRelationshipEventSection3306Employment_Input) : Option EmploymentRelationshipEventSection3306EmploymentOutput :=
+ def EmploymentRelationshipEventSection3306Employment_main_output_leaf_0 (input : EmploymentRelationshipEventSection3306Employment_Input) : Option EmploymentRelationshipEventSection3306EmploymentOutput :=
   some (({ employment_relationship_event := input.employment_relationship_event, is_employment := input.is_employment, is_excluded_agricultural_labor := input.is_excluded_agricultural_labor, is_excluded_domestic_service := input.is_excluded_domestic_service, is_excluded_family_employment := input.is_excluded_family_employment, is_excluded_federal_government := input.is_excluded_federal_government, is_excluded_state_government := input.is_excluded_state_government, is_excluded_student_service := input.is_excluded_student_service, is_excluded_hospital_patient_service := input.is_excluded_hospital_patient_service, is_excluded_foreign_government := input.is_excluded_foreign_government, is_excluded_student_nurse := input.is_excluded_student_nurse, is_excluded_international_organization := input.is_excluded_international_organization, is_excluded_penal_institution := input.is_excluded_penal_institution } : EmploymentRelationshipEventSection3306EmploymentOutput))
 
-@[smt_translate] structure EmploymentRelationshipEventSection3306Employment where
+ structure EmploymentRelationshipEventSection3306Employment where
   main_output : EmploymentRelationshipEventSection3306EmploymentOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def employmentRelationshipEventSection3306Employment (input : EmploymentRelationshipEventSection3306Employment_Input) : EmploymentRelationshipEventSection3306Employment :=
+ def employmentRelationshipEventSection3306Employment (input : EmploymentRelationshipEventSection3306Employment_Input) : EmploymentRelationshipEventSection3306Employment :=
   let main_output := match EmploymentRelationshipEventSection3306Employment_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure EmployerUnemploymentExciseTaxFilerSection3301Tax_Input where
+ structure EmployerUnemploymentExciseTaxFilerSection3301Tax_Input where
   employment_relationship_employment_results : (List EmploymentRelationshipEventSection3306EmploymentOutput)
   organization_employer_statuses : (List OrganizationSection3306EmployerStatusOutput)
   wage_payment_wages_results : (List WagePaymentEventSection3306WagesOutput)
@@ -780,23 +779,23 @@ deriving DecidableEq, Inhabited
   total_taxable_wages : CatalaRuntime.Money := (match (match processExceptions2 [if ((fun (employer_local : Organization) => (!decide ((List.foldl ((fun (acc : Bool) (org_status : OrganizationSection3306EmployerStatusOutput) => (decide (acc) || (decide ((((org_status).organization).id = (employer_local).id)) && decide ((org_status).is_employer))))) false organization_employer_statuses)))) ((match (employer_unemployment_excise_tax_return).details with   | EmployerVariant.GeneralEmployer variant => (variant).employer  | EmployerVariant.AgriculturalEmployer variant => (variant).employer  | EmployerVariant.DomesticServiceEmployer variant => (variant).employer))) then some ((CatalaRuntime.Money.ofCents 0)) else none] with | none => some (((fun (employer_local : Organization) => ((fun (wages_for_employer : (List WagePaymentEventSection3306WagesOutput)) => ((fun (wages_for_employment : (List WagePaymentEventSection3306WagesOutput)) => ((fun (unique_employee_wage_results : (List WagePaymentEventSection3306WagesOutput)) => ((fun (unique_employee_ids : (List Int)) => (match (List.map ((fun (emp_id_local : Int) => ((fun (employee_wages : (List WagePaymentEventSection3306WagesOutput)) => (((totalWages3306Calculation {wage_results:=employee_wages})).main_output).total_taxable_wages) ((List.filter ((fun (wage_result : WagePaymentEventSection3306WagesOutput) => ((((wage_result).wage_payment_event).employee).id = emp_id_local))) wages_for_employment))))) unique_employee_ids) with | [] => (fun () => (CatalaRuntime.Money.ofCents 0)) () | x0 :: xn => List.foldl (fun (sum1 : CatalaRuntime.Money) (sum2 : CatalaRuntime.Money) => (sum1 + sum2)) x0 xn)) ((List.map ((fun (wage_result : WagePaymentEventSection3306WagesOutput) => (((wage_result).wage_payment_event).employee).id)) unique_employee_wage_results)))) ((List.filter ((fun (wage_result : WagePaymentEventSection3306WagesOutput) => (!decide ((List.foldl ((fun (acc : Bool) (prev_wage_result : WagePaymentEventSection3306WagesOutput) => (decide (acc) || (decide (((((prev_wage_result).wage_payment_event).employee).id = (((wage_result).wage_payment_event).employee).id)) && decide ((((prev_wage_result).wage_payment_event).id < ((wage_result).wage_payment_event).id)))))) false wages_for_employment))))) wages_for_employment)))) ((List.filter ((fun (wage_result : WagePaymentEventSection3306WagesOutput) => (List.foldl ((fun (acc : Bool) (emp_result : EmploymentRelationshipEventSection3306EmploymentOutput) => (decide (acc) || (decide (((((emp_result).employment_relationship_event).employer).id = (((wage_result).wage_payment_event).employer).id)) && (decide (((((emp_result).employment_relationship_event).employee).id = (((wage_result).wage_payment_event).employee).id)) && (decide ((((emp_result).employment_relationship_event).start_date ≤ ((wage_result).wage_payment_event).payment_date)) && ((decide (((Date_en.get_year (((emp_result).employment_relationship_event).start_date)) = (employer_unemployment_excise_tax_return).tax_year)) || decide (((Date_en.get_year (((emp_result).employment_relationship_event).end_date)) = (employer_unemployment_excise_tax_return).tax_year))) && decide ((emp_result).is_employment)))))))) false employment_relationship_employment_results))) wages_for_employer)))) ((List.filter ((fun (wage_result : WagePaymentEventSection3306WagesOutput) => (decide (((((wage_result).wage_payment_event).employer).id = (employer_local).id)) && decide (((Date_en.get_year (((wage_result).wage_payment_event).payment_date)) = (employer_unemployment_excise_tax_return).tax_year))))) wage_payment_wages_results)))) ((match (employer_unemployment_excise_tax_return).details with   | EmployerVariant.GeneralEmployer variant => (variant).employer  | EmployerVariant.AgriculturalEmployer variant => (variant).employer  | EmployerVariant.DomesticServiceEmployer variant => (variant).employer)))) | some r => some r) with | some r => r | _ => default)
   excise_tax : CatalaRuntime.Money := (CatalaRuntime.multiply total_taxable_wages tax_rate)
 
-@[smt_translate] def EmployerUnemploymentExciseTaxFilerSection3301Tax_main_output_leaf_0 (input : EmployerUnemploymentExciseTaxFilerSection3301Tax_Input) : Option EmployerUnemploymentExciseTaxFilerSection3301TaxOutput :=
+ def EmployerUnemploymentExciseTaxFilerSection3301Tax_main_output_leaf_0 (input : EmployerUnemploymentExciseTaxFilerSection3301Tax_Input) : Option EmployerUnemploymentExciseTaxFilerSection3301TaxOutput :=
   some (({ employer_unemployment_excise_tax_return := input.employer_unemployment_excise_tax_return, total_taxable_wages := input.total_taxable_wages, excise_tax := input.excise_tax, tax_rate := input.tax_rate } : EmployerUnemploymentExciseTaxFilerSection3301TaxOutput))
 
-@[smt_translate] structure EmployerUnemploymentExciseTaxFilerSection3301Tax where
+ structure EmployerUnemploymentExciseTaxFilerSection3301Tax where
   tax_rate : Rat
   total_taxable_wages : CatalaRuntime.Money
   excise_tax : CatalaRuntime.Money
   main_output : EmployerUnemploymentExciseTaxFilerSection3301TaxOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def employerUnemploymentExciseTaxFilerSection3301Tax (input : EmployerUnemploymentExciseTaxFilerSection3301Tax_Input) : EmployerUnemploymentExciseTaxFilerSection3301Tax :=
+ def employerUnemploymentExciseTaxFilerSection3301Tax (input : EmployerUnemploymentExciseTaxFilerSection3301Tax_Input) : EmployerUnemploymentExciseTaxFilerSection3301Tax :=
   let main_output := match EmployerUnemploymentExciseTaxFilerSection3301Tax_main_output_leaf_0 input with | some val => val | _ => default
   { tax_rate := input.tax_rate,
     total_taxable_wages := input.total_taxable_wages,
     excise_tax := input.excise_tax,
     main_output := main_output }
 
-@[smt_translate] structure TaxpayerExemptionsList151_Input where
+ structure TaxpayerExemptionsList151_Input where
   dependents : (List Individual)
   income_events : (List IncomeEvent)
   tax_return_events : (List TaxReturnEvent)
@@ -806,18 +805,18 @@ deriving DecidableEq, Inhabited
   spouse_personal_exemption_allowed : Bool := ((taxpayer_exemptions).main_output).spouse_exemption_allowed_151_b
   individuals_entitled_to_exemptions_under_151 : (List Individual) := ((fun (taxpayer_list : (List Individual)) => ((fun (spouse_unique_list : (List Individual)) => (taxpayer_list ++ spouse_unique_list)) ((match spouse_result with   | Optional.Absent _ => []  | Optional.Present s_result => (List.filter ((fun (individual : Individual) => (!decide ((List.foldl ((fun (acc : Bool) (taxpayer_individual : Individual) => (decide (acc) || decide ((taxpayer_individual = individual))))) false taxpayer_list))))) (s_result).individuals_entitled_to_exemptions_under_151))))) (((taxpayer_exemptions).main_output).individuals_entitled_to_exemptions_under_151))
 
-@[smt_translate] def TaxpayerExemptionsList151_main_output_leaf_0 (input : TaxpayerExemptionsList151_Input) (taxpayer_exemptions : IndividualSection151ExemptionsList) : Option TaxpayerExemptionsList151Output :=
+ def TaxpayerExemptionsList151_main_output_leaf_0 (input : TaxpayerExemptionsList151_Input) (taxpayer_exemptions : IndividualSection151ExemptionsList) : Option TaxpayerExemptionsList151Output :=
   some (({ taxpayer_result := (taxpayer_exemptions).main_output, spouse_result := input.spouse_result, individuals_entitled_to_exemptions_under_151 := input.individuals_entitled_to_exemptions_under_151, spouse_exemption_allowed_151_b := input.spouse_personal_exemption_allowed } : TaxpayerExemptionsList151Output))
 
-@[smt_translate] structure TaxpayerExemptionsList151 where
+ structure TaxpayerExemptionsList151 where
   main_output : TaxpayerExemptionsList151Output
 deriving DecidableEq, Inhabited
-@[smt_translate] def taxpayerExemptionsList151 (input : TaxpayerExemptionsList151_Input) : TaxpayerExemptionsList151 :=
+ def taxpayerExemptionsList151 (input : TaxpayerExemptionsList151_Input) : TaxpayerExemptionsList151 :=
   let taxpayer_exemptions := individualSection151ExemptionsList { individual := (get_taxpayer (input.individual_tax_return)), spouse := (get_spouse (input.individual_tax_return)), tax_year := (input.individual_tax_return).tax_year, tax_return_events := input.tax_return_events, income_events := input.income_events, dependents := input.dependents, is_joint_or_surviving_spouse := (match (input.individual_tax_return).details with   | FilingStatusVariant.JointReturn variant => true  | FilingStatusVariant.SurvivingSpouse variant => true  | FilingStatusVariant.HeadOfHousehold variant => false  | FilingStatusVariant.Single variant => false  | FilingStatusVariant.MarriedFilingSeparate variant => false) }
   let main_output := match TaxpayerExemptionsList151_main_output_leaf_0 input taxpayer_exemptions with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualTaxReturnSection2aSurvivingSpouse_Input where
+ structure IndividualTaxReturnSection2aSurvivingSpouse_Input where
   taxpayer_exemptions_list_result : TaxpayerExemptionsList151Output
   marriage_events : (List MarriageEvent)
   residence_period_events : (List ResidencePeriodEvent)
@@ -835,17 +834,17 @@ deriving DecidableEq, Inhabited
   has_remarried_2_a_2_A : Bool := ((fun (taxpayer_local : Individual) => ((fun (spouse_local : (Optional Individual)) => ((fun (spouse_death_events_in_window_local : (List DeathEvent)) => ((fun (most_recent_spouse_death_date_local : CatalaRuntime.Date) => (List.foldl ((fun (acc : Bool) (marriage_event : MarriageEvent) => (decide (acc) || ((decide (((marriage_event).spouse1 = taxpayer_local)) || decide (((marriage_event).spouse2 = taxpayer_local))) && (decide (((marriage_event).marriage_date > most_recent_spouse_death_date_local)) && decide (((marriage_event).marriage_date ≤ (get_year_end ((individual_tax_return).tax_year))))))))) false marriage_events)) ((most_recent_spouse_death_date (spouse_death_events_in_window_local) ((individual_tax_return).tax_year))))) ((spouse_death_events_in_window (spouse_local) (death_events) ((individual_tax_return).tax_year))))) ((get_spouse (individual_tax_return))))) ((get_taxpayer (individual_tax_return))))
   is_surviving_spouse_2_a : Bool := (match (match processExceptions2 [processExceptions2 [if has_remarried_2_a_2_A then some (false) else none, if (!decide (joint_return_could_have_been_made_2_a_2_B)) then some (false) else none]] with | none => some ((decide (spouse_died_within_two_years_2_a_1_A) && decide (maintains_household_qualifying_dependent_principal_abode_section151_2_a_1_B))) | some r => some r) with | some r => r | _ => default)
 
-@[smt_translate] def IndividualTaxReturnSection2aSurvivingSpouse_main_output_leaf_0 (input : IndividualTaxReturnSection2aSurvivingSpouse_Input) : Option IndividualTaxReturnSection2aSurvivingSpouseOutput :=
+ def IndividualTaxReturnSection2aSurvivingSpouse_main_output_leaf_0 (input : IndividualTaxReturnSection2aSurvivingSpouse_Input) : Option IndividualTaxReturnSection2aSurvivingSpouseOutput :=
   some (({ individual_tax_return := input.individual_tax_return, spouse_died_within_two_years_2_a_1_A := input.spouse_died_within_two_years_2_a_1_A, maintains_household_qualifying_dependent_principal_abode_section151_2_a_1_B := input.maintains_household_qualifying_dependent_principal_abode_section151_2_a_1_B, has_remarried_2_a_2_A := input.has_remarried_2_a_2_A, joint_return_could_have_been_made_2_a_2_B := input.joint_return_could_have_been_made_2_a_2_B, is_surviving_spouse_2_a := input.is_surviving_spouse_2_a } : IndividualTaxReturnSection2aSurvivingSpouseOutput))
 
-@[smt_translate] structure IndividualTaxReturnSection2aSurvivingSpouse where
+ structure IndividualTaxReturnSection2aSurvivingSpouse where
   main_output : IndividualTaxReturnSection2aSurvivingSpouseOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualTaxReturnSection2aSurvivingSpouse (input : IndividualTaxReturnSection2aSurvivingSpouse_Input) : IndividualTaxReturnSection2aSurvivingSpouse :=
+ def individualTaxReturnSection2aSurvivingSpouse (input : IndividualTaxReturnSection2aSurvivingSpouse_Input) : IndividualTaxReturnSection2aSurvivingSpouse :=
   let main_output := match IndividualTaxReturnSection2aSurvivingSpouse_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualSection151PersonalExemption_Input where
+ structure IndividualSection151PersonalExemption_Input where
   all_individuals_entitled_to_exemptions_under_151 : (List Individual)
   applicable_amount : CatalaRuntime.Money
   adjusted_gross_income : CatalaRuntime.Money
@@ -861,17 +860,17 @@ deriving DecidableEq, Inhabited
   exemption_amount_after_phaseout : CatalaRuntime.Money := (match (match processExceptions2 [if exemption_amount_zero_151_d_5 then some ((CatalaRuntime.Money.ofCents 0)) else none] with | none => some ((if (adjusted_gross_income > applicable_amount) then ((fun (reduction : CatalaRuntime.Money) => (exemption_amount_after_disallowance - reduction)) ((CatalaRuntime.toMoney (CatalaRuntime.multiply (CatalaRuntime.toRat exemption_amount_after_disallowance) applicable_percentage_151_d_3_B)))) else exemption_amount_after_disallowance)) | some r => some r) with | some r => r | _ => default)
   personal_exemptions_deduction_151_a : CatalaRuntime.Money := ((fun (n : Rat) => (CatalaRuntime.toMoney (CatalaRuntime.multiply n (CatalaRuntime.toRat exemption_amount_after_phaseout)))) ((CatalaRuntime.toRat number_of_personal_exemptions_151_c)))
 
-@[smt_translate] def IndividualSection151PersonalExemption_main_output_leaf_0 (input : IndividualSection151PersonalExemption_Input) : Option IndividualSection151PersonalExemptionOutput :=
+ def IndividualSection151PersonalExemption_main_output_leaf_0 (input : IndividualSection151PersonalExemption_Input) : Option IndividualSection151PersonalExemptionOutput :=
   some (({ individual := input.individual, exemption_amount_base := input.exemption_amount_base, exemption_amount_after_disallowance := input.exemption_amount_after_disallowance, exemption_amount_after_phaseout := input.exemption_amount_after_phaseout, personal_exemptions_deduction_151_a := input.personal_exemptions_deduction_151_a, applicable_percentage_151_d_3_B := input.applicable_percentage_151_d_3_B, exemption_amount_zero_151_d_5 := input.exemption_amount_zero_151_d_5 } : IndividualSection151PersonalExemptionOutput))
 
-@[smt_translate] structure IndividualSection151PersonalExemption where
+ structure IndividualSection151PersonalExemption where
   main_output : IndividualSection151PersonalExemptionOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualSection151PersonalExemption (input : IndividualSection151PersonalExemption_Input) : IndividualSection151PersonalExemption :=
+ def individualSection151PersonalExemption (input : IndividualSection151PersonalExemption_Input) : IndividualSection151PersonalExemption :=
   let main_output := match IndividualSection151PersonalExemption_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualTaxReturnSection68ItemizedDeductions_Input where
+ structure IndividualTaxReturnSection68ItemizedDeductions_Input where
   is_head_of_household : Bool
   is_surviving_spouse : Bool
   taxpayer_marital_status : IndividualSection7703MaritalStatusOutput
@@ -885,17 +884,17 @@ deriving DecidableEq, Inhabited
   reduction_amount_68_a : CatalaRuntime.Money := (match (match processExceptions2 [if section_not_applicable_68_f then some ((CatalaRuntime.Money.ofCents 0)) else none] with | none => some ((if (adjusted_gross_income > applicable_amount_68_b_1) then (Money_en.min (three_percent_reduction_68_a_1) (eighty_percent_reduction_68_a_2)) else (CatalaRuntime.Money.ofCents 0))) | some r => some r) with | some r => r | _ => default)
   itemized_deductions_after_68 : CatalaRuntime.Money := (match (match processExceptions2 [if section_not_applicable_68_f then some (itemized_deductions) else none] with | none => some ((itemized_deductions - reduction_amount_68_a)) | some r => some r) with | some r => r | _ => default)
 
-@[smt_translate] def IndividualTaxReturnSection68ItemizedDeductions_main_output_leaf_0 (input : IndividualTaxReturnSection68ItemizedDeductions_Input) : Option IndividualTaxReturnSection68ItemizedDeductionsOutput :=
+ def IndividualTaxReturnSection68ItemizedDeductions_main_output_leaf_0 (input : IndividualTaxReturnSection68ItemizedDeductions_Input) : Option IndividualTaxReturnSection68ItemizedDeductionsOutput :=
   some (({ individual_tax_return := input.individual_tax_return, applicable_amount_68_b_1 := input.applicable_amount_68_b_1, three_percent_reduction_68_a_1 := input.three_percent_reduction_68_a_1, eighty_percent_reduction_68_a_2 := input.eighty_percent_reduction_68_a_2, reduction_amount_68_a := input.reduction_amount_68_a, itemized_deductions_after_68 := input.itemized_deductions_after_68, section_not_applicable_68_f := input.section_not_applicable_68_f } : IndividualTaxReturnSection68ItemizedDeductionsOutput))
 
-@[smt_translate] structure IndividualTaxReturnSection68ItemizedDeductions where
+ structure IndividualTaxReturnSection68ItemizedDeductions where
   main_output : IndividualTaxReturnSection68ItemizedDeductionsOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualTaxReturnSection68ItemizedDeductions (input : IndividualTaxReturnSection68ItemizedDeductions_Input) : IndividualTaxReturnSection68ItemizedDeductions :=
+ def individualTaxReturnSection68ItemizedDeductions (input : IndividualTaxReturnSection68ItemizedDeductions_Input) : IndividualTaxReturnSection68ItemizedDeductions :=
   let main_output := match IndividualTaxReturnSection68ItemizedDeductions_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualTaxReturnSection63TaxableIncome_Input where
+ structure IndividualTaxReturnSection63TaxableIncome_Input where
   itemized_deductions_result : IndividualTaxReturnSection68ItemizedDeductionsOutput
   adjusted_gross_income : CatalaRuntime.Money
   taxpayer_exemption_result : IndividualSection151PersonalExemptionOutput
@@ -925,17 +924,17 @@ deriving DecidableEq, Inhabited
   standard_deduction_63_c_1 : CatalaRuntime.Money := (match (match processExceptions2 [if (!decide (standard_deduction_eligible_63_c_6)) then some ((CatalaRuntime.Money.ofCents 0)) else none] with | none => some ((basic_standard_deduction_63_c_2_after_c_5 + additional_standard_deduction_63_c_3)) | some r => some r) with | some r => r | _ => default)
   taxable_income : CatalaRuntime.Money := (match (match processExceptions2 [if ((fun (does_not_itemize_deductions : Bool) => does_not_itemize_deductions) ((!decide (((fun (itemizes_deductions : Bool) => itemizes_deductions) ((match (individual_tax_return).details with   | FilingStatusVariant.JointReturn variant => (variant).itemization_election  | FilingStatusVariant.SurvivingSpouse variant => (variant).itemization_election  | FilingStatusVariant.HeadOfHousehold variant => (variant).itemization_election  | FilingStatusVariant.Single variant => (variant).itemization_election  | FilingStatusVariant.MarriedFilingSeparate variant => (variant).itemization_election))))))) then some (((fun (computed_taxable_income : CatalaRuntime.Money) => (if (computed_taxable_income < (CatalaRuntime.Money.ofCents 0)) then (CatalaRuntime.Money.ofCents 0) else computed_taxable_income)) (((adjusted_gross_income - standard_deduction_63_c_1) - (taxpayer_exemption_result).personal_exemptions_deduction_151_a)))) else none] with | none => some (((fun (computed_taxable_income : CatalaRuntime.Money) => (if (computed_taxable_income < (CatalaRuntime.Money.ofCents 0)) then (CatalaRuntime.Money.ofCents 0) else computed_taxable_income)) (((adjusted_gross_income - (itemized_deductions_result).itemized_deductions_after_68) - (taxpayer_exemption_result).personal_exemptions_deduction_151_a)))) | some r => some r) with | some r => r | _ => default)
 
-@[smt_translate] def IndividualTaxReturnSection63TaxableIncome_main_output_leaf_0 (input : IndividualTaxReturnSection63TaxableIncome_Input) : Option IndividualTaxReturnSection63TaxableIncomeOutput :=
+ def IndividualTaxReturnSection63TaxableIncome_main_output_leaf_0 (input : IndividualTaxReturnSection63TaxableIncome_Input) : Option IndividualTaxReturnSection63TaxableIncomeOutput :=
   some (({ individual_tax_return := input.individual_tax_return, taxable_income := input.taxable_income, standard_deduction_63_c_1 := input.standard_deduction_63_c_1, standard_deduction_eligible_63_c_6 := input.standard_deduction_eligible_63_c_6, basic_standard_deduction_63_c_2_before_c_5 := input.basic_standard_deduction_63_c_2_before_c_5, basic_standard_deduction_63_c_2_after_c_5 := input.basic_standard_deduction_63_c_2_after_c_5, additional_standard_deduction_63_c_3 := input.additional_standard_deduction_63_c_3, additional_amount_taxpayer_aged_63_f_1_A := input.additional_amount_taxpayer_aged_63_f_1_A, additional_amount_spouse_aged_63_f_1_B := input.additional_amount_spouse_aged_63_f_1_B, additional_amount_taxpayer_blind_63_f_2_A := input.additional_amount_taxpayer_blind_63_f_2_A, additional_amount_spouse_blind_63_f_2_B := input.additional_amount_spouse_blind_63_f_2_B } : IndividualTaxReturnSection63TaxableIncomeOutput))
 
-@[smt_translate] structure IndividualTaxReturnSection63TaxableIncome where
+ structure IndividualTaxReturnSection63TaxableIncome where
   main_output : IndividualTaxReturnSection63TaxableIncomeOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualTaxReturnSection63TaxableIncome (input : IndividualTaxReturnSection63TaxableIncome_Input) : IndividualTaxReturnSection63TaxableIncome :=
+ def individualTaxReturnSection63TaxableIncome (input : IndividualTaxReturnSection63TaxableIncome_Input) : IndividualTaxReturnSection63TaxableIncome :=
   let main_output := match IndividualTaxReturnSection63TaxableIncome_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualSection7703MaritalStatus_Input where
+ structure IndividualSection7703MaritalStatus_Input where
   individuals_entitled_to_exemptions_under_151 : (List Individual)
   qualifying_children : (List IndividualSection152QualifyingChildOutput)
   household_maintenance_events : (List HouseholdMaintenanceEvent)
@@ -963,17 +962,17 @@ deriving DecidableEq, Inhabited
   subsection_b_exception_applies : Bool := (match (match processExceptions2 [if (decide (is_married_at_determination_date) && ((!decide (is_legally_separated)) && (decide ((section_7703_files_separate_return (individual) (individual_tax_return))) && (decide (maintains_household_with_qualifying_child_for_more_than_half_year) && (decide (furnishes_over_one_half_of_household_cost) && decide (spouse_not_member_of_household_last_6_months)))))) then some (true) else none] with | none => some (false) | some r => some r) with | some r => r | _ => default)
   is_married_for_tax_purposes : Bool := (match (match processExceptions2 [(match processExceptions2 [if subsection_b_exception_applies then some (false) else none] with | none => if (decide (is_married_at_determination_date) && (!decide (is_legally_separated))) then some (true) else none | some r => some r)] with | none => some (false) | some r => some r) with | some r => r | _ => default)
 
-@[smt_translate] def IndividualSection7703MaritalStatus_main_output_leaf_0 (input : IndividualSection7703MaritalStatus_Input) : Option IndividualSection7703MaritalStatusOutput :=
+ def IndividualSection7703MaritalStatus_main_output_leaf_0 (input : IndividualSection7703MaritalStatus_Input) : Option IndividualSection7703MaritalStatusOutput :=
   some (({ individual := input.individual, tax_year := input.tax_year, determination_date_7703_a_1 := input.determination_date, is_married_7703_a_1 := input.is_married_at_determination_date, is_legally_separated_7703_a_2 := input.is_legally_separated, maintains_household_7703_b_1 := input.maintains_household_with_qualifying_child_for_more_than_half_year, furnishes_over_one_half_cost_7703_b_2 := input.furnishes_over_one_half_of_household_cost, spouse_not_member_last_6_months_7703_b_3 := input.spouse_not_member_of_household_last_6_months, considered_not_married_7703_b := input.subsection_b_exception_applies, is_married_for_tax_purposes_7703 := input.is_married_for_tax_purposes } : IndividualSection7703MaritalStatusOutput))
 
-@[smt_translate] structure IndividualSection7703MaritalStatus where
+ structure IndividualSection7703MaritalStatus where
   main_output : IndividualSection7703MaritalStatusOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualSection7703MaritalStatus (input : IndividualSection7703MaritalStatus_Input) : IndividualSection7703MaritalStatus :=
+ def individualSection7703MaritalStatus (input : IndividualSection7703MaritalStatus_Input) : IndividualSection7703MaritalStatus :=
   let main_output := match IndividualSection7703MaritalStatus_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualSection152QualifyingChild_Input where
+ structure IndividualSection152QualifyingChild_Input where
   tax_return_events : (List TaxReturnEvent)
   residence_period_events : (List ResidencePeriodEvent)
   birth_events : (List BirthEvent)
@@ -987,17 +986,17 @@ deriving DecidableEq, Inhabited
   joint_return_exception_applies : Bool := (List.foldl ((fun (acc : Bool) (event : TaxReturnEvent) => (decide (acc) || (decide (((event).individual = individual)) && (decide (((event).tax_year = tax_year)) && (decide ((event).filed_joint_return) && (!decide ((event).is_only_for_refund_claim)))))))) false tax_return_events)
   is_qualifying_child : Bool := (decide (relationship_requirement_met) && (decide (principal_place_of_abode_requirement_met) && (decide (age_requirement_met) && (!decide (joint_return_exception_applies)))))
 
-@[smt_translate] def IndividualSection152QualifyingChild_main_output_leaf_0 (input : IndividualSection152QualifyingChild_Input) : Option IndividualSection152QualifyingChildOutput :=
+ def IndividualSection152QualifyingChild_main_output_leaf_0 (input : IndividualSection152QualifyingChild_Input) : Option IndividualSection152QualifyingChildOutput :=
   some (({ individual := input.individual, taxpayer := input.taxpayer, is_qualifying_child := input.is_qualifying_child, bears_relationship_152_c_1_A := input.relationship_requirement_met, has_same_principal_place_of_abode_152_c_1_B := input.principal_place_of_abode_requirement_met, meets_age_requirements_152_c_1_C := input.age_requirement_met, has_not_filed_joint_return_152_c_1_E := (!decide (input.joint_return_exception_applies)) } : IndividualSection152QualifyingChildOutput))
 
-@[smt_translate] structure IndividualSection152QualifyingChild where
+ structure IndividualSection152QualifyingChild where
   main_output : IndividualSection152QualifyingChildOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualSection152QualifyingChild (input : IndividualSection152QualifyingChild_Input) : IndividualSection152QualifyingChild :=
+ def individualSection152QualifyingChild (input : IndividualSection152QualifyingChild_Input) : IndividualSection152QualifyingChild :=
   let main_output := match IndividualSection152QualifyingChild_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualSection152Dependents_Input where
+ structure IndividualSection152Dependents_Input where
   marriage_events : (List MarriageEvent)
   income_events : (List IncomeEvent)
   tax_return_events : (List TaxReturnEvent)
@@ -1014,17 +1013,17 @@ deriving DecidableEq, Inhabited
   dependents_after_152b1 : (List Individual) := ((fun (initial_dependents : (List Individual)) => ((fun (is_dependent_of_another_taxpayer : Bool) => (if is_dependent_of_another_taxpayer then [] else initial_dependents)) ((List.foldl ((fun (acc : Bool) (event : TaxReturnEvent) => (decide (acc) || ((!decide (((event).individual = taxpayer))) && (decide (((event).tax_year = tax_year)) && decide ((List.foldl ((fun (acc : Bool) (dependent : Individual) => (decide (acc) || decide ((dependent = taxpayer))))) false (event).dependents))))))) false tax_return_events)))) (((fun (qualifying_children_individuals : (List Individual)) => ((fun (qualifying_relatives_individuals : (List Individual)) => (qualifying_children_individuals ++ qualifying_relatives_individuals)) ((List.map ((fun (result : IndividualSection152QualifyingRelativeOutput) => (result).individual)) (List.filter ((fun (result : IndividualSection152QualifyingRelativeOutput) => (result).is_qualifying_relative)) qualifying_relatives))))) ((List.map ((fun (result : IndividualSection152QualifyingChildOutput) => (result).individual)) (List.filter ((fun (result : IndividualSection152QualifyingChildOutput) => (result).is_qualifying_child)) qualifying_children))))))
   dependents_after_152b2 : (List Individual) := ((fun (initial_dependents : (List Individual)) => ((fun (dependents_after_b1 : (List Individual)) => (List.filter ((fun (individual : Individual) => (!decide ((List.foldl ((fun (acc : Bool) (event : TaxReturnEvent) => (decide (acc) || (decide (((event).individual = individual)) && (decide (((event).tax_year = tax_year)) && decide ((event).filed_joint_return)))))) false tax_return_events))))) dependents_after_b1)) (((fun (is_dependent_of_another_taxpayer : Bool) => (if is_dependent_of_another_taxpayer then [] else initial_dependents)) ((List.foldl ((fun (acc : Bool) (event : TaxReturnEvent) => (decide (acc) || ((!decide (((event).individual = taxpayer))) && (decide (((event).tax_year = tax_year)) && decide ((List.foldl ((fun (acc : Bool) (dependent : Individual) => (decide (acc) || decide ((dependent = taxpayer))))) false (event).dependents))))))) false tax_return_events)))))) (((fun (qualifying_children_individuals : (List Individual)) => ((fun (qualifying_relatives_individuals : (List Individual)) => (qualifying_children_individuals ++ qualifying_relatives_individuals)) ((List.map ((fun (result : IndividualSection152QualifyingRelativeOutput) => (result).individual)) (List.filter ((fun (result : IndividualSection152QualifyingRelativeOutput) => (result).is_qualifying_relative)) qualifying_relatives))))) ((List.map ((fun (result : IndividualSection152QualifyingChildOutput) => (result).individual)) (List.filter ((fun (result : IndividualSection152QualifyingChildOutput) => (result).is_qualifying_child)) qualifying_children))))))
 
-@[smt_translate] def IndividualSection152Dependents_main_output_leaf_0 (input : IndividualSection152Dependents_Input) : Option IndividualSection152DependentsOutput :=
+ def IndividualSection152Dependents_main_output_leaf_0 (input : IndividualSection152Dependents_Input) : Option IndividualSection152DependentsOutput :=
   some (({ taxpayer := input.taxpayer, dependents_initial := input.dependents_initial, dependents_after_152b1 := input.dependents_after_152b1, dependents_after_152b2 := input.dependents_after_152b2, qualifying_children := input.qualifying_children, qualifying_relatives := input.qualifying_relatives, individual_dependent_statuses := input.individual_dependent_statuses } : IndividualSection152DependentsOutput))
 
-@[smt_translate] structure IndividualSection152Dependents where
+ structure IndividualSection152Dependents where
   main_output : IndividualSection152DependentsOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualSection152Dependents (input : IndividualSection152Dependents_Input) : IndividualSection152Dependents :=
+ def individualSection152Dependents (input : IndividualSection152Dependents_Input) : IndividualSection152Dependents :=
   let main_output := match IndividualSection152Dependents_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IndividualTaxReturnSection2bHeadOfHousehold_Input where
+ structure IndividualTaxReturnSection2bHeadOfHousehold_Input where
   is_surviving_spouse_2_a : Bool
   death_events : (List DeathEvent)
   taxpayer_dependents_result : IndividualSection152DependentsOutput
@@ -1054,17 +1053,17 @@ deriving DecidableEq, Inhabited
   maintains_household_principal_place_of_abode_more_than_half_year_2_b_1_A : Bool := ((fun (taxpayer_local : Individual) => ((fun (year_end_local : CatalaRuntime.Date) => ((fun (year_start_local : CatalaRuntime.Date) => ((fun (qualifying_person_has_principal_place_of_abode_more_than_half_year_local : Bool) => (decide (qualifying_person_has_principal_place_of_abode_more_than_half_year_local) && (decide (qualifying_child_meets_2_b_1_A_i) || decide (other_dependent_2_b_1_A_ii)))) ((match (individual_tax_return).details with   | FilingStatusVariant.JointReturn variant => false  | FilingStatusVariant.SurvivingSpouse variant => false  | FilingStatusVariant.HeadOfHousehold variant => (List.foldl ((fun (acc : Bool) (maintenance_event : HouseholdMaintenanceEvent) => (decide (acc) || (decide (((maintenance_event).individual = taxpayer_local)) && (decide (((maintenance_event).start_date ≤ year_end_local)) && (decide (((maintenance_event).end_date ≥ year_start_local)) && (decide (((maintenance_event).cost_furnished_percentage > (Rat.mk 1 2))) && decide ((List.foldl ((fun (acc : Bool) (residence_event : ResidencePeriodEvent) => (decide (acc) || (decide (((residence_event).individual = (variant).qualifying_person)) && (decide (((residence_event).household = (maintenance_event).household)) && (decide ((residence_event).is_member_of_household) && (decide ((residence_event).is_principal_place_of_abode) && decide ((period_spans_more_than_half_year ((residence_event).start_date) ((residence_event).end_date) ((individual_tax_return).tax_year)))))))))) false residence_period_events))))))))) false household_maintenance_events)  | FilingStatusVariant.Single variant => false  | FilingStatusVariant.MarriedFilingSeparate variant => false)))) ((Date_en.of_year_month_day ((individual_tax_return).tax_year) ((1 : Int)) ((1 : Int)))))) ((get_year_end ((individual_tax_return).tax_year))))) ((get_taxpayer (individual_tax_return))))
   is_head_of_household_2_b : Bool := (match (match processExceptions2 [processExceptions2 [if taxpayer_is_nonresident_alien_2_b_3_A then some (false) else none, if head_of_household_disqualified_household_member_dependent_2_b_3_B then some (false) else none]] with | none => some (((!decide (is_married_at_year_end_2_b_2)) && ((!decide (is_surviving_spouse_2_a)) && (decide (maintains_household_principal_place_of_abode_more_than_half_year_2_b_1_A) || decide (maintains_household_for_father_or_mother_2_b_1_B))))) | some r => some r) with | some r => r | _ => default)
 
-@[smt_translate] def IndividualTaxReturnSection2bHeadOfHousehold_main_output_leaf_0 (input : IndividualTaxReturnSection2bHeadOfHousehold_Input) : Option IndividualTaxReturnSection2bHeadOfHouseholdOutput :=
+ def IndividualTaxReturnSection2bHeadOfHousehold_main_output_leaf_0 (input : IndividualTaxReturnSection2bHeadOfHousehold_Input) : Option IndividualTaxReturnSection2bHeadOfHouseholdOutput :=
   some (({ individual_tax_return := input.individual_tax_return, is_legally_separated_2_b_2_A := input.is_legally_separated_2_b_2_A, spouse_is_nonresident_alien_2_b_2_B := input.spouse_is_nonresident_alien_2_b_2_B, spouse_died_during_year_2_b_2_C := input.spouse_died_during_year_2_b_2_C, is_married_at_year_end_2_b_2 := input.is_married_at_year_end_2_b_2, taxpayer_is_nonresident_alien_2_b_3_A := input.taxpayer_is_nonresident_alien_2_b_3_A, head_of_household_disqualified_household_member_dependent_2_b_3_B := input.head_of_household_disqualified_household_member_dependent_2_b_3_B, is_married_at_year_end_2_b_1_A_i_I := input.is_married_at_year_end_2_b_1_A_i_I, is_not_dependent_by_152b2_2_b_1_A_i_II := input.is_not_dependent_by_152b2_2_b_1_A_i_II, qualifying_child_meets_2_b_1_A_i := input.qualifying_child_meets_2_b_1_A_i, other_dependent_2_b_1_A_ii := input.other_dependent_2_b_1_A_ii, maintains_household_principal_place_of_abode_more_than_half_year_2_b_1_A := input.maintains_household_principal_place_of_abode_more_than_half_year_2_b_1_A, maintains_household_for_father_or_mother_2_b_1_B := input.maintains_household_for_father_or_mother_2_b_1_B, is_head_of_household_2_b := input.is_head_of_household_2_b } : IndividualTaxReturnSection2bHeadOfHouseholdOutput))
 
-@[smt_translate] structure IndividualTaxReturnSection2bHeadOfHousehold where
+ structure IndividualTaxReturnSection2bHeadOfHousehold where
   main_output : IndividualTaxReturnSection2bHeadOfHouseholdOutput
 deriving DecidableEq, Inhabited
-@[smt_translate] def individualTaxReturnSection2bHeadOfHousehold (input : IndividualTaxReturnSection2bHeadOfHousehold_Input) : IndividualTaxReturnSection2bHeadOfHousehold :=
+ def individualTaxReturnSection2bHeadOfHousehold (input : IndividualTaxReturnSection2bHeadOfHousehold_Input) : IndividualTaxReturnSection2bHeadOfHousehold :=
   let main_output := match IndividualTaxReturnSection2bHeadOfHousehold_main_output_leaf_0 input with | some val => val | _ => default
   { main_output := main_output }
 
-@[smt_translate] structure IRCSimplified_Input where
+ structure IRCSimplified_Input where
   employer_unemployment_excise_tax_return : EmployerUnemploymentExciseTaxReturn
   employment_termination_events : (List EmploymentTerminationEvent)
   immigration_admission_events : (List ImmigrationAdmissionEvent)
@@ -1117,13 +1116,13 @@ deriving DecidableEq, Inhabited
   tax_imposed_result : IndividualTaxReturnSection1TaxOutput := (section_1_tax).main_output
   tax : CatalaRuntime.Money := (tax_imposed_result).tax
 
-@[smt_translate] def IRCSimplified_itemized_deductions (input : IRCSimplified_Input) : Option CatalaRuntime.Money :=
+ def IRCSimplified_itemized_deductions (input : IRCSimplified_Input) : Option CatalaRuntime.Money :=
   some input.itemized_deductions
 
-@[smt_translate] def IRCSimplified_adjusted_gross_income (input : IRCSimplified_Input) : Option CatalaRuntime.Money :=
+ def IRCSimplified_adjusted_gross_income (input : IRCSimplified_Input) : Option CatalaRuntime.Money :=
   some input.adjusted_gross_income
 
-@[smt_translate] structure IRCSimplified where
+ structure IRCSimplified where
   itemized_deductions : CatalaRuntime.Money
   adjusted_gross_income : CatalaRuntime.Money
   wage_payment_wages_results : (List WagePaymentEventSection3306WagesOutput)
@@ -1144,7 +1143,7 @@ deriving DecidableEq, Inhabited
   tax_imposed_result : IndividualTaxReturnSection1TaxOutput
   tax : CatalaRuntime.Money
 deriving DecidableEq, Inhabited
-@[smt_translate] def iRCSimplified (input : IRCSimplified_Input) : IRCSimplified :=
+ def iRCSimplified (input : IRCSimplified_Input) : IRCSimplified :=
   let taxpayer_dependents := individualSection152Dependents { taxpayer := (get_taxpayer (input.individual_tax_return)), tax_year := (input.individual_tax_return).tax_year, individuals := input.individuals, family_relationship_events := input.family_relationship_events, birth_events := input.birth_events, residence_period_events := input.residence_period_events, tax_return_events := input.tax_return_events, income_events := input.income_events, marriage_events := input.marriage_events }
   let employer_unemployment_excise_tax := employerUnemploymentExciseTaxFilerSection3301Tax { employer_unemployment_excise_tax_return := input.employer_unemployment_excise_tax_return, wage_payment_wages_results := input.wage_payment_wages_results, organization_employer_statuses := input.organization_employer_statuses, employment_relationship_employment_results := input.employment_relationship_employment_results }
   let taxpayer_exemptions_list := taxpayerExemptionsList151 { individual_tax_return := input.individual_tax_return, tax_return_events := input.tax_return_events, income_events := input.income_events, dependents := (input.taxpayer_dependents_result).dependents_after_152b2 }

@@ -11,7 +11,7 @@ namespace CatalaRuntime
 -- ============================================================================
 
 /-- Money type represented as integer cents -/
-structure Money where
+ structure Money where
   cents : Int
   deriving Repr, BEq, DecidableEq, Inhabited
 
@@ -19,7 +19,7 @@ instance : ToString Money where
   toString m := s!"${m.cents / 100}.{(m.cents % 100).natAbs}"
 
 /-- Date type -/
-structure Date where
+ structure Date where
   year : Int
   month : Int
   day : Int
@@ -29,7 +29,7 @@ instance : ToString Date where
   toString d := s!"{d.year}-{d.month}-{d.day}"
 
 /-- Duration type -/
-structure Duration where
+ structure Duration where
   years : Int
   months : Int
   days : Int
@@ -39,7 +39,7 @@ instance : ToString Duration where
   toString d := s!"{d.years}y {d.months}m {d.days}d"
 
 /-- Source position for error reporting -/
-structure SourcePosition where
+ structure SourcePosition where
   filename : String
   start_line : Int
   start_column : Int
@@ -58,13 +58,15 @@ instance : ToString SourcePosition where
 namespace Money
 
 /-- Create Money from cents -/
-@[inline] def ofCents (c : Int) : Money := ⟨c⟩
+@[inline,simp, grind]  def ofCents (c : Int) : Money := ⟨c⟩
 
 /-- Create Money from integer (dollars/euros) -/
-@[inline] def ofInt (n : Int) : Money := ⟨n * 100⟩
+@[inline,simp, grind]  def ofInt (n : Int) : Money := ⟨n * 100⟩
 
 /-- Convert Money to Int (dollars/euros, truncated) -/
-@[inline] def toInt (m : Money) : Int := m.cents / 100
+@[inline,simp, grind]  def toInt (m : Money) : Int := m.cents / 100
+
+@[inline,simp, grind]  def toIntRound (m: Money) : Int := if m.cents % 100 >= 50 then m.cents / 100 + 1 else m.cents / 100
 
 /-- Addition -/
 instance : Add Money where
@@ -79,7 +81,7 @@ instance : Neg Money where
   neg a := ⟨-a.cents⟩
 
 /-- Multiplication by Int -/
-@[inline] def mulInt (m : Money) (n : Int) : Money := ⟨m.cents * n⟩
+@[inline,simp, grind]  def mulInt (m : Money) (n : Int) : Money := ⟨m.cents * n⟩
 
 /-- Comparison -/
 instance : LE Money where
@@ -108,18 +110,18 @@ instance : HMul Money Int Money where
 namespace Date
 
 /-- Create a Date -/
-@[inline] def create (y m d : Int) : Date := ⟨y, m, d⟩
+@[inline,simp, grind]  def create (y m d : Int) : Date := ⟨y, m, d⟩
 
 /-- Add duration to date (simplified) -/
-@[inline] def addDuration (d : Date) (dur : Duration) : Date :=
+@[inline,simp, grind]  def addDuration (d : Date) (dur : Duration) : Date :=
   ⟨d.year + dur.years, d.month + dur.months, d.day + dur.days⟩
 
 /-- Subtract duration from date -/
-@[inline] def subDuration (d : Date) (dur : Duration) : Date :=
+@[inline,simp, grind]  def subDuration (d : Date) (dur : Duration) : Date :=
   ⟨d.year - dur.years, d.month - dur.months, d.day - dur.days⟩
 
 /-- Subtract two dates to get duration (simplified) -/
-@[inline] def difference (d1 d2 : Date) : Duration :=
+@[inline,simp, grind]  def difference (d1 d2 : Date) : Duration :=
   ⟨d1.year - d2.year, d1.month - d2.month, d1.day - d2.day⟩
 
 end Date
@@ -145,7 +147,7 @@ instance : HAdd Date Duration Date where
 namespace Duration
 
 /-- Create a Duration -/
-@[inline] def create (y m d : Int) : Duration := ⟨y, m, d⟩
+@[inline,simp, grind]  def create (y m d : Int) : Duration := ⟨y, m, d⟩
 
 /-- Addition -/
 instance : Add Duration where
@@ -160,7 +162,7 @@ instance : Neg Duration where
   neg a := ⟨-a.years, -a.months, -a.days⟩
 
 /-- Multiplication by Int -/
-@[inline] def mulInt (d : Duration) (n : Int) : Duration :=
+@[inline,simp, grind]  def mulInt (d : Duration) (n : Int) : Duration :=
   ⟨d.years * n, d.months * n, d.days * n⟩
 
 end Duration
@@ -179,9 +181,9 @@ instance : HMul Duration Int Duration where
 -- Note: Simplified implementation - just does integer division for now
 
 
-def mkRational (num den : Int) : Rat :=
+@[simp, grind] def mkRational (num den : Int) : Rat :=
   if den = 0 then
-    panic! "Rational denominator cannot be zero"
+    default
   else
     num / den
 
@@ -206,7 +208,8 @@ abbrev D (α : Type) := Except Err (Option α)
 /-- Process a list of exceptions, checking for conflicts.
     Returns the first successful definition, or conflict if multiple succeed.
 -/
-def processExceptions0 {α : Type} [DecidableEq α] (exceptions : List (D α)) : D α :=
+
+def processExceptions {α : Type} [DecidableEq α] (exceptions : List (D α)) : D α :=
   exceptions.foldl
     (fun acc ex =>
       match acc with
@@ -222,23 +225,24 @@ def processExceptions0 {α : Type} [DecidableEq α] (exceptions : List (D α)) :
           | .error e => .error e)  -- propagate error
     (.ok none)
 
-def processExceptions {α : Type} [DecidableEq α] (exceptions : List (Option α)) : Option α :=
-  exceptions.foldl
-    (fun acc ex =>
-      match acc with
-      | some e => some e
-      | none => ex)
-    (none)
+
+def processExceptions2 {α : Type} [DecidableEq α] (exceptions : List (Option α)) : Option α :=
+  exceptions.foldl (fun acc ex => match acc with
+  | none => ex
+  | some v1 => match ex with
+    | none => some v1
+    | some v2 => some v2
+  ) none
 
 /-- Handle exceptions by selecting the first non-none value -/
-def handleExceptions {α : Type} (options : List (Option (α × SourcePosition))) :
+@[simp, grind] def handleExceptions {α : Type} (options : List (Option (α × SourcePosition))) :
     Option (α × SourcePosition) :=
   options.find? (·.isSome) |>.join
 
 /-- Division with error position tracking for Money -/
-def divWithErr (pos : SourcePosition) (a b : Money) : Money :=
+@[simp, grind] def divWithErr (pos : SourcePosition) (a b : Money) : Money :=
   if b.cents = 0 then
-    panic! s!"Division by zero at {pos}"
+    default
   else
     -- Simplified: return integer division for now
     ⟨a.cents / b.cents⟩
@@ -250,31 +254,32 @@ def divWithErr (pos : SourcePosition) (a b : Money) : Money :=
 namespace Money
 
 /-- Multiply Money by Float (for percentages, decimal operations) -/
-@[inline] def mulFloat (m : Money) (f : Float) : Money :=
+@[inline,simp, grind]  def mulFloat (m : Money) (f : Float) : Money :=
   ⟨(Float.toInt64 (Float.round (Float.ofInt m.cents * f))).toInt⟩
 
 /-- Multiply Money by Rat (rational number) -/
-@[inline] def mulRat (m : Money) (r : Rat) : Money :=
+@[inline,simp, grind]  def mulRat (m : Money) (r : Rat) : Money :=
   let rat_float := (Float.ofInt (Rat.num r)) / (Float.ofInt (Rat.den r))
   mulFloat m rat_float
 
-@[inline] def divMoney (m1: Money) (m2: Money) : Rat :=
+@[inline,simp, grind]  def divMoney (m1: Money) (m2: Money) : Rat :=
   (m1.cents : Rat) / (m2.cents : Rat)
 
+#check Rat
 /-- Greater than or equal -/
-@[inline] def ge (a b : Money) : Bool := a.cents ≥ b.cents
+@[inline,simp, grind]  def ge (a b : Money) : Bool := a.cents ≥ b.cents
 
 /-- Greater than -/
-@[inline] def gt (a b : Money) : Bool := a.cents > b.cents
+@[inline,simp, grind]  def gt (a b : Money) : Bool := a.cents > b.cents
 
 /-- Less than or equal -/
-@[inline] def le (a b : Money) : Bool := a.cents ≤ b.cents
+@[inline,simp, grind]  def le (a b : Money) : Bool := a.cents ≤ b.cents
 
 /-- Less than -/
-@[inline] def lt (a b : Money) : Bool := a.cents < b.cents
+@[inline,simp, grind]  def lt (a b : Money) : Bool := a.cents < b.cents
 
 /-- Equality -/
-@[inline] def eq (a b : Money) : Bool := a.cents = b.cents
+@[inline,simp, grind]  def eq (a b : Money) : Bool := a.cents = b.cents
 
 end Money
 
@@ -389,7 +394,7 @@ def multiply {α β γ : Type} [CatalaMul α β γ] (a : α) (b : β) : γ :=
 namespace Date
 
 /-- Compare dates: less than -/
-def lt (d1 d2 : Date) : Bool :=
+@[simp, grind] def lt (d1 d2 : Date) : Bool :=
   if d1.year < d2.year then true
   else if d1.year > d2.year then false
   else if d1.month < d2.month then true
@@ -397,17 +402,17 @@ def lt (d1 d2 : Date) : Bool :=
   else d1.day < d2.day
 
 /-- Compare dates: less than or equal -/
-def le (d1 d2 : Date) : Bool :=
+@[simp, grind] def le (d1 d2 : Date) : Bool :=
   lt d1 d2 || (d1.year = d2.year && d1.month = d2.month && d1.day = d2.day)
 
 /-- Compare dates: greater than -/
-def gt (d1 d2 : Date) : Bool := lt d2 d1
+@[simp, grind] def gt (d1 d2 : Date) : Bool := lt d2 d1
 
 /-- Compare dates: greater than or equal -/
-def ge (d1 d2 : Date) : Bool := le d2 d1
+@[simp, grind] def ge (d1 d2 : Date) : Bool := le d2 d1
 
 /-- Compare dates: equal -/
-def eq (d1 d2 : Date) : Bool :=
+@[simp, grind] def eq (d1 d2 : Date) : Bool :=
   d1.year = d2.year && d1.month = d2.month && d1.day = d2.day
 
 instance : LT Duration where
@@ -454,7 +459,7 @@ end Date
 namespace D
 
 /-- Add two D Money values -/
-def addMoney (m1 m2 : D Money) : D Money :=
+@[simp, grind] def addMoney (m1 m2 : D Money) : D Money :=
   match m1, m2 with
   | .ok (some a), .ok (some b) => .ok (some (a + b))
   | .ok none, _ => .ok none
@@ -463,7 +468,7 @@ def addMoney (m1 m2 : D Money) : D Money :=
   | _, .error e => .error e
 
 /-- Subtract two D Money values -/
-def subMoney (m1 m2 : D Money) : D Money :=
+@[simp, grind] def subMoney (m1 m2 : D Money) : D Money :=
   match m1, m2 with
   | .ok (some a), .ok (some b) => .ok (some (a - b))
   | .ok none, _ => .ok none
@@ -472,14 +477,14 @@ def subMoney (m1 m2 : D Money) : D Money :=
   | _, .error e => .error e
 
 /-- Multiply D Money by Float -/
-def mulMoneyFloat (m : D Money) (f : Float) : D Money :=
+@[simp, grind] def mulMoneyFloat (m : D Money) (f : Float) : D Money :=
   match m with
   | .ok (some a) => .ok (some (a * f))
   | .ok none => .ok none
   | .error e => .error e
 
 /-- Compare D Money: less than -/
-def ltMoney (m1 m2 : D Money) : D Bool :=
+@[simp, grind] def ltMoney (m1 m2 : D Money) : D Bool :=
   match m1, m2 with
   | .ok (some a), .ok (some b) => .ok (some (Money.lt a b))
   | .ok none, _ => .ok none
@@ -488,7 +493,7 @@ def ltMoney (m1 m2 : D Money) : D Bool :=
   | _, .error e => .error e
 
 /-- Compare D Money: greater than or equal -/
-def geMoney (m1 m2 : D Money) : D Bool :=
+@[simp, grind] def geMoney (m1 m2 : D Money) : D Bool :=
   match m1, m2 with
   | .ok (some a), .ok (some b) => .ok (some (Money.ge a b))
   | .ok none, _ => .ok none
@@ -497,7 +502,7 @@ def geMoney (m1 m2 : D Money) : D Bool :=
   | _, .error e => .error e
 
 /-- Maximum of two D Money values (return larger, or first on tie) -/
-def maxMoney (m1 m2 : D Money) : D Money :=
+@[simp, grind] def maxMoney (m1 m2 : D Money) : D Money :=
   match m1, m2 with
   | .ok (some a), .ok (some b) => .ok (some (if Money.ge a b then a else b))
   | .ok (some a), .ok none => .ok (some a)
@@ -519,4 +524,4 @@ end CatalaRuntime
 
 -- Export Rat.mk as an alias
 -- Note: Returns Int for now, not Rat (simplified)
-@[inline] def Rat.mk := CatalaRuntime.mkRational
+@[inline,simp, grind]  def Rat.mk := CatalaRuntime.mkRational

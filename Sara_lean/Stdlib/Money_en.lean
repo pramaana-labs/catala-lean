@@ -1,4 +1,4 @@
-import CaseStudies.Pramaana.CatalaRuntime
+import CatalaRuntime
 
 open CatalaRuntime
 
@@ -15,7 +15,7 @@ deriving Repr
 
 /-- Round Money to the nearest whole unit (e.g., dollar/euro)
     Rounds to nearest 100 cents -/
-@[simp, grind, smt_translate] def round (m : CatalaRuntime.Money) : CatalaRuntime.Money :=
+@[simp, grind] def round (m : CatalaRuntime.Money) : CatalaRuntime.Money :=
   let cents := m.cents
   let remainder := cents % 100
   if remainder ≥ 50 then
@@ -26,7 +26,7 @@ deriving Repr
     CatalaRuntime.Money.ofCents (cents - remainder)
 
 /-- Compute 10^n for integer n -/
-@[simp, grind, smt_translate] def pow10 (n : Int) : Int :=
+@[simp, grind] def pow10 (n : Int) : Int :=
   if n ≥ 0 then
     (10 : Int) ^ n.toNat
   else
@@ -37,7 +37,7 @@ deriving Repr
     n=1: round to tenths (10 cents)
     n=2: round to hundredths (cents) - no change
     Negative n rounds to larger units -/
-@[simp, grind, smt_translate] def round_to_decimal (m : CatalaRuntime.Money) (nth_decimal : Int) : CatalaRuntime.Money :=
+@[simp, grind] def round_to_decimal (m : CatalaRuntime.Money) (nth_decimal : Int) : CatalaRuntime.Money :=
   -- cents are at decimal place 2, so we need to adjust
   let adjustment := 2 - nth_decimal
   if adjustment ≤ 0 then
@@ -52,24 +52,24 @@ deriving Repr
       ((cents - half) / divisor) * divisor
     CatalaRuntime.Money.ofCents rounded
 
-@[simp, grind, smt_translate] def min := (fun (m1 : CatalaRuntime.Money) (m2 : CatalaRuntime.Money) => (if (m1 > m2) then m2 else m1))
+@[simp, grind] def min := (fun (m1 : CatalaRuntime.Money) (m2 : CatalaRuntime.Money) => (if (m1 > m2) then m2 else m1))
 
-@[simp, grind, smt_translate] def max := (fun (m1 : CatalaRuntime.Money) (m2 : CatalaRuntime.Money) => (if (m1 > m2) then m1 else m2))
+@[simp, grind] def max := (fun (m1 : CatalaRuntime.Money) (m2 : CatalaRuntime.Money) => (if (m1 > m2) then m1 else m2))
 
-@[simp, grind, smt_translate] def truncate := (fun (_variable : CatalaRuntime.Money) => (if (_variable = (CatalaRuntime.Money.ofCents 0)) then (CatalaRuntime.Money.ofCents 0) else (if (_variable > (CatalaRuntime.Money.ofCents 0)) then (round (_variable - (CatalaRuntime.Money.ofCents 50))) else (round (_variable + (CatalaRuntime.Money.ofCents 50))))))
+@[simp, grind] def truncate := (fun (_variable : CatalaRuntime.Money) => (if (_variable = (CatalaRuntime.Money.ofCents 0)) then (CatalaRuntime.Money.ofCents 0) else (if (_variable > (CatalaRuntime.Money.ofCents 0)) then (round (_variable - (CatalaRuntime.Money.ofCents 50))) else (round (_variable + (CatalaRuntime.Money.ofCents 50))))))
 
-@[simp, grind, smt_translate] def round_by_excess := (fun (_variable : CatalaRuntime.Money) => (if (_variable ≥ (CatalaRuntime.Money.ofCents 0)) then (round (_variable + (CatalaRuntime.Money.ofCents 49))) else (round (_variable + (CatalaRuntime.Money.ofCents 50)))))
+@[simp, grind] def round_by_excess := (fun (_variable : CatalaRuntime.Money) => (if (_variable ≥ (CatalaRuntime.Money.ofCents 0)) then (round (_variable + (CatalaRuntime.Money.ofCents 49))) else (round (_variable + (CatalaRuntime.Money.ofCents 50)))))
 
-@[simp, grind, smt_translate] def round_by_default := (fun (_variable : CatalaRuntime.Money) => (if (_variable > (CatalaRuntime.Money.ofCents 0)) then (round (_variable - (CatalaRuntime.Money.ofCents 50))) else (round (_variable - (CatalaRuntime.Money.ofCents 49)))))
+@[simp, grind] def round_by_default := (fun (_variable : CatalaRuntime.Money) => (if (_variable > (CatalaRuntime.Money.ofCents 0)) then (round (_variable - (CatalaRuntime.Money.ofCents 50))) else (round (_variable - (CatalaRuntime.Money.ofCents 49)))))
 
-@[simp, grind, smt_translate] def ceiling := (fun (_variable : CatalaRuntime.Money) (max_value : CatalaRuntime.Money) => (min _variable max_value))
+@[simp, grind] def ceiling := (fun (_variable : CatalaRuntime.Money) (max_value : CatalaRuntime.Money) => (min _variable max_value))
 
-@[simp, grind, smt_translate] def in_default := (fun (_variable : CatalaRuntime.Money) (reference : CatalaRuntime.Money) => (max (CatalaRuntime.Money.ofCents 0) (reference - _variable)))
+@[simp, grind] def in_default := (fun (_variable : CatalaRuntime.Money) (reference : CatalaRuntime.Money) => (max (CatalaRuntime.Money.ofCents 0) (reference - _variable)))
 
-@[simp, grind, smt_translate] def in_excess := (fun (_variable : CatalaRuntime.Money) (reference : CatalaRuntime.Money) => (max (CatalaRuntime.Money.ofCents 0) (_variable - reference)))
+@[simp, grind] def in_excess := (fun (_variable : CatalaRuntime.Money) (reference : CatalaRuntime.Money) => (max (CatalaRuntime.Money.ofCents 0) (_variable - reference)))
 
-@[simp, grind, smt_translate] def floor := (fun (_variable : CatalaRuntime.Money) (min_value : CatalaRuntime.Money) => (max _variable min_value))
+@[simp, grind] def floor := (fun (_variable : CatalaRuntime.Money) (min_value : CatalaRuntime.Money) => (max _variable min_value))
 
-@[simp, grind, smt_translate] def positive := (fun (_variable : CatalaRuntime.Money) => (floor _variable (CatalaRuntime.Money.ofCents 0)))
+@[simp, grind] def positive := (fun (_variable : CatalaRuntime.Money) => (floor _variable (CatalaRuntime.Money.ofCents 0)))
 
 end Money_en
