@@ -209,7 +209,7 @@ abbrev D (α : Type) := Except Err (Option α)
     Returns the first successful definition, or conflict if multiple succeed.
 -/
 
-def processExceptions {α : Type} [DecidableEq α] (exceptions : List (D α)) : D α :=
+def processExceptions0 {α : Type} [DecidableEq α] (exceptions : List (D α)) : D α :=
   exceptions.foldl
     (fun acc ex =>
       match acc with
@@ -226,7 +226,7 @@ def processExceptions {α : Type} [DecidableEq α] (exceptions : List (D α)) : 
     (.ok none)
 
 
-def processExceptions2 {α : Type} [DecidableEq α] (exceptions : List (Option α)) : Option α :=
+def processExceptions {α : Type} [DecidableEq α] (exceptions : List (Option α)) : Option α :=
   exceptions.foldl (fun acc ex => match acc with
   | none => ex
   | some v1 => match ex with
