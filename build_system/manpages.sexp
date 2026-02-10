@@ -1,5 +1,4 @@
 (rule (alias man) (action (with-stdout-to clerk.1 (run %{bin:clerk}  --help=groff))))
-<<<<<<< HEAD
 (rule (alias man) (action (with-stdout-to clerk-build.1 (run %{bin:clerk} build --help=groff))))
 (rule (alias man) (action (with-stdout-to clerk-ci.1 (run %{bin:clerk} ci --help=groff))))
 (rule (alias man) (action (with-stdout-to clerk-clean.1 (run %{bin:clerk} clean --help=groff))))
@@ -12,5 +11,3 @@
 (rule (alias man) (action (with-stdout-to clerk-start.1 (run %{bin:clerk} start --help=groff))))
 (rule (alias man) (action (with-stdout-to clerk-test.1 (run %{bin:clerk} test --help=groff))))
 (rule (alias man) (action (with-stdout-to clerk-typecheck.1 (run %{bin:clerk} typecheck --help=groff))))
-=======
->>>>>>> ee9c47d9 (updated latest sara translation)

@@ -50,14 +50,21 @@ RUN eval $(opam env) && \
     python3 -m pip install --break-system-packages -e syntax_highlighting/en/pygments -e syntax_highlighting/fr/pygments -e syntax_highlighting/pl/pygments && \
     opam exec -- make dependencies-python pygments || true
 
-# Build catala compiler and the lean4-desugared plugin
+# Build catala compiler, clerk, and the lean4-desugared plugin
 # Building from source ensures compatibility with container's architecture and libraries
 # Use opam exec to ensure dune from OPAM is used
 # Ensure ownership is correct before building (Python install may have created files)
+
+
+# Build: @catala then @install (dune populates install tree); then lean4 plugin.
+# Clerk is not built (would need %{bin:catala}); API uses --stdlib=stdlib when needed.
 RUN sudo chown -R $(id -u):$(id -g) /app && \
     eval $(opam env) && \
     opam exec -- dune build @catala && \
+    opam exec -- dune build @install && \
     opam exec -- dune build compiler/plugins/lean4_desugared.cmxs
+
+# Clerk is not built in this image; API server uses --stdlib=stdlib when _build/libcatala is absent
 
 # Copy the built catala executable
 RUN cp /app/_build/default/compiler/catala.exe /app/catala.exe && \
@@ -83,6 +90,15 @@ RUN apk add --no-cache \
 # Copy catala executable and plugin from builder (built for Alpine/musl)
 COPY --from=builder /app/catala.exe /app/catala.exe
 COPY --from=builder /app/_build/default/compiler/plugins/lean4_desugared.cmxs /app/lean4_desugared.cmxs
+
+# Copy standard library source (always needed)
+# The compiler needs access to the stdlib
+COPY --from=builder /app/stdlib ./stdlib
+
+# Note: We rely on the API server's automatic stdlib detection:
+# - If _build/libcatala exists (created by clerk start), the compiler will find it automatically
+# - If it doesn't exist, the API server will automatically add --stdlib=stdlib to the command
+# This makes the Docker image robust and works in both scenarios
 
 # Verify the binary works and show its dependencies
 RUN ldd /app/catala.exe 2>/dev/null || echo "Binary is statically linked or ldd not available"

@@ -7,6 +7,7 @@ using the Catala compiler.
 """
 
 import os
+import re
 import subprocess
 import tempfile
 import shutil
@@ -144,25 +145,51 @@ async def convert(request: ConvertRequest):
                         status_code=400,
                         detail="Code cannot be empty"
                     )
+                
+                # Extract module name from code if present
+                # Look for pattern: "> Module <Name>" (case-insensitive)
+                module_match = re.search(r'>\s*Module\s+(\w+)', request.code, re.IGNORECASE)
+                if module_match:
+                    module_name = module_match.group(1).lower()
+                    temp_input = tmpdir_path / f"{module_name}{file_ext}"
+                else:
+                    # Fallback to "input" if no module found
+                    temp_input = tmpdir_path / f"input{file_ext}"
+                
                 # Write code to temporary file
-                temp_input = tmpdir_path / f"input{file_ext}"
                 temp_input.write_text(request.code, encoding="utf-8")
 
             # Output file
             temp_output = tmpdir_path / "output.lean"
 
+            # Project root: where stdlib and _build live. In Docker, api_server.py is in /app;
+            # when run from repo, server/ is under project root.
+            app_dir = Path(__file__).resolve().parent
+            if (app_dir / "stdlib").exists():
+                project_root = app_dir
+            else:
+                project_root = app_dir.parent
+            
+            # Check if stdlib is set up in _build/libcatala, otherwise point to stdlib source
+            stdlib_path = project_root / "_build" / "libcatala"
+            stdlib_source = project_root / "stdlib"
+            
             # Build command
             cmd = [
                 str(CATALA_EXE.absolute()),
                 "lean4-desugared",
-                "--no-stdlib",
+            ]
+            
+            # Add stdlib flag if _build/libcatala doesn't exist but stdlib source does
+            if not stdlib_path.exists() and stdlib_source.exists():
+                cmd.append(f"--stdlib={stdlib_source}")
+            # If _build/libcatala exists, compiler will find it automatically (default location)
+            
+            cmd.extend([
                 str(temp_input),
                 "-o",
                 str(temp_output)
-            ]
-
-            # Run the compiler from the project root (parent of server/)
-            project_root = Path(__file__).parent.parent
+            ])
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -225,7 +252,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 9000))
     print(f"Starting Catala to Lean4 API server on port {port}")
     print(f"Catala compiler: {CATALA_EXE}")
     print(f"API documentation available at: http://localhost:{port}/docs")
