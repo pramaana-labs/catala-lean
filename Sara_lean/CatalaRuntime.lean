@@ -226,12 +226,10 @@ def processExceptions0 {α : Type} [DecidableEq α] (exceptions : List (D α)) :
     (.ok none)
 
 
-def processExceptions {α : Type} [DecidableEq α] (exceptions : List (Option α)) : Option α :=
+def processExceptions {α : Type} (exceptions : List (Option α)) : Option α :=
   exceptions.foldl (fun acc ex => match acc with
   | none => ex
-  | some v1 => match ex with
-    | none => some v1
-    | some v2 => some v2
+  | some _ => acc
   ) none
 
 /-- Handle exceptions by selecting the first non-none value -/
