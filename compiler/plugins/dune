@@ -38,6 +38,37 @@
  (flags (-linkall))
  (libraries shared_ast catala.driver ocamlgraph))
 
+; TODO: Remove desugared_viz library after development.
+
+(library
+ (name desugared_viz)
+ (public_name catala.plugins.desugared_viz)
+ (synopsis "Catala plugin that visualizes Desugared AST as JSON")
+ (modules desugared_viz)
+ (libraries catala.driver desugared))
+
+(library
+ (name lean4_desugared)
+ (public_name catala.plugins.lean4_desugared)
+ (synopsis "Catala plugin that generates Lean 4 code from desugared AST")
+ (modules lean4_desugared)
+ (libraries catala.driver desugared scopelang))
+
+(library
+ (name lean4_desugared_catala_test)
+ (public_name catala.plugins.lean4_desugared_test)
+ (synopsis
+  "Catala plugin that generates Lean 4 code for Catala tests from desugared AST")
+ (modules lean4_desugared_for_catala_tests)
+ (libraries catala.driver desugared scopelang))
+
+(library
+ (name dependency_graph)
+ (public_name catala.plugins.dependency_graph)
+ (synopsis "Catala plugin that generates dependency graphs as JSON")
+ (modules dependency_graph)
+ (libraries lean4_desugared catala.driver catala.scopelang desugared yojson))
+
 (alias
  (name plugins)
  (deps

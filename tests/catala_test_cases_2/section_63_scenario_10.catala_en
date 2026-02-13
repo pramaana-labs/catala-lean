@@ -1,0 +1,139 @@
+> Module Section_63_scenario_10
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_10:
+  output result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_10:
+  # Scenario: Single filer flagged as a common trust fund in tax year 2017
+  # Tested law refs: §63(c)(6)(D) - estates, trusts, common trust funds, and partnerships are not eligible for the standard deduction
+  # Goal: Verify the standard deduction is zero due to common trust fund disallowance
+
+  definition result equals
+    # Entities
+    let ctf1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth event (for completeness; not material to §63(c)(6)(D) disallowance)
+    let birth_ctf1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: ctf1
+      -- birth_date: Date.of_year_month_day of 1970, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    # Tax return: Single filer in 2017, flagged as common trust fund (triggers §63(c)(6)(D))
+    let single_variant equals IRC.SingleVariant {
+      -- taxpayer: ctf1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: true
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.Single content single_variant
+    } in
+
+    # Temporary taxpayer marital status (not married)
+    let marital_status equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: ctf1
+      -- tax_year: 2017
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Temporary itemized deductions result (zeros; section 68 not material here)
+    let itemized_deductions_result equals IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+      -- individual_tax_return: individual_tax_return
+      -- applicable_amount_68_b_1: $0
+      -- three_percent_reduction_68_a_1: $0
+      -- eighty_percent_reduction_68_a_2: $0
+      -- reduction_amount_68_a: $0
+      -- itemized_deductions_after_68: $0
+      -- section_not_applicable_68_f: false
+    } in
+
+    # Temporary §151 exemptions list result (minimal consistent structure)
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result:
+        IRC.IndividualSection151ExemptionsListOutput {
+          -- individual: ctf1
+          -- spouse_exemption_allowed_151_b: false
+          -- individuals_entitled_to_exemptions_under_151: [ ctf1 ]
+        }
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ ctf1 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Temporary §151 personal exemption result (zeros; not material to §63(c)(6)(D))
+    let taxpayer_exemption_result equals IRC.IndividualSection151PersonalExemptionOutput {
+      -- individual: ctf1
+      -- exemption_amount_base: $0
+      -- exemption_amount_after_disallowance: $0
+      -- exemption_amount_after_phaseout: $0
+      -- personal_exemptions_deduction_151_a: $0
+      -- applicable_percentage_151_d_3_B: 0.0
+      -- exemption_amount_zero_151_d_5: false
+    } in
+
+    # Compute §63 taxable income and standard deduction, passing context values to reflect §63(c)(6)(D)
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ birth_ctf1 ]
+      -- blindness_status_events: []
+      -- death_events: []
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+
+      -- taxpayer_marital_status: marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_deductions_result
+
+      # Contexts for §63 outputs:
+      # LAW: §63(c)(6)(D) – estate, trust, common trust fund, partnership → standard deduction is zero
+      -- standard_deduction_eligible_63_c_6: false
+      -- standard_deduction_63_c_1: $0
+
+      # Additional contexts set to zero for completeness
+      -- basic_standard_deduction_63_c_2: $0
+      -- additional_standard_deduction_63_c_3: $0
+      -- additional_amount_taxpayer_aged_63_f_1_A: $0
+      -- additional_amount_spouse_aged_63_f_1_B: $0
+      -- additional_amount_taxpayer_blind_63_f_2_A: $0
+      -- additional_amount_spouse_blind_63_f_2_B: $0
+      -- taxable_income: $0
+    }).main_output
+
+  # Assertions:
+
+  # Asserts the computed standard deduction amount is zero per §63(c)(6)(D)
+  assertion (result.standard_deduction_63_c_1 = $0)
+
+  # Corroborates the legal reason: filer flagged as common trust fund ⇒ not eligible for standard deduction under §63(c)(6)(D)
+  assertion (
+    match result.individual_tax_return.details with pattern
+    -- IRC.FilingStatusVariant.Single content variant :
+      variant.is_common_trust_fund = true
+    -- anything : false
+  )
+
+  # Confirms ineligibility flag used by §63(c)(6) logic is set to false (no standard deduction eligibility)
+  assertion (result.standard_deduction_eligible_63_c_6 = false)
+```

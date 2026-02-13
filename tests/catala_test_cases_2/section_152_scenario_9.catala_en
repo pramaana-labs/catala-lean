@@ -1,0 +1,106 @@
+> Module Section_152_scenario_9
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_9:
+  output qr_result content IRC.IndividualSection152QualifyingRelativeOutput
+
+scope Section_152_scenario_9:
+  # Scenario: §152(d)(2)(H) household member exclusion for spouse
+  # Tested law refs: §152(d)(2)(H) (household member relationship, excluding spouse), §152(d)(1)
+  # Facts: Taxpayer t9 and spouse sp9 are married during 2023 and share the same household all year.
+  # Even though sp9 shares abode and could meet income and abode aspects, §152(d)(2)(H) expressly
+  # excludes anyone who was the spouse during the taxable year from being treated as a household member
+  # relationship; therefore the relationship test under §152(d)(2) via subparagraph (H) must fail,
+  # and sp9 is not a qualifying relative of t9 for 2023.
+
+  definition qr_result equals
+    let t9 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let sp9 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h9 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    let birth_t9 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t9
+      -- birth_date: Date.of_year_month_day of 1987, 7, 7
+      -- is_counterfactual: false
+    } in
+    let birth_sp9 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: sp9
+      -- birth_date: Date.of_year_month_day of 1988, 8, 8
+      -- is_counterfactual: false
+    } in
+
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: t9
+      -- spouse2: sp9
+      -- marriage_date: Date.of_year_month_day of 2020, 6, 1
+      -- is_counterfactual: false
+    } in
+
+    let res_t9 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t9
+      -- household: h9
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_sp9 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: sp9
+      -- household: h9
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    let inc_sp9 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: sp9
+      -- tax_year: 2023
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+
+    let tr_sp9 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: sp9
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152(d) qualifying relative status for sp9 relative to t9 (tax year 2023).
+    # We pass empty family relationships and QC results; the spouse exclusion under §152(d)(2)(H)
+    # ensures the household-member relationship cannot satisfy the relationship test.
+    (output of IRC.IndividualSection152QualifyingRelative with {
+      -- individual: sp9
+      -- taxpayer: t9
+      -- tax_year: 2023
+      -- family_relationship_events: []
+      -- residence_period_events: [ res_t9 ] ++ [ res_sp9 ]
+      -- qualifying_child_results: []
+      -- tax_return_events: [ tr_sp9 ]
+      -- income_events: [ inc_sp9 ]
+      -- marriage_events: [ marriage1 ]
+    }).main_output
+
+  # Assertions - ONLY check the previously computed scope output:
+  # qr_household_member_sp9_t9_2023: Tests §152(d)(2)(H) spouse exclusion for household member relationship
+  assertion (qr_result.is_household_member_152_d_2_H = false)
+
+  # is_qualifying_relative_sp9_of_t9_2023: With (H) excluded for a spouse, overall §152(d)(1) fails
+  assertion (qr_result.is_qualifying_relative = false)
+```

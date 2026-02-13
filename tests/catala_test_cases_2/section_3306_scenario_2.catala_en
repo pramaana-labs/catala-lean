@@ -1,0 +1,233 @@
+> Module Section_3306_scenario_2
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_2:
+  output computation content IRC.IRCSimplified
+
+scope Section_3306_scenario_2:
+  # Scenario: General employer status under §3306(a)(1)(B) fails because one of the 10 days
+  # is domestic service, which §3306(a)(1) says is not taken into account for this paragraph.
+  # Nine general-service days in different calendar weeks plus one domestic-service day
+  # do not satisfy the 10-day threshold.
+  # Tested law refs: §3306(a)(1)(B); §3306(a)(1) (domestic-service exclusion sentence).
+
+  definition computation equals
+    let i1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let i2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let org2 equals IRC.Organization {
+      -- id: 2
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationship events:
+    # 9 general-service single-day employments in different calendar weeks (2024-01-02, 01-10, 01-18, 01-24,
+    # 02-01, 02-08, 02-15, 02-22, 02-29), all for employee i1 at org2.
+    # 1 domestic-service day (2024-03-07) for employee i2 at org2.
+    let ere1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 1, 2
+      -- end_date: Date.of_year_month_day of 2024, 1, 2
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 1, 10
+      -- end_date: Date.of_year_month_day of 2024, 1, 10
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 3
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 1, 18
+      -- end_date: Date.of_year_month_day of 2024, 1, 18
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 4
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 1, 24
+      -- end_date: Date.of_year_month_day of 2024, 1, 24
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 5
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 2, 1
+      -- end_date: Date.of_year_month_day of 2024, 2, 1
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere6 equals IRC.EmploymentRelationshipEvent {
+      -- id: 6
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 2, 8
+      -- end_date: Date.of_year_month_day of 2024, 2, 8
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere7 equals IRC.EmploymentRelationshipEvent {
+      -- id: 7
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 2, 15
+      -- end_date: Date.of_year_month_day of 2024, 2, 15
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere8 equals IRC.EmploymentRelationshipEvent {
+      -- id: 8
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 2, 22
+      -- end_date: Date.of_year_month_day of 2024, 2, 22
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere9 equals IRC.EmploymentRelationshipEvent {
+      -- id: 9
+      -- employer: org2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2024, 2, 29
+      -- end_date: Date.of_year_month_day of 2024, 2, 29
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere10 equals IRC.EmploymentRelationshipEvent {
+      -- id: 10
+      -- employer: org2
+      -- employee: i2
+      -- start_date: Date.of_year_month_day of 2024, 3, 7
+      -- end_date: Date.of_year_month_day of 2024, 3, 7
+      -- employment_category: IRC.EmploymentCategory.DomesticService
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Dummy individual income tax return (required input for IRCSimplified)
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: i1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2024
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # FUTA excise return for org2 (calendar year 2024)
+    let futa_general_details equals IRC.EmployerGeneralVariant {
+      -- employer: org2
+    } in
+    let futa_tax_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2024
+      -- details: IRC.EmployerVariant.GeneralEmployer content futa_general_details
+    } in
+
+    output of IRC.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+
+      -- individuals: [ i1 ] ++ [ i2 ]
+      -- organizations: [ org2 ]
+
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: []
+      -- income_events: []
+
+      -- employment_relationship_events:
+      [ ere1 ] ++ [ ere2 ] ++ [ ere3 ] ++ [ ere4 ] ++ [ ere5 ]
+      ++ [ ere6 ] ++ [ ere7 ] ++ [ ere8 ] ++ [ ere9 ] ++ [ ere10 ]
+
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+
+      -- employer_unemployment_excise_tax_return: futa_tax_return
+
+      -- itemized_deductions: $0
+      -- adjusted_gross_income: $0
+    }
+
+  # Assertions - ONLY check outputs from the computed scope result:
+
+  # §3306(a)(1)(B): “10 days in different calendar weeks” for general employment.
+  # §3306(a)(1) exclusion sentence: domestic-service days are not taken into account for paragraph (1).
+  # Hence, with 9 general-service days + 1 domestic-service day (excluded), the general employer
+  # status is not met.
+  assertion (
+    exists s among computation.organization_employer_statuses
+      such that not s.is_general_employer
+  )
+
+  # Count of domestic-service days excluded from the paragraph (1) count should be 1.
+  # We count EmploymentRelationshipEventSection3306EmploymentOutput with DomesticService category
+  # where is_excluded_domestic_service = true.
+  assertion (
+    let domestic_excluded_list equals
+      list of res among computation.employment_relationship_employment_results
+        such that
+          res.employment_relationship_event.employment_category = IRC.EmploymentCategory.DomesticService
+          and res.is_excluded_domestic_service
+    in
+    number of domestic_excluded_list = 1
+  )
+```

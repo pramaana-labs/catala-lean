@@ -1,0 +1,117 @@
+> Module Section_152_scenario_6
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_6:
+  output dependents_t6 content IRC.IndividualSection152DependentsOutput
+
+scope Section_152_scenario_6:
+  # Scenario: Qualifying relative - Father of taxpayer with no income and not QC of any taxpayer
+  # Tested law refs:
+  # - §152(a): Dependent includes qualifying relative
+  # - §152(d)(1)(A): Relationship described in (d)(2)
+  # - §152(d)(1)(B): No income for the calendar year
+  # - §152(d)(1)(D): Not a qualifying child of any taxpayer
+  # - §152(d)(2)(C): Relationship includes father or mother (satisfies (d)(1)(A))
+
+  definition dependents_t6 equals
+    # Individuals
+    let t6 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let f6 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Birth events (used for QC tests like age and younger-than-taxpayer)
+    let birth_t6 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t6
+      -- birth_date: Date.of_year_month_day of 1985, 2, 2
+      -- is_counterfactual: false
+    } in
+    let birth_f6 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: f6
+      -- birth_date: Date.of_year_month_day of 1955, 3, 3
+      -- is_counterfactual: false
+    } in
+
+    # Family relationship: father (matches §152(d)(2)(C), satisfying §152(d)(1)(A))
+    let rel_father equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t6
+      -- relative: f6
+      -- start_date: Date.of_year_month_day of 1985, 2, 2
+      -- relationship_type: IRC.FamilyRelationshipType.Father
+      -- is_counterfactual: false
+    } in
+
+    # Income: father has no income for calendar year 2023 (satisfies §152(d)(1)(B))
+    let income_f6 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: f6
+      -- tax_year: 2023
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+
+    # Tax return event for father: not a joint return (relevant for QC joint return tests elsewhere)
+    let tr_f6 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: f6
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152 dependents for taxpayer t6 in 2023 (only candidate dependent is f6)
+    (output of IRC.IndividualSection152Dependents with {
+      -- taxpayer: t6
+      -- tax_year: 2023
+      -- individuals: [ f6 ]
+      -- family_relationship_events: [ rel_father ]
+      -- birth_events: [ birth_t6 ] ++ [ birth_f6 ]
+      -- residence_period_events: []
+      -- tax_return_events: [ tr_f6 ]
+      -- income_events: [ income_f6 ]
+      -- marriage_events: []
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output
+
+  # qr_relationship_f6_t6_2023: true
+  # Tests §152(d)(1)(A) via relationship described in §152(d)(2); here (d)(2)(C) Father
+  assertion (
+    exists qr among dependents_t6.qualifying_relatives
+      such that qr.individual.id = 2 and qr.bears_relationship_152_d_1_A = true
+  )
+
+  # qr_no_income_f6_2023: true
+  # Tests §152(d)(1)(B): individual has no income for the calendar year
+  assertion (
+    exists qr among dependents_t6.qualifying_relatives
+      such that qr.individual.id = 2 and qr.has_no_income_152_d_1_B = true
+  )
+
+  # qr_not_qc_of_any_taxpayer_f6_2023: true
+  # Tests §152(d)(1)(D): not a qualifying child of any taxpayer
+  assertion (
+    exists qr among dependents_t6.qualifying_relatives
+      such that qr.individual.id = 2 and qr.is_not_qualifying_child_152_d_1_D = true
+  )
+
+  # is_qualifying_relative_f6_of_t6_2023: true
+  # Aggregates §152(d)(1)(A), (B), (D): qualifying relative determination
+  assertion (
+    exists qr among dependents_t6.qualifying_relatives
+      such that qr.individual.id = 2 and qr.is_qualifying_relative = true
+  )
+
+  # is_dependent_f6_of_t6_2023: true
+  # Tests §152(a): dependent includes qualifying relative (after §152(b)(2) joint return exception screening)
+  assertion (
+    exists d among dependents_t6.dependents_after_152b2 such that d.id = 2
+  )
+```

@@ -1,0 +1,134 @@
+> Module Section_152_scenario_16
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_16:
+  output dependents_t16 content IRC.IndividualSection152DependentsOutput
+
+scope Section_152_scenario_16:
+  # Scenario: §152(b)(2) married dependents exception
+  # Tested law refs: §152(b)(2), §152(c)(1)(E), §152(c)(1), §152(a)
+
+  definition dependents_t16 equals
+    # Entities
+    let t16 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c16 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let spc16 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h16 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth events
+    let b_t16 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t16
+      -- birth_date: Date.of_year_month_day of 1984, 1, 1
+      -- is_counterfactual: false
+    } in
+    let b_c16 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: c16
+      -- birth_date: Date.of_year_month_day of 2006, 1, 1
+      -- is_counterfactual: false
+    } in
+    let b_spc16 equals IRC.BirthEvent {
+      -- id: 3
+      -- individual: spc16
+      -- birth_date: Date.of_year_month_day of 2006, 2, 2
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods (principal place of abode)
+    let res_t16 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t16
+      -- household: h16
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_c16 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c16
+      -- household: h16
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 8, 1
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood and family relationship (child of taxpayer)
+    let pr_t16_c16 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: t16
+      -- child: c16
+      -- start_date: Date.of_year_month_day of 2006, 1, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+    let fr_t16_c16 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t16
+      -- relative: c16
+      -- start_date: Date.of_year_month_day of 2006, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    # Marriage: child married spouse in 2023
+    let mar_c16_spc16 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: c16
+      -- spouse2: spc16
+      -- marriage_date: Date.of_year_month_day of 2023, 5, 1
+      -- is_counterfactual: false
+    } in
+
+    # Tax return: child filed a joint return not only for refund (trigger §152(c)(1)(E) and §152(b)(2))
+    let tr_c16 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: c16
+      -- tax_year: 2023
+      -- filed_joint_return: true
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152 dependents for taxpayer t16 in tax year 2023
+    (output of IRC.IndividualSection152Dependents with {
+      -- taxpayer: t16
+      -- tax_year: 2023
+      -- individuals: [ c16 ]
+      -- family_relationship_events: [ fr_t16_c16 ]
+      -- birth_events: [ b_t16 ] ++ [ b_c16 ] ++ [ b_spc16 ]
+      -- residence_period_events: [ res_t16 ] ++ [ res_c16 ]
+      -- tax_return_events: [ tr_c16 ]
+      -- income_events: []
+      -- marriage_events: [ mar_c16_spc16 ]
+    }).main_output
+
+  # Assertions:
+
+  # Tests §152(c)(1)(E): qualifying child must not have filed a joint return (other than only for refund)
+  # Here c16 filed a joint return not only for refund → QC fails
+  assertion (
+    exists qc among dependents_t16.qualifying_children
+      such that qc.individual.id = 2 and qc.is_qualifying_child = false
+  )
+
+  # Tests §152(b)(2): married dependents exception applies when individual made a joint return with spouse
+  assertion (
+    exists st among dependents_t16.individual_dependent_statuses
+      such that st.individual.id = 2 and st.is_excepted_under_152_b_2 = true
+  )
+
+  # Tests §§152(a) and 152(b)(2): individual is not treated as a dependent after applying §152(b)(2)
+  assertion (
+    not exists d among dependents_t16.dependents_after_152b2 such that d.id = 2
+  )
+```

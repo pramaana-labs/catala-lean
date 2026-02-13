@@ -1,0 +1,162 @@
+> Module Section_68_scenario_5
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_68_scenario_5:
+  output computation content IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput
+
+scope Section_68_scenario_5:
+  # Scenario: §68 applicable amount and applicability for a surviving spouse in 2026
+  # Tested law refs: §68(a), §68(b)(1)(A), §68(f)
+  # Assumption from scenario: Adjusted gross income (AGI) equals earned income
+
+  definition computation equals
+    let i8 equals IRC.Individual { -- id: 8 -- is_counterfactual: false } in
+    let i9 equals IRC.Individual { -- id: 9 -- is_counterfactual: false } in
+    let i10 equals IRC.Individual { -- id: 10 -- is_counterfactual: false } in
+
+    let h2 equals IRC.Household { -- id: 2 -- is_counterfactual: false } in
+
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: i8
+      -- spouse2: i9
+      -- marriage_date: Date.of_year_month_day of 2010, 4, 10
+      -- is_counterfactual: false
+    } in
+
+    let death1 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: i9
+      -- death_date: Date.of_year_month_day of 2025, 3, 1
+      -- is_counterfactual: false
+    } in
+
+    let parent1 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: i8
+      -- child: i10
+      -- start_date: Date.of_year_month_day of 2012, 7, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    let rel1 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: i8
+      -- relative: i10
+      -- start_date: Date.of_year_month_day of 2012, 7, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    let res_child equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: i10
+      -- household: h2
+      -- start_date: Date.of_year_month_day of 2026, 1, 1
+      -- end_date: Date.of_year_month_day of 2026, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    let maint equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: i8
+      -- household: h2
+      -- start_date: Date.of_year_month_day of 2026, 1, 1
+      -- end_date: Date.of_year_month_day of 2026, 12, 31
+      -- cost_furnished_percentage: 0.7
+      -- is_counterfactual: false
+    } in
+
+    let nra_i8_2025 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: i8
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+    let nra_i9_2025 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 2
+      -- individual: i9
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 3, 1
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+
+    let inc_i8_2026 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: i8
+      -- tax_year: 2026
+      -- has_income: true
+      -- earned_income: $300000
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return for 2026: Surviving Spouse with qualifying dependent i10
+    let ss_variant equals IRC.SurvivingSpouseVariant {
+      -- taxpayer: i8
+      -- deceased_spouse: i9
+      -- qualifying_dependent: i10
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let indiv_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2026
+      -- details: IRC.FilingStatusVariant.SurvivingSpouse content ss_variant
+    } in
+
+    # Temporary marital status output for §7703 input to §68 computation (assumption per scenario)
+    let marital_status_7703 equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: i8
+        -- tax_year: 2026
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2026, 12, 31
+        -- is_married_7703_a_1: false
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: true
+        -- furnishes_over_one_half_cost_7703_b_2: true
+        -- spouse_not_member_last_6_months_7703_b_3: true
+        -- considered_not_married_7703_b: true
+        -- is_married_for_tax_purposes_7703: false
+      } in
+
+    # Inputs to §68 scope:
+    # - adjusted_gross_income equals earned income per assumption
+    # - itemized_deductions: choose a positive amount; reduction should be $0 since AGI equals applicable amount
+    let agi equals $300000 in
+    let itemized_deductions_amount equals $20000 in
+
+    (output of IRC.IndividualTaxReturnSection68ItemizedDeductions with {
+      -- individual_tax_return: indiv_return
+      -- adjusted_gross_income: agi
+      -- itemized_deductions: itemized_deductions_amount
+      -- taxpayer_marital_status: marital_status_7703
+      -- is_surviving_spouse: true
+      -- is_head_of_household: false
+    }).main_output
+
+  # Assertions mapped to tested law refs:
+  # §68(b)(1)(A): Applicable amount = $300,000 for surviving spouse
+  assertion (computation.applicable_amount_68_b_1 = $300000)
+
+  # §68(f): Section applies in 2026 (i.e., not in the non-applicability window 2018-2025)
+  # We assert the "not applicable" flag is false.
+  assertion (computation.section_not_applicable_68_f = false)
+
+  # §68(a): AGI equals applicable amount → excess = $0 → 3% reduction = $0
+  # This also evidences "agi_exceeds_applicable_amount: false" and "agi_excess_amount: 0" per scenario mapping.
+  assertion (computation.three_percent_reduction_68_a_1 = $0)
+
+  # §68(a): Reduction amount is the lesser of 3% excess and 80% of itemized deductions → $0 here
+  # Confirms no itemized deductions reduction applies.
+  assertion (computation.reduction_amount_68_a = $0)
+```

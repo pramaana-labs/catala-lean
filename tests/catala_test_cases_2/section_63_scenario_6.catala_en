@@ -1,0 +1,141 @@
+> Module Section_63_scenario_6
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_6:
+  output taxable_result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_6:
+  # Scenario: Married filing separate in tax year 2017 where the spouse itemizes deductions.
+  # Tested law refs: §63(c)(6)(A) (standard deduction shall be zero if either spouse itemizes on separate returns),
+  #                  §63(c)(2)(C) (basic standard deduction amount in any other case = $3,000 for 2017).
+  definition taxable_result equals
+    let mfs1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let mfs_sp1 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let b1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: mfs1
+      -- birth_date: Date.of_year_month_day of 1982, 11, 11
+      -- is_counterfactual: false
+    } in
+    let b2 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: mfs_sp1
+      -- birth_date: Date.of_year_month_day of 1981, 1, 20
+      -- is_counterfactual: false
+    } in
+
+    let marr1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: mfs1
+      -- spouse2: mfs_sp1
+      -- marriage_date: Date.of_year_month_day of 2010, 6, 6
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Married Filing Separate for 2017; spouse itemizes
+    let mfs_details equals IRC.MarriedFilingSeparateVariant {
+      -- taxpayer: mfs1
+      -- spouse: mfs_sp1
+      -- itemization_election: false
+      -- spouse_itemization_election: true  # triggers §63(c)(6)(A)
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.MarriedFilingSeparate content mfs_details
+    } in
+
+    # Temporary outputs for dependent scopes required by §63 scope (do not compute them here)
+    # Marital status under §7703 for the taxpayer (married; not deemed unmarried)
+    let taxpayer_marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: mfs1
+        -- tax_year: 2017
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+        -- is_married_7703_a_1: true
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: true
+      } in
+
+    # §68 itemized deductions result placeholder (amounts not relevant to §63(c)(6)(A) test)
+    let itemized_deductions_result equals
+      IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+        -- individual_tax_return: individual_tax_return
+        -- applicable_amount_68_b_1: $0
+        -- three_percent_reduction_68_a_1: $0
+        -- eighty_percent_reduction_68_a_2: $0
+        -- reduction_amount_68_a: $0
+        -- itemized_deductions_after_68: $0
+        -- section_not_applicable_68_f: false
+      } in
+
+    # §151 exemptions list placeholder
+    let taxpayer_result_151 equals
+      IRC.IndividualSection151ExemptionsListOutput {
+        -- individual: mfs1
+        -- spouse_exemption_allowed_151_b: false
+        -- individuals_entitled_to_exemptions_under_151: [ mfs1 ]
+      } in
+    let taxpayer_exemptions_list_result equals
+      IRC.TaxpayerExemptionsList151Output {
+        -- taxpayer_result: taxpayer_result_151
+        -- spouse_result: Absent
+        -- individuals_entitled_to_exemptions_under_151: [ mfs1 ]
+        -- spouse_exemption_allowed_151_b: false
+      } in
+
+    # §151 personal exemption placeholder
+    let taxpayer_exemption_result equals
+      IRC.IndividualSection151PersonalExemptionOutput {
+        -- individual: mfs1
+        -- exemption_amount_base: $0
+        -- exemption_amount_after_disallowance: $0
+        -- exemption_amount_after_phaseout: $0
+        -- personal_exemptions_deduction_151_a: $0
+        -- applicable_percentage_151_d_3_B: 0.0
+        -- exemption_amount_zero_151_d_5: false
+      } in
+
+    # Compute §63 taxable income outputs
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ b1 ] ++ [ b2 ]
+      -- blindness_status_events: []
+      -- death_events: []
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_deductions_result
+    }).main_output
+
+  # Assertions:
+  # Correlation to legal text:
+  # - basic_standard_deduction_63_c_2_before_c_5 = $3000 tests §63(c)(2)(C) for 2017 (“any other case” incl. MFS).
+  assertion (taxable_result.basic_standard_deduction_63_c_2_before_c_5 = $3000)
+
+  # - additional_standard_deduction_63_c_3 = $0 because no aged/blind amounts apply in this scenario (§63(c)(3), (f)).
+  assertion (taxable_result.additional_standard_deduction_63_c_3 = $0)
+
+  # - standard_deduction_63_c_1 = $0 tests §63(c)(6)(A) disallowance when either spouse itemizes on separate returns.
+  assertion (taxable_result.standard_deduction_63_c_1 = $0)
+
+  # - standard_deduction_eligible_63_c_6 = false corresponds to “standard deduction shall be zero” under §63(c)(6)(A)
+  #   (scenario's “standard_deduction_zero_reason: §63(c)(6)(A)”).
+  assertion (taxable_result.standard_deduction_eligible_63_c_6 = false)
+```

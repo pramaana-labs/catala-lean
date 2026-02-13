@@ -1,0 +1,171 @@
+> Module Tax_case_90
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase90:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase90:
+  # Alice and Bob got married on Feb 3rd, 1992. Alice died on July 9th, 2014. From 2015 to 2019, Bob furnished the costs of maintaining the home where he and and his friend Charlie lived during that time, while Charlie had no income and was not the qualifying child of any taxpayer. Bob earned $304598 every year from 2015 to 2019.
+
+  # How much tax does Bob have to pay in 2018? $96641
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let charlie equals
+      Sara.Individual {
+        -- id: 3
+        -- is_counterfactual: false
+      } in
+    let household equals
+      Sara.Household {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let marriage equals
+      Sara.MarriageEvent {
+        -- id: 1
+        -- spouse1: alice
+        -- spouse2: bob
+        -- marriage_date: Date.of_year_month_day of 1992, 2, 3
+        -- is_counterfactual: false
+      } in
+    let alice_death equals
+      Sara.DeathEvent {
+        -- id: 1
+        -- decedent: alice
+        -- death_date: Date.of_year_month_day of 2014, 7, 9
+        -- is_counterfactual: false
+      } in
+    let bob_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 1
+        -- individual: bob
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2015, 1, 1
+        -- end_date: Date.of_year_month_day of 2019, 12, 31
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let charlie_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 2
+        -- individual: charlie
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2015, 1, 1
+        -- end_date: Date.of_year_month_day of 2019, 12, 31
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let bob_household_maintenance_2018 equals
+      Sara.HouseholdMaintenanceEvent {
+        -- id: 1
+        -- individual: bob
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2018, 1, 1
+        -- end_date: Date.of_year_month_day of 2018, 12, 31
+        -- cost_furnished_percentage: 100.0
+        -- is_counterfactual: false
+      } in
+    let bob_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: bob
+        -- tax_year: 2018
+        -- has_income: true
+        -- earned_income: $304598
+        -- is_counterfactual: false
+      } in
+    let charlie_income equals
+      Sara.IncomeEvent {
+        -- id: 2
+        -- individual: charlie
+        -- tax_year: 2018
+        -- has_income: false
+        -- earned_income: $0
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: bob
+        -- tax_year: 2018
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let single_variant equals
+      Sara.SingleVariant {
+        -- taxpayer: bob
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2018
+        -- details: Sara.FilingStatusVariant.Single content single_variant
+      } in
+    let dummy_org equals
+      Sara.Organization {
+        -- id: 0
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let employer_general_variant equals
+      Sara.EmployerGeneralVariant {
+        -- employer: dummy_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 0
+        -- tax_year: 2018
+        -- details: Sara.EmployerVariant.GeneralEmployer content employer_general_variant
+      } in
+    let income_events_list equals [ bob_income ] ++ [ charlie_income ] in
+    let adjusted_gross_income equals $304598 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ] ++ [ charlie ]
+      -- organizations: [ dummy_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: [ alice_death ]
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: [ marriage ]
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: [ bob_residence ] ++ [ charlie_residence ]
+      -- household_maintenance_events: [ bob_household_maintenance_2018 ]
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ tax_return_event ] 
+      -- income_events: income_events_list
+      -- employment_relationship_events: []
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of computation.tax = $96641)
+```
+

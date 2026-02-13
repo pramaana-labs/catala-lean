@@ -1,0 +1,183 @@
+> Module Section_3301_scenario_7
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3301_scenario_7:
+  output tax_result content IRC.EmployerUnemploymentExciseTaxFilerSection3301TaxOutput
+
+scope Section_3301_scenario_7:
+  # Scenario: Agricultural labor employer pays regular cash wages to two employees during 2023.
+  # Tested law refs: §3301 (uniform 6 percent excise tax on total wages for the calendar year)
+  # Comments: AgriculturalEmployer return variant used; §3301 rate applies identically.
+
+  definition tax_result equals
+    # Entities
+    let i1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let i2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let o1 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationships (agricultural labor in the United States, all year)
+    let ere1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let ere2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i2
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Wage payments (regular compensation, cash)
+    let wpe1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- payment_date: Date.of_year_month_day of 2023, 6, 1
+      -- amount: $17000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wpe2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i2
+      -- payment_date: Date.of_year_month_day of 2023, 7, 1
+      -- amount: $8000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Temporary outputs for dependent scopes (do not compute; set based on scenario)
+    # Employer status for FUTA purposes
+    let org_status_o1 equals IRC.OrganizationSection3306EmployerStatusOutput {
+      -- organization: o1
+      -- is_employer: true
+      -- is_general_employer: false
+      -- is_agricultural_employer: true
+      -- is_domestic_service_employer: false
+    } in
+
+    # Employment determinations under §3306(c) (treat as employment; no exclusions)
+    let emp_out1 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: ere1
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+    let emp_out2 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: ere2
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+
+    # Wages determinations under §3306(b) (no exclusions apply; use amounts before $7,000 cap)
+    let wages_out1 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: wpe1
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $17000
+    } in
+    let wages_out2 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: wpe2
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $8000
+    } in
+
+    # FUTA return: AgriculturalEmployer variant for calendar year 2023
+    let agri_details equals IRC.EmployerAgriculturalLaborVariant {
+      -- employer: o1
+    } in
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.EmployerVariant.AgriculturalEmployer content agri_details
+    } in
+
+    # Compute §3301 excise tax with assumed totals and rate (only §3301 is tested here)
+    # §3301: excise tax = 6 percent of total wages for the calendar year.
+    (output of IRC.EmployerUnemploymentExciseTaxFilerSection3301Tax with {
+      -- employer_unemployment_excise_tax_return: futa_return
+      -- wage_payment_wages_results: [ wages_out1 ] ++ [ wages_out2 ]
+      -- organization_employer_statuses: [ org_status_o1 ]
+      -- employment_relationship_employment_results: [ emp_out1 ] ++ [ emp_out2 ]
+
+      # Context outputs for the tested §3301 computation:
+      # Total wages for the year: $17,000 + $8,000 = $25,000
+      -- total_taxable_wages: $25000
+      # Uniform FUTA rate under §3301 is 6%
+      -- tax_rate: 0.06
+      # Excise tax = 6% of $25,000 = $1,500
+      -- excise_tax: $1500
+    }).main_output
+
+  # Assertions (check only the scope output; correlate with §3301):
+  # §3301 total wages base
+  assertion (tax_result.total_taxable_wages = $25000)
+  # §3301 uniform rate of 6 percent
+  assertion (tax_result.tax_rate = 0.06)
+  # §3301 tax amount = 6% of total wages
+  assertion (tax_result.excise_tax = $1500)
+```

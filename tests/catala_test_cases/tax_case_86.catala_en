@@ -1,0 +1,163 @@
+> Module Tax_case_86
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase86:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase86:
+  # Bob is Alice's father. Alice has paid $45252 to Bob for work done in the year 2017.
+
+  # How much tax does Alice have to pay in 2017? $0
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let alice_org equals
+      Sara.Organization {
+        -- id: 1
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let bob_parenthood equals
+      Sara.ParenthoodEvent {
+        -- id: 1
+        -- parent: bob
+        -- child: alice
+        -- start_date: Date.of_year_month_day of 1970, 1, 1
+        -- parent_type: Sara.ParentType.Biological
+        -- is_counterfactual: false
+      } in
+    let alice_family_relationship equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 1
+        -- person: alice
+        -- relative: bob
+        -- relationship_type: Sara.FamilyRelationshipType.Father
+        -- start_date: Date.of_year_month_day of 1970, 1, 1
+        -- is_counterfactual: false
+      } in
+    let bob_family_relationship equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 2
+        -- person: bob
+        -- relative: alice
+        -- relationship_type: Sara.FamilyRelationshipType.Child
+        -- start_date: Date.of_year_month_day of 1970, 1, 1
+        -- is_counterfactual: false
+      } in
+    let bob_employment equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2017, 1, 1
+        -- end_date: Date.of_year_month_day of 2017, 12, 31
+        -- employment_category: Sara.EmploymentCategory.General
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let alice_wage_payment equals
+      Sara.WagePaymentEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2017, 12, 31
+        -- amount: $45252
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let alice_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2017
+        -- has_income: false
+        -- earned_income: $0
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2017
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let single_variant equals
+      Sara.SingleVariant {
+        -- taxpayer: alice
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2017
+        -- details: Sara.FilingStatusVariant.Single content single_variant
+      } in
+    let employer_general_variant equals
+      Sara.EmployerGeneralVariant {
+        -- employer: alice_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 1
+        -- tax_year: 2017
+        -- details: Sara.EmployerVariant.GeneralEmployer content employer_general_variant
+      } in
+    let income_events_list equals [ alice_income ] in
+    let adjusted_gross_income equals $0 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ]
+      -- organizations: [ alice_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: [ bob_parenthood ]
+      -- family_relationship_events: [ alice_family_relationship ] ++ [ bob_family_relationship ]
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: [ bob_employment ]
+      -- wage_payment_events: [ alice_wage_payment ]
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of (computation.tax) + round of (computation.employer_unemployment_excise_tax_result.excise_tax) = $0)
+```
+

@@ -1,0 +1,146 @@
+> Module Section_2_scenario_1
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_2_scenario_1:
+  output computation content IRC.IndividualTaxReturnSection2aSurvivingSpouseOutput
+
+scope Section_2_scenario_1:
+  # Scenario: §2(a) Surviving spouse positive case
+  # Tested law refs: §2(a)(1)(A), §2(a)(1)(B), §2(a)(2)(B)
+  # Assumptions per scenario comments:
+  # - The son (c1) is a dependent within §152 and the taxpayer is entitled to a §151 deduction for the year.
+  #   We pass this via a temporary TaxpayerExemptionsList151Output including c1.
+
+  definition computation equals
+    # Entities
+    let t1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let s1 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let c1 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h1 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Events
+    let m1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: t1
+      -- spouse2: s1
+      -- marriage_date: Date.of_year_month_day of 2015, 5, 1
+      -- is_counterfactual: false
+    } in
+
+    let dth1 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: s1
+      -- death_date: Date.of_year_month_day of 2024, 6, 15
+      -- is_counterfactual: false
+    } in
+
+    let par1 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: t1
+      -- child: c1
+      -- start_date: Date.of_year_month_day of 2010, 1, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    let res_c1_2025 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: c1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    let hm_t1_2025 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: t1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- cost_furnished_percentage: 0.6
+      -- is_counterfactual: false
+    } in
+
+    # Residency status in death year (for §2(a)(2)(B) joint return could have been made)
+    let nra_t1_2024 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: t1
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+    let nra_s1_2024 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 2
+      -- individual: s1
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return (Surviving Spouse filing status for 2025)
+    let ss_details equals IRC.SurvivingSpouseVariant {
+      -- taxpayer: t1
+      -- deceased_spouse: s1
+      -- qualifying_dependent: c1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2025
+      -- details: IRC.FilingStatusVariant.SurvivingSpouse content ss_details
+    } in
+
+    # Temporary §151 exemptions list assumption (passes §151 entitlement for c1)
+    let taxpayer_exemptions_taxpayer_result equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: t1
+      -- spouse_exemption_allowed_151_b: false
+      -- individuals_entitled_to_exemptions_under_151: [ c1 ]
+    } in
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: taxpayer_exemptions_taxpayer_result
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ c1 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Call §2(a) surviving spouse scope
+    (output of IRC.IndividualTaxReturnSection2aSurvivingSpouse with {
+      -- individual_tax_return: individual_tax_return
+      -- death_events: [ dth1 ]
+      -- nonresident_alien_status_period_events: [ nra_t1_2024 ] ++ [ nra_s1_2024 ]
+      -- parenthood_events: [ par1 ]
+      -- household_maintenance_events: [ hm_t1_2025 ]
+      -- residence_period_events: [ res_c1_2025 ]
+      -- marriage_events: [ m1 ]
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output:
+  # §2(a)(1)(A): spouse died during either of the two years immediately preceding the taxable year
+  assertion (computation.spouse_died_within_two_years_2_a_1_A = true)
+
+  # §2(a)(1)(B): maintains as his home a household which is the principal place of abode
+  # of a §152 son/daughter dependent for the taxable year AND furnishes over half the cost.
+  # The scope aggregates these conditions in:
+  # maintains_household_qualifying_dependent_principal_abode_section151_2_a_1_B
+  # This corresponds to the scenario's "maintains_household_over_half_cost_for_tax_year" and
+  # "principal_place_of_abode_for_tax_year" expected values.
+  assertion (computation.maintains_household_qualifying_dependent_principal_abode_section151_2_a_1_B = true)
+
+  # §2(a)(2)(B): joint return could have been made in the death year
+  assertion (computation.joint_return_could_have_been_made_2_a_2_B = true)
+
+  # Overall §2(a) surviving spouse status for §1 filing purposes
+  assertion (computation.is_surviving_spouse_2_a = true)
+```

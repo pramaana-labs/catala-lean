@@ -1,0 +1,170 @@
+> Module Section_3301_scenario_4
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3301_scenario_4:
+  output computation content IRC.IRCSimplified
+
+scope Section_3301_scenario_4:
+  # Scenario: §3301 FUTA tax — exclude wage paid after employment ended; include only wages paid "with respect to employment" within employment dates
+  # Tested law refs: §3301
+  # Expected: Total FUTA wages = $8000 ($5000 within employment for i1 + $3000 for i2), tax rate = 6%, excise tax = $480
+
+  definition computation equals
+    # Entities
+    let i1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let i2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let o1 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationships (calendar year 2023)
+    let emp_rel_1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 6, 30
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_rel_2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i2
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Wage payments (only those within employment dates should count "with respect to employment" for §3301)
+    let wage_1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- payment_date: Date.of_year_month_day of 2023, 6, 15
+      -- amount: $5000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wage_2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i1
+      -- payment_date: Date.of_year_month_day of 2023, 7, 15
+      -- amount: $4000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wage_3 equals IRC.WagePaymentEvent {
+      -- id: 3
+      -- employer: o1
+      -- employee: i2
+      -- payment_date: Date.of_year_month_day of 2023, 8, 1
+      -- amount: $3000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Employment termination (i1 ended 2023-06-30; payment on 2023-07-15 should be excluded by §3301 "with respect to having individuals in his employ")
+    let term_1 equals IRC.EmploymentTerminationEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- termination_date: Date.of_year_month_day of 2023, 6, 30
+      -- reason: IRC.TerminationReason.Other
+      -- is_counterfactual: false
+    } in
+
+    # Employer Unemployment Excise Tax Return (FUTA) for 2023
+    let general_employer_variant equals IRC.EmployerGeneralVariant { -- employer: o1 } in
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.EmployerVariant.GeneralEmployer content general_employer_variant
+    } in
+
+    # Minimal individual income tax return (not used for §3301 but required by IRCSimplified)
+    let single_variant equals IRC.SingleVariant {
+      -- taxpayer: i1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let dummy_individual_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.Single content single_variant
+    } in
+
+    # Compute via IRCSimplified (section-specific subscopes for §3306 and §3301 are wired inside)
+    output of IRC.IRCSimplified with {
+      -- individual_tax_return: dummy_individual_return
+      -- individuals: [ i1 ] ++ [ i2 ]
+      -- organizations: [ o1 ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: []
+      -- income_events: []
+      -- employment_relationship_events: [ emp_rel_1 ] ++ [ emp_rel_2 ]
+      -- wage_payment_events: [ wage_1 ] ++ [ wage_2 ] ++ [ wage_3 ]
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: [ term_1 ]
+      -- employer_unemployment_excise_tax_return: futa_return
+      # Not relevant for §3301 but required inputs to IRCSimplified
+      -- itemized_deductions: $0
+      -- adjusted_gross_income: $0
+    }
+
+  # Assertions - Only check scope output (IRCSimplified). Tests §3301: 6% of total wages paid during calendar year with respect to employment.
+  # The 2023-07-15 payment to i1 is excluded because it was paid after employment ended (not “with respect to having individuals in his employ”).
+  assertion (computation.employer_unemployment_excise_tax_result.total_taxable_wages = $8000)
+  assertion (computation.employer_unemployment_excise_tax_result.tax_rate = 0.06)
+  assertion (computation.employer_unemployment_excise_tax_result.excise_tax = $480)
+```

@@ -1,0 +1,81 @@
+> Module Section_68_scenario_4
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_68_scenario_4:
+  output itemized_deductions_result content IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput
+
+scope Section_68_scenario_4:
+  # Scenario: Married filing separately in 2026 with AGI $200,000 and positive itemized deductions
+  # Tested law refs: §68(a), §68(b)(1)(D), §68(f)
+  # Assumption from scenario comments: adjusted gross income equals earned_income ($200,000)
+
+  definition itemized_deductions_result equals
+    # Entities
+    let i6 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let i7 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Tax return: Married Filing Separate, tax year 2026
+    let mfs_variant equals IRC.MarriedFilingSeparateVariant {
+      -- taxpayer: i6
+      -- spouse: i7
+      -- itemization_election: true
+      -- spouse_itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2026
+      -- details: IRC.FilingStatusVariant.MarriedFilingSeparate content mfs_variant
+    } in
+
+    # Temporary §7703 marital status output (assumed values for MFS in 2026)
+    let taxpayer_marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: i6
+        -- tax_year: 2026
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2026, 12, 31
+        -- is_married_7703_a_1: true
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: true
+      } in
+
+    # Call §68 itemized deductions limitation
+    # Inputs:
+    # - adjusted_gross_income: $200,000 (per scenario assumption)
+    # - itemized_deductions: set positive so reduction can apply (choose $20,000 so 80% cap = $16,000 > 3% of excess)
+    (output of IRC.IndividualTaxReturnSection68ItemizedDeductions with {
+      -- individual_tax_return: individual_tax_return
+      -- adjusted_gross_income: $200000
+      -- itemized_deductions: $20000
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+    }).main_output
+
+  # Assertions (only checking the outputs of the computed scope result):
+
+  # §68(b)(1)(D): Applicable amount for married filing separately is one-half of the joint/surviving spouse amount ($300,000 / 2 = $150,000)
+  assertion (itemized_deductions_result.applicable_amount_68_b_1 = $150000)
+
+  # §68(f): Section does not apply for tax years beginning after 2017 and before 2026; for 2026 the section applies
+  # Therefore section_not_applicable_68_f should be false in 2026
+  assertion (itemized_deductions_result.section_not_applicable_68_f = false)
+
+  # §68(a): AGI exceeds applicable amount triggers a positive 3% reduction amount; with AGI $200,000 and applicable amount $150,000, excess exists
+  assertion (itemized_deductions_result.three_percent_reduction_68_a_1 > $0)
+
+  # Proxy for "agi_excess_amount = $50,000" under §68(a)(1): 3% of the excess must equal $1,500
+  # This checks the correct application of §68(a)(1) using only scope outputs
+  assertion (itemized_deductions_result.three_percent_reduction_68_a_1 = $1500)
+
+  # "itemized_deductions_reduction_applies" under §68(a): reduction amount should be positive
+  assertion (itemized_deductions_result.reduction_amount_68_a > $0)
+```

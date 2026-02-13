@@ -1,0 +1,143 @@
+> Module Section_63_scenario_8
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_8:
+  output tax63 content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_8:
+  # Scenario: Single filer (2020) aged 65+ and blind.
+  # Tested law refs:
+  # - §63(c)(7)(A)(ii): Special rules 2018–2025, substitute $12,000 for §63(c)(2)(C) for "any other case" (single)
+  # - §63(c)(2)(C): Basic standard deduction baseline for single (substituted under §63(c)(7)(A)(ii))
+  # - §63(f)(1)(A): Additional amount for aged 65+ (taxpayer)
+  # - §63(f)(2)(A): Additional amount for blind (taxpayer)
+  # - §63(f)(3): Higher $750 amount for certain unmarried individuals (applies here: single and not a surviving spouse)
+  # - §63(c)(1): Standard deduction equals basic plus additional amounts
+
+  definition tax63 equals
+    # Entities
+    let s2020 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    # Events
+    let birth_s2020 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: s2020
+      -- birth_date: Date.of_year_month_day of 1950, 2, 2
+      -- is_counterfactual: false
+    } in
+
+    let blind_s2020 equals IRC.BlindnessStatusEvent {
+      -- id: 1
+      -- individual: s2020
+      -- status_date: Date.of_year_month_day of 2020, 1, 15
+      -- is_blind: true
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return (Single, not itemizing)
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: s2020
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2020
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Temporary outputs for dependent scopes (assumptions per scenario):
+    # §7703 marital status output used by §63
+    let taxpayer_marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: s2020
+        -- tax_year: 2020
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2020, 12, 31
+        -- is_married_7703_a_1: false
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: false
+      } in
+
+    # §151 exemptions list (minimal structure; no dependents/spouse exemptions)
+    let taxpayer_exemptions_list_result equals
+      IRC.TaxpayerExemptionsList151Output {
+        -- taxpayer_result:
+          IRC.IndividualSection151ExemptionsListOutput {
+            -- individual: s2020
+            -- spouse_exemption_allowed_151_b: false
+            -- individuals_entitled_to_exemptions_under_151: []
+          }
+        -- spouse_result: Absent
+        -- individuals_entitled_to_exemptions_under_151: []
+        -- spouse_exemption_allowed_151_b: false
+      } in
+
+    # §151 personal exemption (set to $0 for test context)
+    let taxpayer_exemption_result equals
+      IRC.IndividualSection151PersonalExemptionOutput {
+        -- individual: s2020
+        -- exemption_amount_base: $0
+        -- exemption_amount_after_disallowance: $0
+        -- exemption_amount_after_phaseout: $0
+        -- personal_exemptions_deduction_151_a: $0
+        -- applicable_percentage_151_d_3_B: 0.0
+        -- exemption_amount_zero_151_d_5: false
+      } in
+
+    # §68 itemized deductions limitation result (not itemizing; set to $0)
+    let itemized_deductions_result equals
+      IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+        -- individual_tax_return: individual_tax_return
+        -- applicable_amount_68_b_1: $0
+        -- three_percent_reduction_68_a_1: $0
+        -- eighty_percent_reduction_68_a_2: $0
+        -- reduction_amount_68_a: $0
+        -- itemized_deductions_after_68: $0
+        -- section_not_applicable_68_f: false
+      } in
+
+    # Compute §63 taxable income / standard deduction
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ birth_s2020 ]
+      -- blindness_status_events: [ blind_s2020 ]
+      -- death_events: []
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_deductions_result
+    }).main_output
+
+  # Assertions: ONLY reference the output variable "tax63"
+  # special_rules_2018_2025_applied → Tests §63(c)(7)(A)(ii):
+  # Single basic SD should be $12,000 due to special rule substitution (2018–2025).
+  assertion (tax63.basic_standard_deduction_63_c_2_before_c_5 = $12000)
+
+  # basic_standard_deduction_amount → §63(c)(2)(C) as modified by §63(c)(7)(A)(ii)
+  assertion (tax63.basic_standard_deduction_63_c_2_before_c_5 = $12000)
+
+  # higher_unmarried_additional_amount_applied → §63(f)(3) higher $750 applies twice (aged + blind)
+  # We confirm via the total additional SD and the component amounts:
+  assertion (tax63.additional_amount_taxpayer_aged_63_f_1_A = $750)
+  assertion (tax63.additional_amount_taxpayer_blind_63_f_2_A = $750)
+
+  # additional_standard_deduction_amount → §63(c)(3) sum of the applicable §63(f) amounts
+  assertion (tax63.additional_standard_deduction_63_c_3 = $1500)
+
+  # standard_deduction_amount → §63(c)(1) = basic + additional
+  assertion (tax63.standard_deduction_63_c_1 = $13500)
+```

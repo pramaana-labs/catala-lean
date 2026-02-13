@@ -1,0 +1,132 @@
+> Module Section_7703_scenario_7
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_7703_scenario_7:
+  output person_status content IRC.IndividualSection7703MaritalStatusOutput
+
+scope Section_7703_scenario_7:
+  # Scenario: Married filing separately, maintains household, but spouse is a member of the household during the last 6 months → fails §7703(b)(3)
+  # Tested law refs: §7703(b)(3). Expected:
+  # - meets_7703b_conditions: false  → mapped to §7703(b)(3) "spouse not member last 6 months" condition
+  # - is_not_considered_married_under_7703b: false → mapped to §7703(b) conclusion field considered_not_married_7703_b
+
+  definition person_status equals
+    let p1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let p2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let c1 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h1 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: p1
+      -- spouse2: p2
+      -- marriage_date: Date.of_year_month_day of 2015, 4, 1
+      -- is_counterfactual: false
+    } in
+
+    # Residence: taxpayer and child are members of h1 for > 1/2 year; spouse joins on July 1 (member during last 6 months)
+    let rp_p1 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: p1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let rp_c1 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 3, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let rp_p2 equals IRC.ResidencePeriodEvent {
+      -- id: 3
+      -- individual: p2
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 7, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: false
+      -- is_counterfactual: false
+    } in
+
+    # Household maintenance: taxpayer furnishes > 1/2 of cost (70%)
+    let hm_p1 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: p1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- cost_furnished_percentage: 0.7
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood (supports relationship context; not directly consumed by §7703 scope but aligns with facts)
+    let parent1 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: p1
+      -- child: c1
+      -- start_date: Date.of_year_month_day of 2011, 1, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return (Married Filing Separate)
+    let mfs_variant equals IRC.MarriedFilingSeparateVariant {
+      -- taxpayer: p1
+      -- spouse: p2
+      -- itemization_election: false
+      -- spouse_itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.MarriedFilingSeparate content mfs_variant
+    } in
+
+    # Temporary §152 Qualifying Child output for c1 (assumed based on facts; used by §7703(b)(1) household condition)
+    let qc_c1 equals IRC.IndividualSection152QualifyingChildOutput {
+      -- individual: c1
+      -- taxpayer: p1
+      -- is_qualifying_child: true
+      -- bears_relationship_152_c_1_A: true
+      -- has_same_principal_place_of_abode_152_c_1_B: true
+      -- meets_age_requirements_152_c_1_C: true
+      -- has_not_filed_joint_return_152_c_1_E: true
+    } in
+
+    # Compute §7703 marital status
+    (output of IRC.IndividualSection7703MaritalStatus with {
+      -- individual: p1
+      -- tax_year: 2023
+      -- marriage_events: [ marriage1 ]
+      -- divorce_or_legal_separation_events: []
+      -- death_events: []
+      -- individual_tax_return: individual_tax_return
+      -- residence_period_events: [ rp_p1 ] ++ [ rp_c1 ] ++ [ rp_p2 ]
+      -- household_maintenance_events: [ hm_p1 ]
+      -- qualifying_children: [ qc_c1 ]
+      -- individuals_entitled_to_exemptions_under_151: [ c1 ]
+    }).main_output
+
+  # Assertions:
+  # Maps "meets_7703b_conditions" to §7703(b)(3): spouse must not be a member of the household during the last 6 months.
+  # Here, spouse is a member from July 1 to Dec 31 → condition fails.
+  assertion (person_status.spouse_not_member_last_6_months_7703_b_3 = false)
+
+  # Maps "is_not_considered_married_under_7703b" to §7703(b) conclusion:
+  # Since (b)(3) fails, the individual is not treated as unmarried under §7703(b).
+  assertion (person_status.considered_not_married_7703_b = false)
+```

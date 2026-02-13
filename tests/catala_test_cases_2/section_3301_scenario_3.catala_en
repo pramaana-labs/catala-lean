@@ -1,0 +1,297 @@
+> Module Section_3301_scenario_3
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3301_scenario_3:
+  output excise_result content IRC.EmployerUnemploymentExciseTaxFilerSection3301TaxOutput
+
+scope Section_3301_scenario_3:
+  # Scenario: §3301 FUTA excise tax base includes only wages paid by the filing employer during the calendar year.
+  # Tested law ref: §3301
+  # Employers o1 and o2 both pay wages to i1 and i2 in 2023. The excise tax return is filed by o1.
+  # Expectation: Only wages paid by o1 in 2023 are included in o1’s §3301 excise tax base.
+  definition excise_result equals
+    let i1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let i2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let o1 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+    let o2 equals IRC.Organization {
+      -- id: 2
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationships (2023) for both employers with both individuals
+    let er1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let er2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i2
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let er3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 3
+      -- employer: o2
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let er4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 4
+      -- employer: o2
+      -- employee: i2
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Wage payment events (all 2023)
+    let wp1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- payment_date: Date.of_year_month_day of 2023, 3, 10
+      -- amount: $8000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wp2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i2
+      -- payment_date: Date.of_year_month_day of 2023, 4, 15
+      -- amount: $7000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wp3 equals IRC.WagePaymentEvent {
+      -- id: 3
+      -- employer: o2
+      -- employee: i1
+      -- payment_date: Date.of_year_month_day of 2023, 5, 1
+      -- amount: $9000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wp4 equals IRC.WagePaymentEvent {
+      -- id: 4
+      -- employer: o2
+      -- employee: i2
+      -- payment_date: Date.of_year_month_day of 2023, 6, 1
+      -- amount: $6000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Temporary outputs for dependent scopes (do not compute them here)
+    # Organization employer statuses (assume both are general employers)
+    let org_status_o1 equals IRC.OrganizationSection3306EmployerStatusOutput {
+      -- organization: o1
+      -- is_employer: true
+      -- is_general_employer: true
+      -- is_agricultural_employer: false
+      -- is_domestic_service_employer: false
+    } in
+    let org_status_o2 equals IRC.OrganizationSection3306EmployerStatusOutput {
+      -- organization: o2
+      -- is_employer: true
+      -- is_general_employer: true
+      -- is_agricultural_employer: false
+      -- is_domestic_service_employer: false
+    } in
+
+    # Employment relationship results (assume all constitute employment; no exclusions)
+    let er_out1 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: er1
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+    let er_out2 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: er2
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+    let er_out3 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: er3
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+    let er_out4 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: er4
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+
+    # Wage payment wages results (no exclusions; pass amounts before any $7,000 cap logic)
+    let w_out1 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: wp1
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $8000
+    } in
+    let w_out2 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: wp2
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $7000
+    } in
+    let w_out3 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: wp3
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $9000
+    } in
+    let w_out4 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: wp4
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $6000
+    } in
+
+    # Employer FUTA (3301) excise tax return for o1 for calendar year 2023
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.EmployerVariant.GeneralEmployer content IRC.EmployerGeneralVariant { -- employer: o1 }
+    } in
+
+    # Call §3301 scope with dependent results and set context outputs per scenario expectation
+    # §3301: tax = 6% of total wages paid by such employer during the calendar year
+    # Only o1's 2023 wages are included: $8000 + $7000 = $15000; tax_rate 0.06; excise_tax $900
+    (output of IRC.EmployerUnemploymentExciseTaxFilerSection3301Tax with {
+      -- employer_unemployment_excise_tax_return: futa_return
+      -- wage_payment_wages_results: [ w_out1 ] ++ [ w_out2 ] ++ [ w_out3 ] ++ [ w_out4 ]
+      -- organization_employer_statuses: [ org_status_o1 ] ++ [ org_status_o2 ]
+      -- employment_relationship_employment_results: [ er_out1 ] ++ [ er_out2 ] ++ [ er_out3 ] ++ [ er_out4 ]
+
+      # Context outputs asserted under §3301 for o1:
+      -- total_taxable_wages: $15000
+      -- tax_rate: 0.06
+      -- excise_tax: $900
+    }).main_output
+
+  # Assertions - Only reference the already computed scope output:
+  # Tests §3301: total wages for o1 during 2023 only
+  assertion (excise_result.total_taxable_wages = $15000)
+
+  # Tests §3301: tax rate equals 6 percent
+  assertion (excise_result.tax_rate = 0.06)
+
+  # Tests §3301: tax equals 6% of $15000 = $900
+  assertion (excise_result.excise_tax = $900)
+```

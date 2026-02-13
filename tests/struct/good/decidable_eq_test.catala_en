@@ -1,0 +1,46 @@
+## Test: DecidableEq derivation for structs
+
+### Struct without function types (should derive DecidableEq in Lean)
+
+```catala
+declaration structure Point:
+  data x content integer
+  data y content integer
+
+declaration structure Color:
+  data r content integer
+  data g content integer
+  data b content integer
+```
+
+### Scope using structs with equality checks and a function variable
+
+```catala
+#[test] declaration scope TestDecidableEq:
+  context output origin content Point
+  context output same_origin content boolean
+  context output color content Color
+  context f content integer depends on x content integer
+  context output result content integer
+
+scope TestDecidableEq:
+  definition origin equals Point { -- x: 0 -- y: 0 }
+  definition same_origin equals origin = Point { -- x: 0 -- y: 0 }
+  definition color equals Color { -- r: 255 -- g: 0 -- b: 0 }
+  definition f of x equals x * 2
+  definition result equals f of 5
+```
+
+```catala-test-cli
+$ catala Typecheck --check-invariants
+┌─[RESULT]─
+│ All invariant checks passed
+└─
+┌─[RESULT]─
+│ Typechecking successful!
+└─
+```
+
+```catala-test-cli
+$ catala lean4-desugared --whole-program
+```

@@ -1,0 +1,170 @@
+> Module Section_63_scenario_5
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_5:
+  output result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_5:
+  # Scenario: Single filer (dep1) in tax year 2017; is a dependent of another taxpayer (oth1)
+  # Earned income: $300; Blind at 2017-10-01
+  # Tested law refs:
+  # - §63(c)(5)(A)-(B): Limitation on basic standard deduction for dependents
+  # - §63(c)(2)(C): Basic SD amount for "any other case" (Single) in 2017 ($3,000) before limitation
+  # - §63(f)(2)(A): Additional amount for blind (baseline $600)
+  # - §63(f)(3): Higher $750 additional amount for individuals not married and not surviving spouse (applies here)
+
+  definition result equals
+    # Entities
+    let dep1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let oth1 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Birth events
+    let birth_dep1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: dep1
+      -- birth_date: Date.of_year_month_day of 1999, 2, 2
+      -- is_counterfactual: false
+    } in
+    let birth_oth1 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: oth1
+      -- birth_date: Date.of_year_month_day of 1970, 10, 10
+      -- is_counterfactual: false
+    } in
+
+    # Blindness status event (dep1 blind at close of 2017)
+    let blind_dep1 equals IRC.BlindnessStatusEvent {
+      -- id: 1
+      -- individual: dep1
+      -- status_date: Date.of_year_month_day of 2017, 10, 1
+      -- is_blind: true
+      -- is_counterfactual: false
+    } in
+
+    # Income event (earned income $300 in 2017)
+    let income_dep1_2017 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: dep1
+      -- tax_year: 2017
+      -- has_income: true
+      -- earned_income: $300
+      -- is_counterfactual: false
+    } in
+
+    # Tax return event for oth1 claiming dep1 as dependent (establishes §151 allowance to another)
+    let tre_oth1_2017 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: oth1
+      -- tax_year: 2017
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: [ dep1 ]
+      -- dependents: [ dep1 ]
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return for dep1: Single, tax year 2017, does not itemize
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: dep1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Temporary marital status output for §7703 (Single, not married; determination at year end)
+    let ms_7703 equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: dep1
+      -- tax_year: 2017
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Temporary §68 itemized deductions output (irrelevant here; filer did not itemize)
+    let itemized_deductions_result equals IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+      -- individual_tax_return: individual_tax_return
+      -- applicable_amount_68_b_1: $0
+      -- three_percent_reduction_68_a_1: $0
+      -- eighty_percent_reduction_68_a_2: $0
+      -- reduction_amount_68_a: $0
+      -- itemized_deductions_after_68: $0
+      -- section_not_applicable_68_f: false
+    } in
+
+    # Temporary §151 exemptions list output (minimal, as dependency)
+    let taxpayer_151_list_result equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: dep1
+      -- spouse_exemption_allowed_151_b: false
+      -- individuals_entitled_to_exemptions_under_151: []
+    } in
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: taxpayer_151_list_result
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: []
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Temporary §151 personal exemption output (minimal, as dependency)
+    let taxpayer_exemption_result equals IRC.IndividualSection151PersonalExemptionOutput {
+      -- individual: dep1
+      -- exemption_amount_base: $0
+      -- exemption_amount_after_disallowance: $0
+      -- exemption_amount_after_phaseout: $0
+      -- personal_exemptions_deduction_151_a: $0
+      -- applicable_percentage_151_d_3_B: 0.0
+      -- exemption_amount_zero_151_d_5: false
+    } in
+
+    # Call §63 taxable income / standard deduction scope
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ birth_dep1 ] ++ [ birth_oth1 ]
+      -- blindness_status_events: [ blind_dep1 ]
+      -- death_events: []
+      -- income_events: [ income_dep1_2017 ]
+      -- tax_return_events: [ tre_oth1_2017 ]
+      -- nonresident_alien_status_period_events: []
+      -- taxpayer_marital_status: ms_7703
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+      -- adjusted_gross_income: $300
+      -- itemized_deductions_result: itemized_deductions_result
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output "result"
+
+  # §63(c)(5): Limitation on basic SD applies since after_c_5 differs from before_c_5
+  assertion (
+    result.basic_standard_deduction_63_c_2_before_c_5 != result.basic_standard_deduction_63_c_2_after_c_5
+  )
+
+  # §63(c)(5)(A)-(B): Limitation value = max($500, $250 + $300 earned) = $550
+  assertion (result.basic_standard_deduction_63_c_2_after_c_5 = $550)
+
+  # §63(c)(2)(C) with §63(c)(5): Basic SD amount used for the standard deduction is $550
+  assertion (result.basic_standard_deduction_63_c_2_after_c_5 = $550)
+
+  # §63(f)(2)(A) and §63(f)(3): Blind; unmarried and not surviving spouse => additional amount = $750
+  assertion (result.additional_standard_deduction_63_c_3 = $750)
+
+  # §63(f)(3): Higher unmarried blind amount applied (taxpayer additional blind amount equals $750)
+  assertion (result.additional_amount_taxpayer_blind_63_f_2_A = $750)
+
+  # §63(c)(1): Standard deduction = basic ($550) + additional ($750) = $1,300
+  assertion (result.standard_deduction_63_c_1 = $1300)
+```

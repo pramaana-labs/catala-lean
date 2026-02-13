@@ -1,0 +1,101 @@
+> Module Section_152_scenario_4
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_4:
+  output qc_result content IRC.IndividualSection152QualifyingChildOutput
+
+scope Section_152_scenario_4:
+  # Scenario: Qualifying child where the stepbrother filed a joint return only to claim a refund.
+  # Tested law refs: §152(c)(2)(B) (relationship: stepbrother), §152(c)(1)(B) (same principal place of abode > half year),
+  # §152(c)(3) (age requirements), §152(c)(1)(E) (joint return exception for refund-only), §152(c)(1) (overall QC).
+
+  definition qc_result equals
+    let t4 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let sb4 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h4 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    let birth_t4 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t4
+      -- birth_date: Date.of_year_month_day of 1980, 1, 1
+      -- is_counterfactual: false
+    } in
+    let birth_sb4 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: sb4
+      -- birth_date: Date.of_year_month_day of 2005, 5, 5
+      -- is_counterfactual: false
+    } in
+
+    let res_t4 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t4
+      -- household: h4
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_sb4 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: sb4
+      -- household: h4
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 8, 1
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    let rel_stepbrother equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t4
+      -- relative: sb4
+      -- start_date: Date.of_year_month_day of 2010, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Stepbrother
+      -- is_counterfactual: false
+    } in
+
+    let tr_sb4 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: sb4
+      -- tax_year: 2023
+      -- filed_joint_return: true
+      -- is_only_for_refund_claim: true
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152(c) Qualifying Child for sb4 with respect to taxpayer t4, tax year 2023
+    (output of IRC.IndividualSection152QualifyingChild with {
+      -- individual: sb4
+      -- taxpayer: t4
+      -- tax_year: 2023
+      -- family_relationship_events: [ rel_stepbrother ]
+      -- birth_events: [ birth_t4 ] ++ [ birth_sb4 ]
+      -- residence_period_events: [ res_t4 ] ++ [ res_sb4 ]
+      -- tax_return_events: [ tr_sb4 ]
+    }).main_output
+
+  # Assertions - ONLY check the output of the computed scope (no re-computation):
+
+  # §152(c)(2)(B): Stepbrother relationship satisfies the relationship test.
+  assertion (qc_result.bears_relationship_152_c_1_A = true)
+
+  # §152(c)(1)(B): Same principal place of abode as taxpayer for more than half the taxable year.
+  assertion (qc_result.has_same_principal_place_of_abode_152_c_1_B = true)
+
+  # §152(c)(3): Age requirements (younger than taxpayer and under 25 at year end).
+  assertion (qc_result.meets_age_requirements_152_c_1_C = true)
+
+  # §152(c)(1)(E): Joint return limitation satisfied due to refund-only filing.
+  # The scenario states the refund-only exception applies; this meets the joint return requirement.
+  assertion (qc_result.has_not_filed_joint_return_152_c_1_E = true)
+
+  # §152(c)(1): All qualifying child criteria met overall.
+  assertion (qc_result.is_qualifying_child = true)
+```

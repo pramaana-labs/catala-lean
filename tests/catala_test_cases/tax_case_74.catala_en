@@ -1,0 +1,145 @@
+> Module Tax_case_74
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase74:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase74:
+  # Alice was paid $200 in March 2017 for services performed at Johns Hopkins Hospital. Alice was a patient at Johns Hopkins Hospital from March 15th, 2017 to April 2nd, 2017. In 2017, Alice was also paid $31220 in remuneration. Alice takes the standard deduction.
+
+  # How much tax does Alice have to pay in 2017? $4525
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let hopkins_hospital equals
+      Sara.Organization {
+        -- id: 1
+        -- organization_type: Sara.OrganizationType.Hospital
+        -- is_counterfactual: false
+      } in
+    let alice_employment equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 1
+        -- employer: hopkins_hospital
+        -- employee: alice
+        -- start_date: Date.of_year_month_day of 2017, 3, 15
+        -- end_date: Date.of_year_month_day of 2017, 3, 31
+        -- employment_category: Sara.EmploymentCategory.General
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let hopkins_wage_payment equals
+      Sara.WagePaymentEvent {
+        -- id: 1
+        -- employer: hopkins_hospital
+        -- employee: alice
+        -- payment_date: Date.of_year_month_day of 2017, 3, 31
+        -- amount: $200
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let alice_hospital_patient equals
+      Sara.HospitalPatientEvent {
+        -- id: 1
+        -- patient: alice
+        -- hospital: hopkins_hospital
+        -- start_date: Date.of_year_month_day of 2017, 3, 15
+        -- end_date: Date.of_year_month_day of 2017, 4, 2
+        -- is_counterfactual: false
+      } in
+    let alice_other_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2017
+        -- has_income: true
+        -- earned_income: $31220
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2017
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let single_variant equals
+      Sara.SingleVariant {
+        -- taxpayer: alice
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2017
+        -- details: Sara.FilingStatusVariant.Single content single_variant
+      } in
+    let dummy_org equals
+      Sara.Organization {
+        -- id: 0
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let employer_general_variant equals
+      Sara.EmployerGeneralVariant {
+        -- employer: dummy_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 0
+        -- tax_year: 2017
+        -- details: Sara.EmployerVariant.GeneralEmployer content employer_general_variant
+      } in
+    let income_events_list equals [ alice_other_income ] in
+    let adjusted_gross_income equals $31220 + $200 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ]
+      -- organizations: [ hopkins_hospital ] ++ [ dummy_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: [ alice_employment ]
+      -- wage_payment_events: [ hopkins_wage_payment ]
+      -- student_enrollment_events: []
+      -- hospital_patient_events: [ alice_hospital_patient ]
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of computation.tax = $4525)
+```

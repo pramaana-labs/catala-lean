@@ -1,0 +1,48 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts (will be built in Docker)
+_build/
+_targets/
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+!README.md
+doc/
+
+# Test files
+tests/
+test*.catala_en
+test*.lean
+example_client.py
+test_api.sh
+
+# Other
+.DS_Store
+*.log
+*.tmp
+.env
+.env.local
+

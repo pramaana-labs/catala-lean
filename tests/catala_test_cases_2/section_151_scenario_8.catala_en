@@ -1,0 +1,100 @@
+> Module Section_151_scenario_8
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_151_scenario_8:
+  output computation content IRC.IRCSimplified
+
+scope Section_151_scenario_8:
+  # Scenario: 2025 Single filer; §151(d)(5) special rule period
+  # Tested law refs: §151(a), §151(d)(5)
+  # Edge case: taxable year beginning after 12/31/2017 and before 1/1/2026 → exemption amount is zero
+
+  definition computation equals
+    let i_t8 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    let org1 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: i_t8
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2025
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    let tax_return_event1 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: i_t8
+      -- tax_year: 2025
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    let employer_details equals IRC.EmployerGeneralVariant { -- employer: org1 } in
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2025
+      -- details: IRC.EmployerVariant.GeneralEmployer content employer_details
+    } in
+
+    # Call IRCSimplified to obtain §151 personal exemption results and exemptions list
+    output of IRC.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ i_t8 ]
+      -- organizations: [ org1 ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ tax_return_event1 ]
+      -- income_events: []
+      -- employment_relationship_events: []
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: futa_return
+
+      # Computation inputs defaults for this test
+      -- itemized_deductions: $0
+      -- adjusted_gross_income: $0
+    }
+
+  # Assertions:
+
+  # exemption_amount_value: §151(d)(5) mandates exemption amount = 0 for tax years 2018–2025
+  assertion (computation.taxpayer_exemption_result.exemption_amount_after_phaseout = $0)
+
+  # taxpayer_exemption_allowed: §151(a) allows an exemption for the taxpayer; verify taxpayer is in the §151 list
+  assertion (
+    computation.taxpayer_exemptions_list_result.individuals_entitled_to_exemptions_under_151
+      contains computation.taxpayer_exemption_result.individual
+  )
+
+  # taxpayer_exemption_deduction_amount: §151(a) deduction for the taxpayer → $0 under §151(d)(5)
+  assertion (computation.taxpayer_exemption_result.personal_exemptions_deduction_151_a = $0)
+
+  # total_exemptions_deduction: No spouse/dependents → equals taxpayer’s §151(a) deduction → $0 under §151(d)(5)
+  assertion (computation.taxpayer_exemption_result.personal_exemptions_deduction_151_a = $0)
+```

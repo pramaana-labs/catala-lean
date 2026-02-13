@@ -1,0 +1,16 @@
+# Root Cloud Build configuration
+# This triggers the server/cloudbuild.yaml to build and deploy the API server
+
+steps:
+  # Trigger the server build configuration
+  # The build context is the repo root (.) and config is in server/cloudbuild.yaml
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Triggering server build..."
+        gcloud builds submit . --config=server/cloudbuild.yaml
+
+options:
+  default_logs_bucket_behavior: 'REGIONAL_USER_OWNED_BUCKET'
