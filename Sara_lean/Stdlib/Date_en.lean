@@ -81,7 +81,7 @@ deriving Repr, DecidableEq
 
 @[simp, grind] def first_day_of_year := (fun (d : CatalaRuntime.Date) => ((fun (ymd : (Int × Int × Int)) => (of_year_month_day (ymd).1 (1 : Int) (1 : Int))) (to_year_month_day d)))
 
-@[simp, grind] def first_day_of_month := (fun (d : CatalaRuntime.Date) => ((fun (ymd : (Int × Int × Int)) => (of_year_month_day (ymd).1, (ymd).2, (1 : Int))) (to_year_month_day d)))
+@[simp, grind] def first_day_of_month := (fun (d : CatalaRuntime.Date) => ((fun (ymd : (Int × Int × Int)) => (of_year_month_day (ymd).1 (ymd).2.1 (1 : Int))) (to_year_month_day d)))
 
 @[simp, grind] def get_day := (fun (d : CatalaRuntime.Date) => ((to_year_month_day d)).2.2)
 

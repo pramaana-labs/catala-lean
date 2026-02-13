@@ -50,7 +50,11 @@ let lean_keywords =
     "by_contradiction"; "by_cases"; "trivial"; "dec_trivial"; "tauto";
     "propext"; "ext"; "funext"; "use"; "exists"; "existsi"; "choose"; "obtain"; "from"; "have";
     "suffices"; "show"; "by"; "calc"; "trans"; "symm"; "congr_arg";
-    "congr_fun"; "congr"; "refl"; "rfl"; "example"
+    "congr_fun"; "congr"; "refl"; "rfl"; "example";
+    (* Lean built-in names that conflict with common Catala identifiers *)
+    "assert"; "sort"; "insert"; "type"; "Type"; "Prop"; "Set"; "List"; "Array";
+    "Option"; "IO"; "Pure"; "Monad"; "Functor"; "Bind"; "true"; "false"; "not";
+    "or"; "and"; "mod"; "decide"
   ]
 
 (** Create a set of keywords for fast lookup *)
@@ -289,8 +293,13 @@ let collect_var_info_ordered
                  let is_output = Mark.remove scope_def.Ast.scope_def_io.io_output in
                  let is_input_output = is_input && is_output in
                  
-                 (* Include if has rules OR is an input-output variable *)
-                 if RuleName.Map.is_empty scope_def.Ast.scope_def_rules && not is_input_output then None
+                 let is_context = match Mark.remove scope_def.Ast.scope_def_io.io_input with
+                  | Runtime.Reentrant -> true
+                  | _ -> false
+                in
+                 (* Include if has rules OR is an input-output variable OR is a context variable
+                    (context variables need let bindings to unwrap Option from input struct) *)
+                 if RuleName.Map.is_empty scope_def.Ast.scope_def_rules && not is_input_output && not is_context then None
                  else
                    (* Get dependencies using existing function *)
                    let all_deps = Desugared.Ast.free_variables scope_def.Ast.scope_def_rules in
@@ -342,13 +351,16 @@ let format_lit (l : lit) : string =
   | LRat r -> 
       let num = Q.num r in
       let den = Q.den r in
-      Printf.sprintf "(Rat.mk %s %s)" 
-        (Runtime.integer_to_string num)
-        (Runtime.integer_to_string den)
+      let num_str = Runtime.integer_to_string num in
+      (* Parenthesize negative numerators so Lean doesn't parse - as subtraction *)
+      let num_str = if String.length num_str > 0 && num_str.[0] = '-' then "(" ^ num_str ^ ")" else num_str in
+      Printf.sprintf "(Rat.mk %s %s)" num_str (Runtime.integer_to_string den)
   | LMoney m ->
       let cents = Runtime.money_to_cents m in
-      Printf.sprintf "(CatalaRuntime.Money.ofCents %s)" 
-        (Runtime.integer_to_string cents)
+      let cents_str = Runtime.integer_to_string cents in
+      (* Parenthesize negative values so Lean doesn't parse - as subtraction *)
+      let cents_str = if String.length cents_str > 0 && cents_str.[0] = '-' then "(" ^ cents_str ^ ")" else cents_str in
+      Printf.sprintf "(CatalaRuntime.Money.ofCents %s)" cents_str
   | LDate d ->
       let y, m, d = Runtime.date_to_years_months_days d in
       Printf.sprintf "(CatalaRuntime.Date.create %d %d %d)" y m d
@@ -413,11 +425,82 @@ let collect_type_vars_from_list (tys : typ list) : string list =
   let var_set = List.fold_left (fun acc ty -> collect_type_vars ty acc) String.Set.empty tys in
   String.Set.elements var_set
 
+(** Build a mapping from toplevel type's type variables to EAbs parameter type variables.
+    This handles cases where Catala renames type variables during compilation. *)
+let build_type_var_mapping (toplevel_ty : typ) (eabs_param_tys : typ list) : (string * string) list =
+  (* Collect type vars from both sources *)
+  let toplevel_vars = collect_type_vars_from_list [toplevel_ty] in
+  let eabs_vars = collect_type_vars_from_list eabs_param_tys in
+  (* Zip them together - assumes same order and count *)
+  List.combine toplevel_vars eabs_vars
+
+(** Simple string replacement that replaces whole words only *)
+let replace_word (str : string) (old_word : string) (new_word : string) : string =
+  if old_word = new_word then str
+  else
+    (* Check if character is a word boundary (delimiter) *)
+    let is_delimiter c =
+      match c with
+      | ' ' | '(' | ')' | '[' | ']' | '{' | '}' | ',' -> true
+      | _ -> false
+    in
+    (* Also check for multi-byte UTF-8 sequences that are delimiters *)
+    let is_delimiter_at str pos =
+      if pos >= String.length str then true
+      else if is_delimiter str.[pos] then true
+      else
+        (* Check for × (U+00D7) and → (U+2192) *)
+        let remaining = String.length str - pos in
+        if remaining >= 2 && str.[pos] = '\xC3' && str.[pos+1] = '\x97' then true  (* × *)
+        else if remaining >= 3 && str.[pos] = '\xE2' && str.[pos+1] = '\x86' && str.[pos+2] = '\x92' then true  (* → *)
+        else false
+    in
+    let len = String.length str in
+    let buf = Buffer.create len in
+    let rec process i word_start =
+      if i >= len then (
+        (* Flush final word *)
+        if i > word_start then
+          let word = String.sub str word_start (i - word_start) in
+          if word = old_word then Buffer.add_string buf new_word
+          else Buffer.add_string buf word
+      ) else if is_delimiter_at str i then (
+        (* Flush current word *)
+        if i > word_start then (
+          let word = String.sub str word_start (i - word_start) in
+          if word = old_word then Buffer.add_string buf new_word
+          else Buffer.add_string buf word
+        );
+        (* Add delimiter *)
+        Buffer.add_char buf str.[i];
+        (* Skip multi-byte UTF-8 sequences *)
+        let skip = 
+          if i + 2 < len && str.[i] = '\xC3' then 2
+          else if i + 3 < len && str.[i] = '\xE2' then 3
+          else 1
+        in
+        for j = i + 1 to min (i + skip - 1) (len - 1) do
+          Buffer.add_char buf str.[j]
+        done;
+        process (i + skip) (i + skip)
+      ) else
+        process (i + 1) word_start
+    in
+    process 0 0;
+    Buffer.contents buf
+
+(** Substitute type variable names in a formatted type string *)
+let substitute_type_vars (type_str : string) (mappings : (string * string) list) : string =
+  List.fold_left (fun str (old_name, new_name) ->
+    replace_word str old_name new_name
+  ) type_str mappings
+
 (** Format a location (variable reference) to Lean code *)
 let format_location 
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     ?(use_input_prefix : bool = true)  (* Set to false when formatting input struct defaults *)
     ?(in_scope_body_context : bool = false)  (* Whether we're in scope body (subscope calls) *)
+    ?(program_ctx : Shared_ast.decl_ctx option = None)  (* For detuplify *)
     (loc : desugared glocation) 
     : string =
   match loc with
@@ -482,6 +565,7 @@ let rec format_expr
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     ?(use_input_prefix : bool = true)  (* Set to false when formatting input struct defaults *)
     ?(in_scope_body_context : bool = false)  (* Set to true when formatting subscope calls in scope body *)
+    ?(program_ctx : Shared_ast.decl_ctx option = None)  (* For looking up topdef types in detuplify *)
     (e : (desugared, untyped) gexpr) 
     : string =
   match Mark.remove e with
@@ -489,11 +573,11 @@ let rec format_expr
   | EVar v -> sanitize_name (Bindlib.name_of v)
   | EIfThenElse { cond; etrue; efalse } ->
       Printf.sprintf "(if %s then %s else %s)"
-        (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context cond)
-        (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context etrue)
-        (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context efalse)
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context cond)
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context etrue)
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context efalse)
   | ETuple es ->
-      let formatted = List.map (format_expr ~scope_defs ~use_input_prefix) es in
+      let formatted = List.map (format_expr ~scope_defs ~use_input_prefix ~program_ctx) es in
       Printf.sprintf "(%s)" (String.concat ", " formatted)
   | ETupleAccess { e; index; size } ->
       (* Lean represents tuples as nested pairs: (a, b, c) = (a, (b, c)).
@@ -502,7 +586,7 @@ let rec format_expr
          - index 1 (if n=2): .2, (if n>2): .2.1
          - index i (if i=n-1): .2 repeated i times
          - index i (if i<n-1): .2 repeated i times then .1 *)
-      let base = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context e in
+      let base = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e in
       if index = 0 then
         Printf.sprintf "(%s).1" base
       else if index = size - 1 then
@@ -513,33 +597,117 @@ let rec format_expr
         (* Middle element: chain .2's then .1 *)
         let dots = String.concat "" (List.init index (fun _ -> ".2")) in
         Printf.sprintf "(%s)%s.1" base dots
-  | EApp { f; args; tys = _ } ->
-      let f_str = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context f in
-      let args_str = List.map (format_expr ~scope_defs ~use_input_prefix) args in
-      Printf.sprintf "(%s %s)" f_str (String.concat " " args_str)
+  | EApp { f; args; tys } ->
+      let f_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context f in
+      (* Detuplify: convert single tuple argument to multiple curried arguments.
+         Two-tier logic matching Expr.detuplify_application from shared_ast/expr.ml:
+         
+         Tier 1 (tys-based): When EApp.tys has length > 1, the surface desugaring
+         (LetIn handler) explicitly marked this as a multi-arg call. Safe to detuplify
+         all cases (ETuple splat, variable projection, let-bind+project).
+         
+         Tier 2 (ETuple+topdef): When tys is empty/length<=1 (regular FunCall),
+         ONLY splat ETuple literals when the function is a ToplevelVar with arity > 1.
+         Never apply variable projections here — the desugared AST may not have all
+         arguments yet (e.g., implicit SourcePosition args are added in scopelang). *)
+      let fmt_expr = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context in
+      (* Helper: generate tuple projections for a given arity *)
+      let make_projections arg_str arity =
+        List.init arity (fun index ->
+          if index = 0 then
+            Printf.sprintf "(%s).1" arg_str
+          else if index = arity - 1 then
+            let dots = String.concat "" (List.init index (fun _ -> ".2")) in
+            Printf.sprintf "(%s)%s" arg_str dots
+          else
+            let dots = String.concat "" (List.init index (fun _ -> ".2")) in
+            Printf.sprintf "(%s)%s.1" arg_str dots
+        )
+      in
+      (* Helper: look up topdef arity from program_ctx, excluding implicit args *)
+      let topdef_arity_of_f =
+        match Mark.remove f with
+        | ELocation (ToplevelVar { name; _ }) ->
+            (match program_ctx with
+             | Some ctx ->
+                 let topdef_name = Mark.remove name in
+                 (match TopdefName.Map.find_opt topdef_name ctx.ctx_topdefs with
+                  | Some (topdef_type, _vis) ->
+                      (match Mark.remove topdef_type with
+                       | TArrow (arg_tys, _) ->
+                           let explicit_arg_tys = List.filter
+                             (fun ty -> not (Pos.has_attr (Mark.get ty) ImplicitPosArg))
+                             arg_tys
+                           in
+                           if List.length explicit_arg_tys > 1 then
+                             Some (List.length explicit_arg_tys)
+                           else None
+                       | _ -> None)
+                  | None -> None)
+             | None -> None)
+        | _ -> None
+      in
+      (* Filter out implicit position argument types from tys.
+         After the typing pass, tys includes ALL param types including implicit
+         SourcePosition args marked with ImplicitPosArg. But args only has
+         explicit args — implicit args are inserted in scopelang, which we skip.
+         So we must use only explicit tys to determine detuplification arity. *)
+      let tys_explicit = List.filter
+        (fun ty -> not (Pos.has_attr (Mark.get ty) ImplicitPosArg))
+        tys
+      in
+      let arity_from_tys = List.length tys_explicit in
+      (match args with
+       | [single_arg] when arity_from_tys > 1 ->
+           (* Tier 1: tys says multiple args expected (LetIn-derived application) *)
+           (match Mark.remove single_arg with
+            | ETuple es ->
+                (* Literal tuple: splat elements as curried args *)
+                let args_str = List.map fmt_expr es in
+                Printf.sprintf "(%s %s)" f_str (String.concat " " args_str)
+            | _ ->
+                (* Variable or expression: generate tuple projections *)
+                let arg_str = fmt_expr single_arg in
+                let projected = make_projections arg_str arity_from_tys in
+                Printf.sprintf "(%s %s)" f_str (String.concat " " projected))
+       | [single_arg] ->
+           (* Tier 2: tys empty or length 1 (regular FunCall) *)
+           (match Mark.remove single_arg with
+            | ETuple es when topdef_arity_of_f = Some (List.length es) ->
+                (* ETuple literal AND topdef expects that many args: splat *)
+                let args_str = List.map fmt_expr es in
+                Printf.sprintf "(%s %s)" f_str (String.concat " " args_str)
+            | _ ->
+                (* Non-tuple arg or no matching topdef arity: format normally *)
+                let args_str = List.map fmt_expr args in
+                Printf.sprintf "(%s %s)" f_str (String.concat " " args_str))
+       | _ ->
+           (* Multiple args - format normally *)
+           let args_str = List.map fmt_expr args in
+           Printf.sprintf "(%s %s)" f_str (String.concat " " args_str))
   | EStruct { name = name; fields } ->
       let bindings = StructField.Map.bindings fields in
       let formatted_fields = List.map (fun (field, e) ->
         Printf.sprintf "%s := %s"
           (sanitize_name (StructField.to_string field))
-          (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context e)
+          (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e)
       ) bindings in
       Printf.sprintf "({ %s } : %s)" (String.concat ", " formatted_fields) (sanitize_name (StructName.to_string name))
   | EStructAccess { e; field; name = name } ->
-      Printf.sprintf "(%s).%s" (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context e) (sanitize_name (StructField.to_string field))
+      Printf.sprintf "(%s).%s" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e) (sanitize_name (StructField.to_string field))
   | EInj { e; cons; name } ->
       Printf.sprintf "(%s.%s %s)"
         (sanitize_name (EnumName.to_string name))
         (sanitize_name (EnumConstructor.to_string cons))
-        (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context e)
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e)
   | EArray es ->
-      let formatted = List.map (format_expr ~scope_defs ~use_input_prefix) es in
+      let formatted = List.map (format_expr ~scope_defs ~use_input_prefix ~program_ctx) es in
       Printf.sprintf "[%s]" (String.concat ", " formatted)
   | EAppOp { op; args; tys = _ } ->
-      format_operator ~scope_defs ~use_input_prefix ~in_scope_body_context op args
+      format_operator ~scope_defs ~use_input_prefix ~in_scope_body_context ~program_ctx op args
   | EMatch { e = matched_expr; name = enum_name; cases } ->
       (* Pattern matching: match expr with | Case1 var => body1 | Case2 var => body2 *)
-      let matched_str = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context matched_expr in
+      let matched_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context matched_expr in
       let enum_name_str = sanitize_name (EnumName.to_string enum_name) in
       let cases_list = EnumConstructor.Map.bindings cases in
       let formatted_cases = List.map (fun (cons, case_expr) ->
@@ -550,12 +718,12 @@ let rec format_expr
             let vars, body = Bindlib.unmbind binder in
             let params = Array.to_list vars in
             let param_names = List.map (fun var -> sanitize_name (Bindlib.name_of var)) params in
-            let body_str = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context body in
+            let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body in
             Printf.sprintf "| %s.%s %s => %s" 
               enum_name_str cons_name (String.concat " " param_names) body_str
         | _ ->
             (* Not a lambda - just format the expression directly *)
-            let body_str = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context case_expr in
+            let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context case_expr in
             Printf.sprintf "| %s.%s _ => %s" enum_name_str cons_name body_str
       ) cases_list in
       (* Generate match as single line to avoid indentation issues in struct literals *)
@@ -580,9 +748,9 @@ let rec format_expr
       ) params tys in
       Printf.sprintf "(fun %s => %s)"
         (String.concat " " param_strs)
-        (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context body)
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body)
   | ELocation loc ->
-      format_location ~scope_defs ~use_input_prefix ~in_scope_body_context loc
+      format_location ~scope_defs ~use_input_prefix ~in_scope_body_context ~program_ctx loc
   | EScopeCall { scope; args } ->
     (* EScopeCall represents calling a scope with INPUT values to get OUTPUT values.
        Generate: (scopeFunction ({ input_field := val, ... } : ScopeName_Input))
@@ -592,7 +760,7 @@ let rec format_expr
     let input_struct_name = scope_name ^ "_Input" in
     let args_values_list = ScopeVar.Map.fold
       (fun scope_var (_, gexpr) acc ->
-         let s = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context gexpr in
+         let s = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context gexpr in
          (sanitize_name (ScopeVar.to_string scope_var) ^ " := " ^ s) :: acc
       ) args []
     in 
@@ -611,6 +779,7 @@ and format_operator
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     ?(use_input_prefix : bool = true)
     ?(in_scope_body_context : bool = false)
+    ?(program_ctx : Shared_ast.decl_ctx option = None)  (* For detuplify *)
     (op : desugared operator Mark.pos) 
     (args : (desugared, untyped) gexpr list) 
     : string =
@@ -619,7 +788,7 @@ and format_operator
     match args with
     | [arg1; arg2] ->
         Printf.sprintf "(%s %s %s)"
-          (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg1) sym (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg2)
+          (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg1) sym (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg2)
     | _ -> "default -- wrong number of args for binop"
   in
   (* Comparison operators return Prop in Lean 4, so wrap with decide to get Bool *)
@@ -627,17 +796,17 @@ and format_operator
     match args with
     | [arg1; arg2] ->
         Printf.sprintf "(decide (%s %s %s))"
-          (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg1) sym (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg2)
+          (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg1) sym (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg2)
     | _ -> "default -- wrong number of args for compop"
   in
   let unop sym =
     match args with
-    | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg)
+    | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg)
     | _ -> "default -- wrong number of args for unop"
   in
   (* Helper to wrap with decide only if not a boolean operator or match expression *)
   let format_bool_arg arg =
-    let formatted = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg in
+    let formatted = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg in
     let skip_decide = is_bool_operator arg || 
       (match Mark.remove arg with EMatch _ -> true | _ -> false) in
     if skip_decide then formatted
@@ -651,8 +820,8 @@ and format_operator
       (* Use CatalaRuntime.multiply which handles all type combinations *)
       (match args with
       | [arg1; arg2] ->
-          let arg1_str = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg1 in
-          let arg2_str = format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg2 in
+          let arg1_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg1 in
+          let arg2_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg2 in
           Printf.sprintf "(CatalaRuntime.multiply %s %s)"
             arg1_str arg2_str
       | _ -> "default -- wrong number of args for Mult")
@@ -687,36 +856,36 @@ and format_operator
   (* Polymorphic operators *)
   | Length ->
       (match args with
-       | [arg] -> Printf.sprintf "(%s).length" (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg)
+       | [arg] -> Printf.sprintf "(%s).length" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg)
        | _ -> "default -- wrong args for Length")
   | Map ->
       (match args with
         | [func; arr] ->
             Printf.sprintf "(List.map (%s) %s)"
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context func)
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arr)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context func)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arr)
         | _ -> "default -- wrong args for Map")
   | Filter ->
       (match args with
         | [pred; arr] ->
             Printf.sprintf "(List.filter (%s) %s)"
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context pred)
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arr)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context pred)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arr)
         | _ -> "default -- wrong args for Filter")
   | Fold ->
       (match args with
         | [fn; init; arr] ->
             Printf.sprintf "(List.foldl (%s) %s %s)"
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context fn)
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context init)
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arr)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context fn)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context init)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arr)
         | _ -> "default -- wrong args for Fold")
   | Concat ->
       (match args with
         | [arr1; arr2] ->
             Printf.sprintf "(%s ++ %s)"
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arr1)
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arr2)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arr1)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arr2)
         | _ -> "default -- wrong args for Concat")
   | Reduce ->
       (match args with
@@ -732,9 +901,9 @@ and format_operator
               | _ -> ""
             in
             Printf.sprintf "((match %s with | [] => %s () | x0 :: xn => List.foldl %s x0 xn)%s)"
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arr)
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context default)
-              (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context fn)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arr)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context default)
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context fn)
               result_type_annotation
         | _ -> "default -- wrong args for Reduce")
   | Map2 ->
@@ -742,22 +911,22 @@ and format_operator
   (* Conversions *)
   | ToInt ->
       (match args with
-       | [arg] -> Printf.sprintf "(Rat.floor %s)" (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg)
+       | [arg] -> Printf.sprintf "(Rat.floor %s)" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg)
        | _ -> "default -- wrong args for ToInt")
   | ToRat ->
       (match args with
-       | [arg] ->  Printf.sprintf "(CatalaRuntime.toRat %s)" (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg)
+       | [arg] ->  Printf.sprintf "(CatalaRuntime.toRat %s)" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg)
        | _ -> "default -- wrong args for ToRat")
   | ToMoney ->
       (match args with
-       | [arg] -> Printf.sprintf "(CatalaRuntime.toMoney %s)" (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg)
+       | [arg] -> Printf.sprintf "(CatalaRuntime.toMoney %s)" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg)
        | _ -> "default -- wrong args for ToMoney")
   | Round ->
       (match args with
-       | [arg] -> Printf.sprintf "(round %s)" (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg)
+       | [arg] -> Printf.sprintf "(round %s)" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg)
        | _ -> "default -- wrong args for Round")
   (* Other *)
-  | Log _ -> (match args with [arg] -> format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context arg | _ -> "default -- log")
+  | Log _ -> (match args with [arg] -> format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg | _ -> "default -- log")
   | ToClosureEnv | FromClosureEnv -> "default -- closure env"
   | _ -> "default -- unsupported operator"
 
@@ -773,6 +942,7 @@ let format_rule_consequence
     ?(use_input_prefix : bool = true)
     ?(skip_lambda_wrap : bool = false)
     ?(in_scope_body_context : bool = false)
+    ?(program_ctx : Shared_ast.decl_ctx option = None)  (* For detuplify *)
     (rule : Ast.rule) 
     : string =
   let cons_expr = Expr.unbox rule.Ast.rule_cons in
@@ -784,10 +954,10 @@ let format_rule_consequence
       ) params in
       Printf.sprintf "fun %s => %s" 
         (String.concat " " param_strs) 
-        (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context cons_expr)
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context cons_expr)
   | _ ->
       (* No parameters OR skip_lambda_wrap=true - just format the expression *)
-      format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context cons_expr
+      format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context cons_expr
 
 (** Format a single rule body (justification and consequence) wrapped in Option *)
 let format_rule_body 
@@ -795,7 +965,8 @@ let format_rule_body
     ?(use_input_prefix : bool = true)
     ?(skip_lambda_wrap : bool = false)
     ?(in_scope_body_context : bool = false)
-    (rule : Ast.rule) 
+    ?(program_ctx : Shared_ast.decl_ctx option = None)  (* For detuplify *)
+    (rule : Ast.rule)
     : string =
   let just_expr = Expr.unbox rule.Ast.rule_just in
   
@@ -803,12 +974,12 @@ let format_rule_body
   match Mark.remove just_expr with
   | ELit (LBool true) ->
     (* Unconditional rule: just return the consequence wrapped in some *)
-    Printf.sprintf "some (%s)" (format_rule_consequence ~scope_defs ~use_input_prefix ~skip_lambda_wrap ~in_scope_body_context rule)
+    Printf.sprintf "some (%s)" (format_rule_consequence ~scope_defs ~use_input_prefix ~skip_lambda_wrap ~in_scope_body_context ~program_ctx rule)
   | _ ->
     (* Conditional rule: if-then-else *)
     Printf.sprintf "if %s then some (%s) else none"
-        (format_expr ~scope_defs ~use_input_prefix ~in_scope_body_context just_expr)
-        (format_rule_consequence ~scope_defs ~use_input_prefix ~skip_lambda_wrap ~in_scope_body_context rule)
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context just_expr)
+        (format_rule_consequence ~scope_defs ~use_input_prefix ~skip_lambda_wrap ~in_scope_body_context ~program_ctx rule)
 
 (** Extract all variable locations used in a list of rules *)
 let rules_locations_used (rules : Ast.rule list) : Ast.LocationSet.t =
@@ -916,6 +1087,7 @@ let context_to_input (ctx : context_var_info) : input_info = {
     3. Returns the combined result
 *)
 let rec format_rule_tree_method
+    ?(program_ctx : Shared_ast.decl_ctx option = None)
     (scope_name : string)
     (var_name : string)
     (var_type : typ)
@@ -968,9 +1140,9 @@ let rec format_rule_tree_method
           in
           let inner_body = match base_rules with
             | [] -> "none"
-            | [single_rule] -> format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true single_rule
+            | [single_rule] -> format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true ~program_ctx single_rule
             | multiple_rules ->
-                let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true) multiple_rules in
+                let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true ~program_ctx) multiple_rules in
                 Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies)
           in
           (* Wrap the inner body in some(fun params => match ... with | some r => r | _ => default) *)
@@ -980,9 +1152,9 @@ let rec format_rule_tree_method
         else
           let body = match base_rules with
             | [] -> "none"
-            | [single_rule] -> format_rule_body ~scope_defs:(Some scope_defs) single_rule
+            | [single_rule] -> format_rule_body ~scope_defs:(Some scope_defs) ~program_ctx single_rule
             | multiple_rules ->
-                let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs)) multiple_rules in
+                let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~program_ctx) multiple_rules in
                 Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies)
           in
           (body, "")
@@ -998,7 +1170,7 @@ let rec format_rule_tree_method
       
       (* Recursively generate exception methods *)
       let exception_methods = List.mapi (fun i exc_tree ->
-        let methods, _dependencies = format_rule_tree_method scope_name var_name var_type inputs contexts exc_tree (index * 10 + i) scope_defs in
+        let methods, _dependencies = format_rule_tree_method scope_name var_name var_type inputs contexts exc_tree (index * 10 + i) scope_defs ~program_ctx in
         methods, _dependencies
       ) exception_trees in
       let all_exception_methods = List.concat (List.map fst exception_methods) in
@@ -1049,7 +1221,7 @@ let rec format_rule_tree_method
         | multiple_rules ->
             (* Multiple piecewise rules - process them first *)
             if has_rule_params then
-              let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true) multiple_rules in
+              let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true ~program_ctx) multiple_rules in
               let func_params = match multiple_rules with
                 | rule :: _ ->
                     (match rule.Ast.rule_parameter with
@@ -1064,7 +1236,7 @@ let rec format_rule_tree_method
               Printf.sprintf "some (fun %s => match (processExceptions [%s]) with | some r => r | _ => default)"
                 params_str (String.concat ", " rule_bodies)
             else
-              let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs)) multiple_rules in
+              let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~program_ctx) multiple_rules in
               Printf.sprintf "(processExceptions [%s])"
                 (String.concat ", " rule_bodies)
       in
@@ -1135,6 +1307,7 @@ let rec format_rule_tree_method
 
 (** Generate all methods for a variable's rule trees *)
 let format_var_methods
+    ?(program_ctx : Shared_ast.decl_ctx option = None)
     (scope_name : string)
     (var_def : var_def_info)
     (inputs : input_info list)
@@ -1171,7 +1344,7 @@ let format_var_methods
   else
     (* Normal case: generate methods from rule trees *)
     List.concat (List.mapi (fun i tree ->
-      let methods, _deps = format_rule_tree_method scope_name var_name_str var_def.var_type inputs contexts tree i scope_defs in
+      let methods, _deps = format_rule_tree_method scope_name var_name_str var_def.var_type inputs contexts tree i scope_defs ~program_ctx in
       methods
     ) var_def.rule_trees)
 
@@ -1185,6 +1358,7 @@ let format_var_methods
 let rec format_rule_tree_inline
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     ?(skip_lambda_wrap : bool = false)
+    ?(program_ctx : Shared_ast.decl_ctx option = None)
     (tree : Scopelang.From_desugared.rule_tree)
     : string =
   match tree with
@@ -1192,9 +1366,9 @@ let rec format_rule_tree_inline
       (* Leaf: format base rules as Option *)
       (match base_rules with
       | [] -> "none"
-      | [single_rule] -> format_rule_body ~scope_defs ~use_input_prefix:false ~skip_lambda_wrap single_rule
+      | [single_rule] -> format_rule_body ~scope_defs ~use_input_prefix:false ~skip_lambda_wrap ~program_ctx single_rule
       | multiple_rules ->
-          let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false ~skip_lambda_wrap) multiple_rules in
+          let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false ~skip_lambda_wrap ~program_ctx) multiple_rules in
           Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies))
   | Scopelang.From_desugared.Node (exception_trees, base_rules) ->
       (* Node: process exceptions first, then fall back to base rules *)
@@ -1205,17 +1379,17 @@ let rec format_rule_tree_inline
             let just_expr = Expr.unbox single_rule.Ast.rule_just in
             let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
             (match Mark.remove just_expr with
-            | ELit (LBool true) -> Printf.sprintf "some (%s)" (format_expr ~scope_defs ~use_input_prefix:false cons_expr)
+            | ELit (LBool true) -> Printf.sprintf "some (%s)" (format_expr ~scope_defs ~use_input_prefix:false ~program_ctx cons_expr)
             | _ -> Printf.sprintf "if %s then some (%s) else none"
-                     (format_expr ~scope_defs ~use_input_prefix:false just_expr) 
-                     (format_expr ~scope_defs ~use_input_prefix:false cons_expr))
+                     (format_expr ~scope_defs ~use_input_prefix:false ~program_ctx just_expr) 
+                     (format_expr ~scope_defs ~use_input_prefix:false ~program_ctx cons_expr))
         | multiple_rules ->
-            let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false ~skip_lambda_wrap) multiple_rules in
+            let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false ~skip_lambda_wrap ~program_ctx) multiple_rules in
             Printf.sprintf "(processExceptions [%s])"
               (String.concat ", " rule_bodies)
       in
       (* Recursively format exception trees as Option expressions *)
-      let exception_calls = List.map (format_rule_tree_inline ~scope_defs ~skip_lambda_wrap) exception_trees in
+      let exception_calls = List.map (format_rule_tree_inline ~scope_defs ~skip_lambda_wrap ~program_ctx) exception_trees in
       if exception_calls = [] then
         local_default
       else
@@ -1226,6 +1400,7 @@ let rec format_rule_tree_inline
 (** Generate input struct for a scope *)
 let format_input_struct 
     ?(all_scopes : Ast.scope ScopeName.Map.t = ScopeName.Map.empty)
+    ?(program_ctx : Shared_ast.decl_ctx option = None)
     (scope_name : string) 
     (inputs : input_info list) 
     (contexts: context_var_info list)
@@ -1300,7 +1475,7 @@ let format_input_struct
                     (inp_acc, true)
                   else
                     let rule = snd (RuleName.Map.choose scope_def.Ast.scope_def_rules) in
-                    let input_value = format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:false rule in
+                    let input_value = format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:false ~program_ctx rule in
                     (Printf.sprintf "%s := some (%s)" input_var_name input_value :: inp_acc, true)
               | _ ->
                   (* Pure input to sub-scope: pass value directly *)
@@ -1309,7 +1484,7 @@ let format_input_struct
                     (inp_acc, true)
                   else
                     let rule = snd (RuleName.Map.choose scope_def.Ast.scope_def_rules) in
-                    let input_value = format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:false rule in
+                    let input_value = format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:false ~program_ctx rule in
                     (Printf.sprintf "%s := %s" input_var_name input_value :: inp_acc, true)
             else (inp_acc, has_inputs)
         | _ -> (inp_acc, has_inputs)
@@ -1492,13 +1667,11 @@ let format_toplevel
           if type_vars = [] then
             (* No type variables - simple lambda, keep as is *)
             let type_str = format_typ toplevel_decl.Ast.topdef_type in
-            let body_str = format_expr expr in
+            let body_str = format_expr ~program_ctx expr in
             Printf.sprintf "def %s : %s := %s" toplevel_name_str type_str body_str
           else
             (* Has type variables - generate def with implicit type parameters *)
-            (* For polymorphic functions, let Lean infer the return type rather than
-               trying to format it with mismatched type variable names *)
-            let type_param_strs = List.map (fun tv -> Printf.sprintf "{%s : Type}" tv) type_vars in
+            let type_param_strs = List.concat_map (fun tv -> [Printf.sprintf "{%s : Type}" tv; Printf.sprintf "[Inhabited %s]" tv]) type_vars in
             let param_strs = List.map2 (fun var ty ->
               match Mark.remove ty with
               | TLit TUnit -> "()"
@@ -1508,16 +1681,40 @@ let format_toplevel
                     (format_typ ty)
             ) params tys in
             let all_params = type_param_strs @ param_strs in
-            let body_str = format_expr body in
-            (* Omit return type annotation - let Lean infer it *)
-            Printf.sprintf "def %s %s := %s" 
+            let body_str = format_expr ~program_ctx body in
+            (* Extract return type from the toplevel type.
+               For polymorphic functions with TForAll, unwrap to get the arrow type's return type.
+               Then substitute type variable names to match those from EAbs.tys. *)
+            let return_type_str = 
+              match Mark.remove toplevel_decl.Ast.topdef_type with
+              | TForAll binder ->
+                  let _, inner = Bindlib.unmbind binder in
+                  (match Mark.remove inner with
+                   | TArrow (toplevel_param_tys, ret) ->
+                       (* Build mapping from toplevel type vars to EAbs type vars *)
+                       let var_mapping = build_type_var_mapping 
+                         (Mark.add (Mark.get toplevel_decl.Ast.topdef_type) (TArrow (toplevel_param_tys, ret)))
+                         tys in
+                       let ret_str = format_typ ret in
+                       substitute_type_vars ret_str var_mapping
+                   | other_ty -> format_typ (Mark.add (Mark.get toplevel_decl.Ast.topdef_type) other_ty))
+              | TArrow (toplevel_param_tys, ret) ->
+                  let var_mapping = build_type_var_mapping 
+                    (Mark.add (Mark.get toplevel_decl.Ast.topdef_type) (TArrow (toplevel_param_tys, ret)))
+                    tys in
+                  let ret_str = format_typ ret in
+                  substitute_type_vars ret_str var_mapping
+              | _ -> format_typ toplevel_decl.Ast.topdef_type
+            in
+            Printf.sprintf "def %s %s : %s := %s" 
               toplevel_name_str 
               (String.concat " " all_params)
+              return_type_str
               body_str
       | _ ->
           (* Not a lambda - format as expression *)
           let type_str = format_typ toplevel_decl.Ast.topdef_type in
-          let body_str = format_expr expr in
+          let body_str = format_expr ~program_ctx expr in
           Printf.sprintf "def %s : %s := %s" toplevel_name_str type_str body_str)
   | None ->
       (* No expression - external or undefined *)
@@ -1539,10 +1736,10 @@ let format_scope
   let var_defs, inputs, context_vars = collect_var_info_ordered ~program_ctx scope_decl in
   
   (* 2. Generate input struct (if any inputs) *)
-  let input_struct = format_input_struct ~all_scopes scope_name_str inputs context_vars scope_decl in
+  let input_struct = format_input_struct ~all_scopes ~program_ctx scope_name_str inputs context_vars scope_decl in
   (* 3. Generate all methods for all variables *)
   let all_methods = List.concat (List.map (fun var_def ->
-    format_var_methods scope_name_str var_def inputs context_vars scope_decl.Ast.scope_defs
+    format_var_methods scope_name_str var_def inputs context_vars scope_decl.Ast.scope_defs ~program_ctx
   ) var_defs) in
   
   (* 4. Generate output struct *)
@@ -1621,7 +1818,7 @@ let format_scope
                         (acc, true)
                       else
                         let rule = snd (RuleName.Map.choose scope_def.Ast.scope_def_rules) in
-                        let input_value = format_rule_consequence ~scope_defs:(Some scope_decl.Ast.scope_defs) ~use_input_prefix:true ~in_scope_body_context:true rule in
+                        let input_value = format_rule_consequence ~scope_defs:(Some scope_decl.Ast.scope_defs) ~use_input_prefix:true ~in_scope_body_context:true ~program_ctx rule in
                         (Printf.sprintf "%s := some (%s)" input_var_name input_value :: acc, true)
                   | _ ->
                       (* Pure input to sub-scope: pass value directly *)
@@ -1630,7 +1827,7 @@ let format_scope
                         (acc, true)
                       else
                         let rule = snd (RuleName.Map.choose scope_def.Ast.scope_def_rules) in
-                        let input_value = format_rule_consequence ~scope_defs:(Some scope_decl.Ast.scope_defs) ~use_input_prefix:true ~in_scope_body_context:true rule in
+                        let input_value = format_rule_consequence ~scope_defs:(Some scope_decl.Ast.scope_defs) ~use_input_prefix:true ~in_scope_body_context:true ~program_ctx rule in
                         (Printf.sprintf "%s := %s" input_var_name input_value :: acc, true)
                 else (acc, has_inputs)
             | _ -> (acc, has_inputs)
@@ -1712,9 +1909,14 @@ let format_scope
       Some (Printf.sprintf "let %s := %s" binding_name (get_method_call var_def))
     else if is_context then
       (* Context variable: unwrap Option from input struct, or compute default via leaf function *)
-      let call = get_method_call var_def in
-      Some (Printf.sprintf "let %s := match input.%s with | some v => v | none => match %s with | some val => val | _ => default "
-        binding_name base_name call)
+      if var_def.rule_trees = [] && not var_def.is_input_output then
+        (* Context variable with no rules and no default: just unwrap from input or use default *)
+        Some (Printf.sprintf "let %s := match input.%s with | some v => v | none => default "
+          binding_name base_name)
+      else
+        let call = get_method_call var_def in
+        Some (Printf.sprintf "let %s := match input.%s with | some v => v | none => match %s with | some val => val | _ => default "
+          binding_name base_name call)
     else
       (* Internal/output variable: compute via leaf function call *)
       Some (Printf.sprintf "let %s := match %s with | some val => val | _ => default " binding_name (get_method_call var_def))

@@ -327,6 +327,18 @@ instance : CatalatoRat Int Rat where
 def toRat {α γ : Type} [CatalatoRat α γ] (a : α) : γ :=
   CatalatoRat.toRat a
 
+/-- Round a rational to the nearest integer, returning a rational.
+    Uses round-half-away-from-zero semantics: round(q) = sgn(q) * floor(|q| + 0.5),
+    matching Catala's OCaml runtime. -/
+def round (q : Rat) : Rat :=
+  -- sgn(q) * floor(|q| + 1/2)
+  -- floor(|q| + 1/2) = floor((2*|num| + den) / (2*den))
+  let n := q.num.natAbs
+  let d := q.den
+  let absRound := (2 * n + d) / (2 * d)
+  if q.num ≥ 0 then Rat.ofInt (Int.ofNat absRound)
+  else Rat.ofInt (-(Int.ofNat absRound))
+
 /-- Type class for Catala multiplication -/
 class CatalaMul (α : Type) (β : Type) (γ : outParam Type) where
   multiply : α → β → γ
