@@ -38,6 +38,11 @@ instance : ToString Date where
 instance : ToString Duration where
   toString d := s!"{d.years}y {d.months}m {d.days}d"
 
+/-- Helper method to convert Duration to days (integer division) -/
+
+instance : HDiv Duration Duration Int where
+  hDiv a b := a.years * 365 + a.months * 30 + a.days / (b.years * 365 + b.months * 30 + b.days)
+
 /-- Source position for error reporting -/
  structure SourcePosition where
   filename : String
