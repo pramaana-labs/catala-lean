@@ -15,6 +15,379 @@
 
 (** Lean4 backend from desugared AST *)
 
+(** {1 OVERVIEW}
+
+This plugin translates Catala's Desugared AST to Lean 4 code. It operates on the
+desugared representation (after surface parsing and name resolution, before scopelang
+transformation), generating executable Lean code that preserves Catala's semantics.
+
+{2 Why Desugared AST?}
+
+We target the desugared AST rather than later IRs (scopelang, dcalc, lcalc) because:
+- Preserves high-level Catala constructs (scopes, variables, rules)
+- Retains type information and structure needed for readable Lean code
+- Avoids lambda lifting and closure conversion that would make generated code opaque
+- Allows direct mapping of Catala scopes to Lean structures and functions
+
+{2 Compilation Pipeline Position}
+
+Surface AST → Desugared AST → [THIS PLUGIN] → Lean 4 code
+                      ↓
+              [Other plugins go through:]
+              Scopelang → Dcalc → Lcalc → Scalc → OCaml/Python/etc
+
+{1 ARCHITECTURE}
+
+{2 Core Translation Strategy}
+
+For each Catala scope `S`, we generate:
+
+1. **Input Struct** (`S_Input`):
+   - Pure input variables: `x : Option T`
+   - Context variables (reentrant): `ctx_var : Option T := none` (with default)
+   - Input-output variables: included for caller to optionally override
+
+2. **Leaf Methods** (`S_varname_leaf_N`):
+   - One method per rule per variable
+   - Takes relevant dependencies as parameters (Input struct + computed vars)
+   - Returns `Option T` (Some for unconditional, if-then-else for conditional)
+   - Avoids circular dependencies by explicit parameter threading
+
+3. **Output Struct** (`S`):
+   - All output and context output variables
+   - Derives `Inhabited` (always) and `DecidableEq` (if no function types)
+
+4. **Main Scope Function** (`s : S_Input → S`):
+   - For each variable, evaluates leaf method with match-unwrap pattern:
+     * Context vars: `match input.ctx with | some v => v | none => match leaf ...`
+     * Other vars: `match leaf ... | some val => val | _ => default`
+   - Constructs and returns output struct
+
+{2 Variable Classification}
+
+Variables are classified by `io_input` and `io_output` flags:
+
+| Type | io_input | io_output | In Input Struct? | In Output Struct? | Has Rules? |
+|------|----------|-----------|------------------|-------------------|------------|
+| Pure Input | OnlyInput | false | Yes (`x : Option T`) | No | No |
+| Context Input | Reentrant | false | Yes (`ctx : Option T := none`) | No | Yes (default) |
+| Internal | NoInput | false | No | No | Yes |
+| Output | NoInput | true | No | Yes | Yes |
+| Context Output | Reentrant | true | Yes (`ctx : Option T := none`) | Yes | Yes |
+| Input Output | OnlyInput/Reentrant | true | Yes | Yes | Yes |
+
+{1 KEY DESIGN DECISIONS}
+
+{2 Decision 1: Context Variables as `Option T := none`}
+
+Context variables (io_input=Reentrant) are optional inputs with default values.
+We represent them as `Option T := none` in the Input struct, and compute defaults
+in the scope body when the caller doesn't provide a value.
+
+Alternative considered: Computing defaults directly in struct definition. Rejected
+because defaults may depend on other variables not yet in scope.
+
+{2 Decision 2: Currying vs Tuples (Detuplification)}
+
+Catala's surface syntax allows `f of (a, b, c)` (tuple arg) but the canonical
+representation is curried: `f a b c`. We implement two-tier detuplification:
+
+**Tier 1 (LetIn-derived, tys-based)**: When `EApp.tys` has length > 1 (set by
+the LetIn handler in desugared/from_surface.ml), we know the surface code intended
+multiple arguments. Safe to:
+  - Splat `ETuple` literals: `f (a, b)` → `f a b`
+  - Project tuple variables: `f x` where `x:(A×B)` → `f x.1 x.2`
+
+**Tier 2 (FunCall, conservative)**: When `tys` is empty (regular function calls),
+ONLY splat `ETuple` literals when the topdef arity matches. Never project variables
+because:
+  - Implicit args (e.g., SourcePosition) may be added later in scopelang
+  - The desugared AST may not have the complete argument list yet
+  - Projecting a non-tuple (e.g., Int) causes type errors
+
+Example: `need_position of 33` where `need_position : SourcePosition → Int → Int`
+  - In desugared AST: `EApp { f = need_position; args = [33]; tys = [] }`
+  - Scopelang will insert SourcePosition later
+  - We generate: `need_position 33` (not `33.1` and `33.2`!)
+
+{2 Decision 3: Internal Variables as Scope Body Let-Bindings}
+
+Internal variables (NoInput, non-output) are computed in the scope body as
+`let _varname := match leaf_method ... | some val => val | _ => default`.
+They are NOT in the Input or Output structs, keeping the interface clean.
+
+{2 Decision 4: Underscore Prefix for Let-Bindings}
+
+All scope body let-bindings use `_varname` (underscore prefix) to avoid naming
+conflicts with the scope name or struct constructors. For example, in `scope S`,
+we generate `let _x := ...` not `let x := ...`.
+
+{1 CODE GENERATION PATTERNS}
+
+{2 Type Mappings}
+
+Catala Type → Lean Type:
+  - `integer` → `Int`
+  - `decimal` → `Rat`
+  - `money` → `CatalaRuntime.Money`
+  - `date` → `CatalaRuntime.Date`
+  - `duration` → `CatalaRuntime.Duration`
+  - `boolean` → `Bool`
+  - `(A, B, C)` → `(A × B × C)` (nested pairs in Lean)
+  - `collection T` → `(List T)`
+  - `optional T` → `(Optional T)` (Catala's custom Optional type)
+  - `A → B → C` → `(A → B → C)` (curried functions)
+  - `structure S` → `structure S` (with deriving clauses)
+  - `enumeration E` → `inductive E : Type where` (sum type)
+
+{2 Tuple Access Patterns}
+
+Lean represents tuples as right-nested pairs: `(a, b, c)` = `(a, (b, c))`
+
+Access patterns:
+  - `tuple.0` → `tuple.1` (first element)
+  - `tuple.1` → `tuple.2.1` (second of 3+)
+  - `tuple.2` (if size=3) → `tuple.2.2` (last element)
+  - `tuple.i` (middle) → `.2` repeated i times, then `.1`
+
+Example: For tuple `(a, b, c, d)`:
+  - Index 0: `.1` → `a`
+  - Index 1: `.2.1` → `b`
+  - Index 2: `.2.2.1` → `c`
+  - Index 3: `.2.2.2` → `d`
+
+{2 Literal Formatting}
+
+Critical: Parenthesize negative numbers to prevent Lean from parsing `-` as
+subtraction operator:
+  - `Rat.mk (-1) 1` not `Rat.mk -1 1`
+  - `Money.ofCents (-30)` not `Money.ofCents -30`
+  - Integer literals are always parenthesized: `(-5 : Int)`
+
+{2 Polymorphic Functions}
+
+For polymorphic topdefs like `declaration identity content anything of type a`:
+
+Generated Lean:
+```lean
+def identity {t1 : Type} [Inhabited t1] (x : t1) : t1 := x
+```
+
+Pattern:
+  1. Implicit type parameters: `{t : Type}`
+  2. Inhabited constraint: `[Inhabited t]`
+  3. Function parameters with types
+  4. Return type annotation (critical for `default` expressions)
+  5. Type variable name mapping to handle Catala's renaming
+
+{2 Rule Methods}
+
+Each rule generates a method returning `Option T`:
+
+Unconditional rule (justification = true):
+```lean
+def S_x_leaf_0 : Option Int :=
+  some ((expression))
+```
+
+Conditional rule:
+```lean
+def S_x_leaf_0 : Option Int :=
+  if (condition) then some ((expression)) else none
+```
+
+Rules with "depends on" parameters:
+```lean
+def S_x_leaf_0 (param1 : T1) (param2 : T2) : Option Int :=
+  some ((fun (p1 : T1) (p2 : T2) => (expression)) param1 param2)
+```
+
+{1 CRITICAL IMPLEMENTATION DETAILS}
+
+{2 The program_ctx Parameter}
+
+`program_ctx : Shared_ast.decl_ctx option` is threaded through formatting functions
+to enable looking up topdef types. Required for detuplification decisions (Tier 2)
+where we check if a ToplevelVar expects multiple arguments.
+
+Functions that need it: format_expr, format_operator, format_location, format_rule_*
+
+{2 Implicit Position Arguments}
+
+Catala functions can have `#[implicit_position_argument]` parameters. These are:
+  - Included in the function's type signature with the `ImplicitPosArg` attribute
+  - NOT present in `EApp.args` in the desugared AST
+  - Inserted by scopelang/from_desugared.ml during translation
+
+Impact on detuplification: We must filter `ImplicitPosArg` types from `EApp.tys`
+and topdef arity calculations, otherwise we'll try to detuplify args that don't exist.
+
+Example:
+  - Function: `need_position : SourcePosition → Int → Int` (first param implicit)
+  - Call: `need_position of 33` 
+  - Desugared: `EApp { f; args = [33]; tys = [SourcePosition; Int] }`
+  - After filtering implicit: `tys_explicit = [Int]` → arity 1, don't detuplify
+  - Generated: `need_position 33` (scopelang will insert SourcePosition later)
+
+{2 Type Variable Renaming}
+
+Catala may rename type variables during compilation. For example:
+  - Toplevel type: `TForAll(t, TArrow([List(Int × t)], List(Int × t)))`
+  - EAbs param types: `[List(Int × t1)]`
+
+We build a mapping (toplevel type vars → EAbs type vars) and substitute in the
+return type annotation to ensure consistency:
+  - Generate params: `{t1 : Type} [Inhabited t1] (p : List (Int × t1))`
+  - Substitute in return: `List (Int × t)` → `List (Int × t1)`
+  - Result: `: (List (Int × t1))`
+
+{2 DecidableEq Derivation}
+
+Structs/enums can derive `DecidableEq` only if they don't contain function types.
+We check recursively:
+  - Function types (TArrow): Skip DecidableEq
+  - Struct types: Recursively check fields (requires ctx_structs map)
+  - Other types: Generally safe
+
+Always derive `Inhabited` (via `default` values).
+
+{2 Name Sanitization}
+
+Three levels:
+  1. **Keywords**: Replace Lean keywords (if, then, def, etc.) with `_keyword`
+  2. **Qualified names**: Preserve module structure (Mod.SubMod.Name)
+  3. **Scope functions**: Lowercase first letter to avoid struct name collision
+
+Current limitation: Multiple Catala identifiers may sanitize to same Lean name
+(e.g., topdef `assert` and scope `Assert` both become `_assert`). Requires
+disambiguation strategy.
+
+{1 KNOWN LIMITATIONS}
+
+1. **Implicit position arguments**: Not inserted (requires scopelang logic)
+2. **Cross-module references**: Incomplete without proper multi-module compilation
+3. **Cyrillic/Unicode identifiers**: May cause Lean parse errors
+4. **External functions**: OCaml externals have no Lean equivalent
+5. **Impossible expressions**: Generate `default /-unsupported expression-/`
+6. **Name collisions**: Multiple Catala names may map to same sanitized name
+
+{1 TESTING}
+
+As of Feb 2026: **138/151 (91.3%)** Catala test cases compile successfully in Lean.
+
+Passing test categories:
+  - Arithmetic, arrays, assertions, bool, dates, decimals, defaults
+  - Enums, exceptions, functions (including closures)
+  - IO, JSON, literals, metadata
+  - Scopes (including subscopes and multi-level calls)
+  - Structs, tuples, variable state
+
+Failing test categories (13 tests):
+  - Implicit position arguments (2)
+  - Cross-module imports (7)
+  - Name collisions (1)
+  - Cyrillic identifiers (1)
+  - Complex polymorphism (1)
+  - Expected type error test (1)
+
+{1 EXAMPLE TRANSLATION}
+
+{2 Input Catala Code}
+
+```catala
+declaration scope TaxComputation:
+  context input gross_income content money
+  input num_dependents content integer
+  internal tax_rate content decimal
+  output tax_owed content money
+
+scope TaxComputation:
+  definition tax_rate equals
+    if num_dependents > 2
+    then 0.15
+    else 0.20
+  
+  definition tax_owed equals
+    gross_income * tax_rate
+```
+
+{2 Generated Lean Code}
+
+```lean
+structure TaxComputation_Input where
+  gross_income : Option Money := none
+  num_dependents : Option Int
+
+def TaxComputation_tax_rate_leaf_0 (input : TaxComputation_Input) (num_dependents : Int) : Option Rat :=
+  if (num_dependents > 2) then some (Rat.mk 15 100) else some (Rat.mk 20 100)
+
+def TaxComputation_tax_owed_leaf_0 (input : TaxComputation_Input) (gross_income : Money) (tax_rate : Rat) : Option Money :=
+  some (CatalaRuntime.multiply gross_income tax_rate)
+
+structure TaxComputation where
+  tax_owed : Money
+deriving Inhabited, DecidableEq
+
+def taxComputation (input : TaxComputation_Input) : TaxComputation :=
+  let _gross_income := match input.gross_income with | some v => v | none => match TaxComputation_gross_income_leaf_0 input with | some val => val | _ => default
+  let _num_dependents := match input.num_dependents with | some val => val | _ => default
+  let _tax_rate := match TaxComputation_tax_rate_leaf_0 input _num_dependents with | some val => val | _ => default
+  let _tax_owed := match TaxComputation_tax_owed_leaf_0 input _gross_income _tax_rate with | some val => val | _ => default
+  { tax_owed := _tax_owed }
+```
+
+{1 MAIN COMPONENTS}
+
+Below are the key functions in this file:
+
+- {!format_lit}: Literal value formatting (handles negative number parenthesization)
+- {!format_typ}: Type translation (Catala types → Lean types)
+- {!format_expr}: Expression translation (core recursive formatter)
+- {!format_operator}: Operator and operation formatting
+- {!format_location}: Variable reference formatting
+- {!format_rule_consequence}: Rule consequence expression (with optional lambda wrap)
+- {!format_rule_body}: Complete rule (justification + consequence → Option T)
+- {!collect_var_info_ordered}: Dependency analysis and topological sort of variables
+- {!format_var_methods}: Generate all leaf methods for a variable
+- {!format_input_struct}: Generate Input struct with context variables as Option types
+- {!format_struct_decl}: Generate struct with deriving clauses
+- {!format_scope}: Generate complete scope (Input, methods, Output, main function)
+- {!format_toplevel}: Generate toplevel definitions (with polymorphism support)
+- {!format_program}: Main entry point, generates complete Lean file
+
+{1 GOTCHAS AND TRICKY ASPECTS}
+
+{2 EApp Detuplification Must Be Conservative}
+
+DO NOT blindly detuplify all single-arg calls. The desugared AST is incomplete:
+  - Implicit args not yet inserted
+  - Some type info not populated (tys=[] for FunCall)
+  - Tuple variable might not actually be a tuple at runtime
+
+Always check `tys` first, fall back to topdef lookup with ETuple-only splatting.
+
+{2 Type Variable Names May Change}
+
+Catala renames type variables during compilation. The toplevel type may use `t`
+while the EAbs uses `t1`. Always build a mapping and substitute in return types.
+
+{2 Rat.mk Requires Parenthesized Negatives}
+
+`Rat.mk -1 1` is parsed as `(Rat.mk) - (1) (1)` by Lean. Always parenthesize
+negative numerators: `Rat.mk (-1) 1`.
+
+{2 Scope Function Naming}
+
+Scope functions are lowercase (e.g., `taxComputation`) to avoid collision with
+the struct name (e.g., `TaxComputation`). This is done via `uncapitalize_qualified_name`.
+
+{2 DecidableEq Requires No Function Types}
+
+Never derive `DecidableEq` for structs/enums containing function types. We detect
+this via `contains_function_type` and `type_lacks_decidable_eq` checks.
+
+*)
+
 open Catala_utils
 open Shared_ast
 open Desugared.Dependency
@@ -804,11 +1177,21 @@ and format_operator
     | [arg] -> Printf.sprintf "(%s%s)" sym (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg)
     | _ -> "default -- wrong number of args for unop"
   in
-  (* Helper to wrap with decide only if not a boolean operator or match expression *)
+  (* Helper to wrap with decide only if not a boolean operator, match expression,
+     variable, or function application. In the desugared AST, arguments to boolean
+     operators are type-checked to be Bool, so we don't need to wrap them with decide.
+     The only place we use decide is for comparison operators (which return Prop in Lean)
+     and those are already wrapped in the compop helper above. *)
   let format_bool_arg arg =
     let formatted = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg in
     let skip_decide = is_bool_operator arg || 
-      (match Mark.remove arg with EMatch _ -> true | _ -> false) in
+      (match Mark.remove arg with 
+       | EMatch _ -> true  (* Match expressions return Bool *)
+       | EVar _ -> true    (* Variables in boolean context are Bool-typed *)
+       | EApp _ -> true    (* Function applications in boolean context return Bool *)
+       | ELocation _ -> true  (* Location references in boolean context are Bool-typed *)
+       | _ -> false) 
+    in
     if skip_decide then formatted
     else Printf.sprintf "decide (%s)" formatted
   in
