@@ -1980,7 +1980,7 @@ let format_struct_decl ?(ctx_structs : typ StructField.Map.t StructName.Map.t op
      Structs with function-type fields only derive Inhabited. *)
   let deriving =
     if struct_lacks_decidable_eq ~ctx_structs fields then "deriving Inhabited"
-    else "deriving Inhabited, DecidableEq"
+    else "deriving Inhabited, DecidableEq, Repr"
   in
   Printf.sprintf "structure %s where\n%s\n%s"
     name
@@ -2002,7 +2002,7 @@ let format_enum_decl ?(ctx_structs : typ StructField.Map.t StructName.Map.t opti
        only derive Inhabited, so DecidableEq derivation would fail transitively). *)
     let lacks_eq = enum_lacks_decidable_eq ~ctx_structs fields in
     let deriving = if lacks_eq then "deriving Inhabited"
-                   else "deriving Inhabited, DecidableEq" in
+                   else "deriving Inhabited, DecidableEq, Repr" in
     if num_forall_ty = 0 then 
       (let formatted_fields =  (List.map (fun (field, ty) ->
       Printf.sprintf " | %s : %s -> %s"
