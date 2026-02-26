@@ -55,6 +55,12 @@
  (libraries catala.driver desugared scopelang))
 
 (library
+ (name lean4_desugared_test)
+ (synopsis "Unit tests for Lean4 desugared backend")
+ (modules lean4_desugared_test)
+ (libraries lean4_desugared alcotest catala.driver desugared scopelang str))
+
+(library
  (name lean4_desugared_catala_test)
  (public_name catala.plugins.lean4_desugared_test)
  (synopsis

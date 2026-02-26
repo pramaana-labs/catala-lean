@@ -34,6 +34,11 @@
  (public_name catala)
  (libraries catala.driver ocamlgraph))
 
+(executable
+ (name tests)
+ (modules tests)
+ (libraries shared_ast lean4_desugared_test alcotest))
+
 (documentation
  (package catala)
  (mld_files index))
