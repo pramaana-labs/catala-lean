@@ -1455,6 +1455,40 @@ let format_method_params
   
   String.concat " " (input_param @ List.rev dep_params)
 
+(** Like format_method_params but returns only the parameter names (no type annotations).
+    Used at call sites where types are not needed, avoiding a fragile string-parsing round-trip. *)
+let format_method_param_names
+    ?(has_input_struct : bool = false)
+    (_inputs : input_info list)
+    (scope_name : string)
+    (dependencies : Ast.LocationSet.t)
+    (scope_defs : Ast.scope_def Ast.ScopeDef.Map.t)
+    : string =
+  let _ = scope_name in
+  let input_name = if has_input_struct then ["input"] else [] in
+  let dep_names = Ast.LocationSet.fold (fun (loc, _pos) acc ->
+    match loc with
+    | DesugaredScopeVar { name; state } ->
+        let scope_def_key = (name, Ast.ScopeDef.Var state) in
+        (match Ast.ScopeDef.Map.find_opt scope_def_key scope_defs with
+        | None -> acc
+        | Some scope_def ->
+            let is_pure_input = match Mark.remove scope_def.Ast.scope_def_io.io_input with
+              | Runtime.OnlyInput -> true
+              | _ -> false
+            in
+            if is_pure_input then acc
+            else
+              let base_name = sanitize_name (ScopeVar.to_string (Mark.remove name)) in
+              let var_name = match state with
+                | None -> base_name
+                | Some st -> Printf.sprintf "%s_%s" base_name (sanitize_name (StateName.to_string st))
+              in
+              var_name :: acc)
+    | ToplevelVar _ -> acc
+  ) dependencies [] in
+  String.concat " " (input_name @ List.rev dep_names)
+
 (** Convert context_var_info to input_info *)
 let context_to_input (ctx : context_var_info) : input_info = {
   var_name = ctx.ctx_var_name;
@@ -1627,48 +1661,7 @@ let rec format_rule_tree_method
       (* Call exception methods - need to pass all their dependencies *)
       let exception_calls = List.mapi (fun i (_exc_methods, exc_deps) ->
         let exc_method_name = format_tree_method_name scope_name var_name (List.nth exception_trees i) (index * 10 + i) in
-        let exc_params = format_method_params ~has_input_struct all_inputs scope_name exc_deps scope_defs in
-        (* Extract just the parameter names from the formatted params *)
-        let param_names = 
-          if exc_params = "" then ""
-          else
-            (* Parse params like "(input : Type)" to extract "input" *)
-            let rec extract_params str acc =
-              let len = String.length str in
-              (* Find the next opening paren *)
-              let rec find_paren pos =
-                if pos >= len then None
-                else if str.[pos] = '(' then Some pos
-                else find_paren (pos + 1)
-              in
-              match find_paren 0 with
-              | None -> List.rev acc
-              | Some start ->
-                  (* Find the closing paren *)
-                  let rec find_close pos =
-                    if pos >= len then len
-                    else if str.[pos] = ')' then pos
-                    else find_close (pos + 1)
-                  in
-                  let close = find_close (start + 1) in
-                  (* Extract content between parens *)
-                  let content = String.sub str (start + 1) (close - start - 1) in
-                  (* Find colon to separate name from type *)
-                  let rec find_colon pos =
-                    if pos >= String.length content then String.length content
-                    else if content.[pos] = ':' then pos
-                    else find_colon (pos + 1)
-                  in
-                  let colon_pos = find_colon 0 in
-                  let name = String.trim (String.sub content 0 colon_pos) in
-                  (* Continue with the rest of the string *)
-                  let rest_start = min (close + 1) len in
-                  let rest = String.sub str rest_start (len - rest_start) in
-                  extract_params rest (name :: acc)
-            in
-            let names = extract_params exc_params [] in
-            String.concat " " names
-        in
+        let param_names = format_method_param_names ~has_input_struct all_inputs scope_name exc_deps scope_defs in
         Printf.sprintf "%s %s" exc_method_name param_names
       ) exception_methods in
       
