@@ -1907,6 +1907,51 @@ let format_input_struct
       scope_name
       (String.concat "\n" (formatted_input_fields @ formatted_dependent_fields))
 
+(** Generate split wrapper structs and function for theorem proving.
+    Generates S_PureInput (only OnlyInput fields), S_ContextInput (only Reentrant
+    fields with Option T := none), and s_theorem wrapper that constructs S_Input
+    from both and delegates to the original scope function. *)
+let format_split_wrapper
+    (scope_name : string)
+    (func_name : string)
+    (inputs : input_info list)
+    (contexts : context_var_info list)
+    : string =
+  let format_field_name var_name var_state =
+    let base = sanitize_name (ScopeVar.to_string var_name) in
+    match var_state with
+    | None -> base
+    | Some state_name ->
+        Printf.sprintf "%s_%s" base (sanitize_name (StateName.to_string state_name))
+  in
+  let pure_fields = List.map (fun (input : input_info) ->
+    let name = format_field_name input.var_name input.var_state in
+    (name, Printf.sprintf "  %s : %s" name (format_typ input.var_type))
+  ) inputs in
+  let ctx_fields = List.map (fun (ctx : context_var_info) ->
+    let name = format_field_name ctx.ctx_var_name ctx.ctx_state in
+    (name, Printf.sprintf "  %s : Option %s := none" name (format_typ ctx.ctx_var_type))
+  ) contexts in
+  let pure_struct = Printf.sprintf "structure %s_PureInput where\n%s\n"
+    scope_name
+    (String.concat "\n" (List.map snd pure_fields)) in
+  let ctx_struct = Printf.sprintf "structure %s_ContextInput where\n%s\n"
+    scope_name
+    (String.concat "\n" (List.map snd ctx_fields)) in
+  let pure_assignments = List.map (fun (name, _) ->
+    Printf.sprintf "%s := pure.%s" name name
+  ) pure_fields in
+  let ctx_assignments = List.map (fun (name, _) ->
+    Printf.sprintf "%s := ctx.%s" name name
+  ) ctx_fields in
+  let all_assignments = pure_assignments @ ctx_assignments in
+  let wrapper_func = Printf.sprintf
+    "@[reducible]\ndef %s_theorem (pure : %s_PureInput) (ctx : %s_ContextInput := {}) : %s :=\n  %s {\n    %s }\n"
+    func_name scope_name scope_name scope_name
+    func_name
+    (String.concat ",\n    " all_assignments) in
+  Printf.sprintf "%s\n%s\n%s" pure_struct ctx_struct wrapper_func
+
 (** Check if a type contains function types (TArrow) recursively *)
 let rec contains_function_type (ty : typ) : bool =
   match Mark.remove ty with
@@ -2323,12 +2368,16 @@ let format_scope
         (String.concat ",\n    " output_assignments)
   in
   
-  (* 6. Assemble all parts *)
+  (* 6. Generate split wrapper for theorem proving *)
+  let split_wrapper = format_split_wrapper scope_name_str scope_func_name inputs context_vars in
+
+  (* 7. Assemble all parts *)
   let parts = List.filter (fun s -> s <> "") [
     input_struct;
     String.concat "\n" all_methods;
     output_struct;
-    func_def
+    func_def;
+    split_wrapper;
   ] in
   String.concat "\n" parts
 

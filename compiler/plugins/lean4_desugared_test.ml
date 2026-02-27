@@ -531,11 +531,146 @@ module ExpressionFormattingTests = struct
   ]
 end
 
+(** {1 Test Category 4: Split Wrapper Generation} *)
+
+module SplitWrapperTests = struct
+  open Helpers
+
+  let mk_input_info name ty =
+    let var = ScopeVar.fresh (name, Pos.void) in
+    ({ var_name = var; var_state = None; var_type = ty;
+       io_input = Mark.add Pos.void Runtime.OnlyInput } : Lean4_desugared.input_info)
+
+  let mk_context_info name ty =
+    let var = ScopeVar.fresh (name, Pos.void) in
+    ({ ctx_var_name = var; ctx_state = None; ctx_var_type = ty;
+       ctx_io_input = Mark.add Pos.void Runtime.Reentrant;
+       ctx_default = None } : Lean4_desugared.context_var_info)
+
+  let mk_input_info_with_state name state_name ty =
+    let var = ScopeVar.fresh (name, Pos.void) in
+    let state = StateName.fresh (state_name, Pos.void) in
+    ({ var_name = var; var_state = Some state; var_type = ty;
+       io_input = Mark.add Pos.void Runtime.OnlyInput } : Lean4_desugared.input_info)
+
+  let mk_context_info_with_state name state_name ty =
+    let var = ScopeVar.fresh (name, Pos.void) in
+    let state = StateName.fresh (state_name, Pos.void) in
+    ({ ctx_var_name = var; ctx_state = Some state; ctx_var_type = ty;
+       ctx_io_input = Mark.add Pos.void Runtime.Reentrant;
+       ctx_default = None } : Lean4_desugared.context_var_info)
+
+  let test_pure_inputs_only () =
+    let inputs = [
+      mk_input_info "tax_year" (mk_int_ty ());
+      mk_input_info "income" (mk_money_ty ());
+    ] in
+    let result = Lean4_desugared.format_split_wrapper "MyScope" "myScope" inputs [] in
+    check_contains ~msg:"PureInput struct declared"
+      result "structure MyScope_PureInput where";
+    check_contains ~msg:"pure field tax_year"
+      result "tax_year : Int";
+    check_contains ~msg:"pure field income"
+      result "income : CatalaRuntime.Money";
+    check_contains ~msg:"ContextInput struct declared"
+      result "structure MyScope_ContextInput where";
+    check_contains ~msg:"theorem wrapper declared"
+      result "def myScope_theorem";
+    check_contains ~msg:"wrapper takes pure param"
+      result "(pure : MyScope_PureInput)";
+    check_contains ~msg:"wrapper takes ctx param with default"
+      result "(ctx : MyScope_ContextInput := {})";
+    check_contains ~msg:"wrapper maps pure.tax_year"
+      result "tax_year := pure.tax_year";
+    check_contains ~msg:"wrapper maps pure.income"
+      result "income := pure.income";
+    check_contains ~msg:"wrapper is reducible"
+      result "@[reducible]"
+
+  let test_context_inputs_only () =
+    let contexts = [
+      mk_context_info "is_married" (mk_bool_ty ());
+      mk_context_info "deduction" (mk_money_ty ());
+    ] in
+    let result = Lean4_desugared.format_split_wrapper "MyScope" "myScope" [] contexts in
+    check_contains ~msg:"PureInput struct declared"
+      result "structure MyScope_PureInput where";
+    check_contains ~msg:"ContextInput has is_married"
+      result "is_married : Option Bool := none";
+    check_contains ~msg:"ContextInput has deduction"
+      result "deduction : Option CatalaRuntime.Money := none";
+    check_contains ~msg:"wrapper maps ctx.is_married"
+      result "is_married := ctx.is_married";
+    check_contains ~msg:"wrapper maps ctx.deduction"
+      result "deduction := ctx.deduction"
+
+  let test_mixed_inputs () =
+    let inputs = [
+      mk_input_info "persons" (mk_list_ty (mk_bool_ty ()));
+      mk_input_info "tax_year" (mk_int_ty ());
+    ] in
+    let contexts = [
+      mk_context_info "adjusted_gross_income" (mk_money_ty ());
+      mk_context_info "is_dependent" (mk_bool_ty ());
+    ] in
+    let result = Lean4_desugared.format_split_wrapper "TaxCalc" "taxCalc" inputs contexts in
+    check_contains ~msg:"PureInput has persons"
+      result "persons : (List Bool)";
+    check_contains ~msg:"PureInput has tax_year"
+      result "tax_year : Int";
+    check_contains ~msg:"ContextInput has adjusted_gross_income"
+      result "adjusted_gross_income : Option CatalaRuntime.Money := none";
+    check_contains ~msg:"ContextInput has is_dependent"
+      result "is_dependent : Option Bool := none";
+    check_contains ~msg:"pure field mapped with pure prefix"
+      result "persons := pure.persons";
+    check_contains ~msg:"context field mapped with ctx prefix"
+      result "adjusted_gross_income := ctx.adjusted_gross_income";
+    check_contains ~msg:"wrapper calls original function"
+      result "taxCalc {";
+    check_contains ~msg:"wrapper returns correct type"
+      result ": TaxCalc :="
+
+  let test_state_qualified_variables () =
+    let inputs = [
+      mk_input_info_with_state "foo" "s1" (mk_int_ty ());
+    ] in
+    let contexts = [
+      mk_context_info_with_state "bar" "s2" (mk_bool_ty ());
+    ] in
+    let result = Lean4_desugared.format_split_wrapper "MyScope" "myScope" inputs contexts in
+    check_contains ~msg:"state-qualified pure field"
+      result "foo_s1 : Int";
+    check_contains ~msg:"state-qualified context field"
+      result "bar_s2 : Option Bool := none";
+    check_contains ~msg:"state-qualified pure mapping"
+      result "foo_s1 := pure.foo_s1";
+    check_contains ~msg:"state-qualified context mapping"
+      result "bar_s2 := ctx.bar_s2"
+
+  let test_empty_scope () =
+    let result = Lean4_desugared.format_split_wrapper "Empty" "empty" [] [] in
+    check_contains ~msg:"PureInput struct exists"
+      result "structure Empty_PureInput where";
+    check_contains ~msg:"ContextInput struct exists"
+      result "structure Empty_ContextInput where";
+    check_contains ~msg:"theorem wrapper exists"
+      result "def empty_theorem"
+
+  let suite = [
+    Alcotest.test_case "split wrapper: pure inputs only" `Quick test_pure_inputs_only;
+    Alcotest.test_case "split wrapper: context inputs only" `Quick test_context_inputs_only;
+    Alcotest.test_case "split wrapper: mixed inputs" `Quick test_mixed_inputs;
+    Alcotest.test_case "split wrapper: state-qualified variables" `Quick test_state_qualified_variables;
+    Alcotest.test_case "split wrapper: empty scope" `Quick test_empty_scope;
+  ]
+end
+
 (** {1 Main Test Suite} *)
 
 let suite = [
   ("Name Sanitization", NameSanitizationTests.suite);
   ("Detuplification & Function Application", DetuplificationTests.suite);
   ("Expression Formatting", ExpressionFormattingTests.suite);
-  (* More test categories will be added here after review *)
+  ("Split Wrapper Generation", SplitWrapperTests.suite);
 ]
