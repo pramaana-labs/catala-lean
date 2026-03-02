@@ -29,11 +29,11 @@ deriving Repr, BEq
 
 @[simp, grind] def of_tuple2 := (fun (begin_date : CatalaRuntime.Date) (_end : CatalaRuntime.Date) => ({ begin := begin_date, _end := _end } : Period))
 
-@[simp, grind] def intersection := (fun (p1 : Period) (p2 : Period) => ((fun (intersection : Period) => (if (valid intersection) then (Optional.Present intersection) else (Optional.Absent ()))) ({ begin := (Date_en.max (p1).begin (p2).begin), _end := (Date_en.min (p1)._end (p2)._end) } : Period)))
+@[simp, grind] def intersection := (fun (p1 : Period) (p2 : Period) => ((fun (intersection : Period) => (if (valid intersection) then (Optional.Present intersection) else Optional.Absent)) ({ begin := (Date_en.max (p1).begin (p2).begin), _end := (Date_en.min (p1)._end (p2)._end) } : Period)))
 
 @[simp, grind] def find_period := (fun (l : (List Period)) (d : CatalaRuntime.Date) => (List.foldl ((fun (found : (Optional Period)) (p : Period) => (match found with
-  | Optional.Absent _ => (if (contained p d) then (Optional.Present p) else (Optional.Absent ()))
-  | Optional.Present _ => found))) (Optional.Absent ()) l))
+  | Optional.Absent => (if (contained p d) then (Optional.Present p) else Optional.Absent)
+  | Optional.Present _ => found))) Optional.Absent l))
 
 @[simp, grind] def to_tuple_list := (fun (l : (List Period)) => (List.map ((fun (p : Period) => (to_tuple p))) l))
 

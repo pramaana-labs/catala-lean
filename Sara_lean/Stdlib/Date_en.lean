@@ -10,18 +10,18 @@ namespace Date_en
 
 @[grind]
 inductive Month : Type where
- | January : Unit -> Month
- | February : Unit -> Month
- | March : Unit -> Month
- | April : Unit -> Month
- | May : Unit -> Month
- | June : Unit -> Month
- | July : Unit -> Month
- | August : Unit -> Month
- | September : Unit -> Month
- | October : Unit -> Month
- | November : Unit -> Month
- | December : Unit -> Month
+ | January : Month
+ | February : Month
+ | March : Month
+ | April : Month
+ | May : Month
+ | June : Month
+ | July : Month
+ | August : Month
+ | September : Month
+ | October : Month
+ | November : Month
+ | December : Month
 deriving Repr, DecidableEq, Inhabited
 
 
@@ -42,22 +42,22 @@ deriving Repr, DecidableEq
 @[simp, grind] def last_day_of_month := (fun (d : CatalaRuntime.Date) => (Date_internal.last_day_of_month d))
 
 @[simp, grind] def month_to_int := (fun (m : Month) => (match m with
-  | Month.January _ => (1 : Int)
-  | Month.February _ => (2 : Int)
-  | Month.March _ => (3 : Int)
-  | Month.April _ => (4 : Int)
-  | Month.May _ => (5 : Int)
-  | Month.June _ => (6 : Int)
-  | Month.July _ => (7 : Int)
-  | Month.August _ => (8 : Int)
-  | Month.September _ => (9 : Int)
-  | Month.October _ => (10 : Int)
-  | Month.November _ => (11 : Int)
-  | Month.December _ => (12 : Int)))
+  | Month.January => (1 : Int)
+  | Month.February => (2 : Int)
+  | Month.March => (3 : Int)
+  | Month.April => (4 : Int)
+  | Month.May => (5 : Int)
+  | Month.June => (6 : Int)
+  | Month.July => (7 : Int)
+  | Month.August => (8 : Int)
+  | Month.September => (9 : Int)
+  | Month.October => (10 : Int)
+  | Month.November => (11 : Int)
+  | Month.December => (12 : Int)))
 
 @[simp, grind] def month_to_integer := month_to_int
 
-@[simp, grind] def month_of_int := (fun (i : Int) => (if (i = (1 : Int)) then (Month.January ()) else (if (i = (2 : Int)) then (Month.February ()) else (if (i = (3 : Int)) then (Month.March ()) else (if (i = (4 : Int)) then (Month.April ()) else (if (i = (5 : Int)) then (Month.May ()) else (if (i = (6 : Int)) then (Month.June ()) else (if (i = (7 : Int)) then (Month.July ()) else (if (i = (8 : Int)) then (Month.August ()) else (if (i = (9 : Int)) then (Month.September ()) else (if (i = (10 : Int)) then (Month.October ()) else (if (i = (11 : Int)) then (Month.November ()) else (if (i = (12 : Int)) then (Month.December ()) else default /-unsupported expression-/)))))))))))))
+@[simp, grind] def month_of_int := (fun (i : Int) => (if (i = (1 : Int)) then Month.January else (if (i = (2 : Int)) then Month.February else (if (i = (3 : Int)) then Month.March else (if (i = (4 : Int)) then Month.April else (if (i = (5 : Int)) then Month.May else (if (i = (6 : Int)) then Month.June else (if (i = (7 : Int)) then Month.July else (if (i = (8 : Int)) then Month.August else (if (i = (9 : Int)) then Month.September else (if (i = (10 : Int)) then Month.October else (if (i = (11 : Int)) then Month.November else (if (i = (12 : Int)) then Month.December else default /-unsupported expression-/)))))))))))))
 
 @[simp, grind] def integer_to_month := month_of_int
 

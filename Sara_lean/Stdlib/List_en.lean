@@ -14,7 +14,7 @@ namespace List_en
   let idx := index.toNat - 1  -- Convert to 0-based
   match lst[idx]? with
   | some v => Optional.Present v
-  | none => Optional.Absent ()
+  | none => Optional.Absent
 
 /-- Remove nth element from list (1-based index) -/
 @[simp, grind] def remove_nth_element {t : Type} (lst : List t) (index : Int) : List t :=
