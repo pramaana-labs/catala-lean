@@ -1,0 +1,57 @@
+# Transformation C Test: Beta-reduce immediate lambda applications
+
+Tests that Catala `let x = e in body` patterns, which desugar as
+`(fun (x : T) => body) e`, are emitted as `let x : T := e; body` in Lean4.
+
+## Before Transformation C (Lean4 output):
+
+```
+-- Simple let binding:
+((fun (base_amount : Int) => base_amount * 2) 1000)
+
+-- Chained let bindings:
+((fun (a : Int) => ((fun (b : Int) => a + b) (a * 3))) 100)
+```
+
+## After Transformation C (Lean4 output):
+
+```
+-- Simple let binding → let:
+(let base_amount : Int := 1000; base_amount * 2)
+
+-- Chained let bindings → nested lets:
+(let a : Int := 100; (let b : Int := a * 3; a + b))
+```
+
+```catala
+declaration scope BetaReduceScope:
+  input base_value content integer
+  output simple_let content integer
+  output chained_lets content integer
+  output let_with_condition content integer
+  output let_in_tuple content (integer, integer)
+
+scope BetaReduceScope:
+  # Simple let: base_amount = base_value * 2
+  definition simple_let equals
+    let base_amount equals base_value * 2 in
+    base_amount + 100
+
+  # Chained lets: a = base_value, b = a + 10, result = a * b
+  definition chained_lets equals
+    let a equals base_value + 1 in
+    let b equals a + 10 in
+    a * b
+
+  # Let with conditional body
+  definition let_with_condition equals
+    let threshold equals 500 in
+    if base_value > threshold then base_value - threshold
+    else 0
+
+  # Let producing a tuple
+  definition let_in_tuple equals
+    let doubled equals base_value * 2 in
+    let tripled equals base_value * 3 in
+    (doubled, tripled)
+```

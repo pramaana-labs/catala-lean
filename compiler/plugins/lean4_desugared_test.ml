@@ -100,6 +100,25 @@ module Helpers = struct
   let mk_appop op args =
     Expr.eappop ~op ~args ~tys:[] nomark
   
+  (** Create a lambda (EAbs) and immediately apply it (EApp).
+      [mk_immediate_app var_name ty body_fn arg] builds
+      ((fun (var_name : ty) => body_fn(var_expr)) arg). *)
+  let mk_abs_app var_name ty body_fn arg =
+    let var = Var.make var_name in
+    let var_expr = Expr.evar var nomark in
+    let body = body_fn var_expr in
+    let binder = Bindlib.bind_mvar [|var|] (Expr.Box.lift body) in
+    let abs = Expr.eabs_ghost binder [ty] nomark in
+    mk_app abs [arg]
+
+  (** Create a standalone lambda (EAbs) without application. *)
+  let mk_abs var_name ty body_fn =
+    let var = Var.make var_name in
+    let var_expr = Expr.evar var nomark in
+    let body = body_fn var_expr in
+    let binder = Bindlib.bind_mvar [|var|] (Expr.Box.lift body) in
+    Expr.eabs_ghost binder [ty] nomark
+
   (** {2 String Checking Helpers} *)
   
   let contains_substring haystack needle =
@@ -666,7 +685,132 @@ module SplitWrapperTests = struct
   ]
 end
 
-(** {1 Test Category 5: strip_outer_decide} *)
+(** {1 Test Category 5: Beta-Reduction (Transformation C)} *)
+
+module BetaReductionTests = struct
+  open Helpers
+
+  (** Test: Simple immediate lambda application → let binding.
+      (fun (x : Int) => x) 42  →  (let x : Int := 42; x) *)
+  let test_simple_identity () =
+    let int_ty = mk_int_ty () in
+    let app = mk_abs_app "x" int_ty (fun x -> x) (mk_int 42) in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has let binding" formatted "let";
+    check_contains ~msg:"has variable x" formatted "x :";
+    check_contains ~msg:"has Int type" formatted "Int";
+    check_contains ~msg:"has value 42" formatted "42";
+    check_not_contains ~msg:"no fun keyword" formatted "fun"
+
+  (** Test: Lambda with computation body.
+      (fun (y : Int) => y + 1) 10  →  (let y : Int := 10; (y + ...)) *)
+  let test_computation_body () =
+    let int_ty = mk_int_ty () in
+    let app = mk_abs_app "y" int_ty
+      (fun y ->
+        mk_appop (Mark.add Pos.void Op.Add) [y; mk_int 1])
+      (mk_int 10)
+    in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has let" formatted "let y";
+    check_contains ~msg:"has value 10" formatted "10";
+    check_contains ~msg:"has addition" formatted "+";
+    check_not_contains ~msg:"no fun" formatted "fun"
+
+  (** Test: Unit parameter is skipped entirely.
+      (fun () => 42) ()  →  42 *)
+  let test_unit_param_skipped () =
+    let unit_ty = mk_unit_ty () in
+    let app = mk_abs_app "unused" unit_ty
+      (fun _u -> mk_int 42)
+      (mk_unit ())
+    in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has 42" formatted "42";
+    check_not_contains ~msg:"no let binding" formatted "let";
+    check_not_contains ~msg:"no fun" formatted "fun"
+
+  (** Test: Nested immediate lambda applications → nested let bindings.
+      (fun (a : Int) => (fun (b : Int) => a + b) 20) 10
+      →  (let a : Int := 10; (let b : Int := 20; a + b)) *)
+  let test_nested_lambdas () =
+    let int_ty = mk_int_ty () in
+    let app = mk_abs_app "a" int_ty
+      (fun a ->
+        mk_abs_app "b" int_ty
+          (fun b -> mk_appop (Mark.add Pos.void Op.Add) [a; b])
+          (mk_int 20))
+      (mk_int 10)
+    in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has let a" formatted "let a";
+    check_contains ~msg:"has let b" formatted "let b";
+    check_contains ~msg:"has 10" formatted "10";
+    check_contains ~msg:"has 20" formatted "20";
+    check_not_contains ~msg:"no fun" formatted "fun"
+
+  (** Test: Lambda passed as argument is NOT beta-reduced.
+      f (fun (x : Int) => x)  →  (f (fun (x : Int) => x)) *)
+  let test_lambda_as_arg_not_reduced () =
+    let int_ty = mk_int_ty () in
+    let f_var = mk_var "f" in
+    let lambda = mk_abs "x" int_ty (fun x -> x) in
+    let app = mk_app f_var [lambda] in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has fun" formatted "fun";
+    check_contains ~msg:"has f" formatted "f";
+    check_not_contains ~msg:"no let" formatted "let"
+
+  (** Test: Normal function application is NOT beta-reduced.
+      g 42  →  (g 42) *)
+  let test_normal_app_not_reduced () =
+    let f_var = mk_var "g" in
+    let app = mk_app f_var [mk_int 42] in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has g" formatted "g";
+    check_contains ~msg:"has 42" formatted "42";
+    check_not_contains ~msg:"no let" formatted "let";
+    check_not_contains ~msg:"no fun" formatted "fun"
+
+  (** Test: Bool-typed let binding.
+      (fun (flag : Bool) => if flag then 1 else 0) true *)
+  let test_bool_typed_let () =
+    let bool_ty = mk_bool_ty () in
+    let app = mk_abs_app "flag" bool_ty
+      (fun flag -> mk_if flag (mk_int 1) (mk_int 0))
+      (mk_bool true)
+    in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has let flag" formatted "let flag";
+    check_contains ~msg:"has Bool type" formatted "Bool";
+    check_contains ~msg:"has true value" formatted "true";
+    check_not_contains ~msg:"no fun" formatted "fun"
+
+  (** Test: Money-typed let binding preserves type annotation. *)
+  let test_money_typed_let () =
+    let money_ty = mk_money_ty () in
+    let app = mk_abs_app "amount" money_ty
+      (fun amount -> amount)
+      (mk_money 1000)
+    in
+    let formatted = format_expr (Expr.unbox app) in
+    check_contains ~msg:"has let amount" formatted "let amount";
+    check_contains ~msg:"has Money type" formatted "CatalaRuntime.Money";
+    check_not_contains ~msg:"no fun" formatted "fun"
+
+  let suite = [
+    Alcotest.test_case "simple identity lambda" `Quick test_simple_identity;
+    Alcotest.test_case "computation body" `Quick test_computation_body;
+    Alcotest.test_case "unit param skipped" `Quick test_unit_param_skipped;
+    Alcotest.test_case "nested lambdas" `Quick test_nested_lambdas;
+    Alcotest.test_case "lambda as arg not reduced" `Quick test_lambda_as_arg_not_reduced;
+    Alcotest.test_case "normal app not reduced" `Quick test_normal_app_not_reduced;
+    Alcotest.test_case "bool-typed let" `Quick test_bool_typed_let;
+    Alcotest.test_case "money-typed let" `Quick test_money_typed_let;
+  ]
+end
+
+(** {1 Test Category 6: strip_outer_decide} *)
 
 module StripOuterDecideTests = struct
 
@@ -789,5 +933,6 @@ let suite = [
   ("Detuplification & Function Application", DetuplificationTests.suite);
   ("Expression Formatting", ExpressionFormattingTests.suite);
   ("Split Wrapper Generation", SplitWrapperTests.suite);
+  ("Beta-Reduction (Transformation C)", BetaReductionTests.suite);
   ("strip_outer_decide", StripOuterDecideTests.suite);
 ]

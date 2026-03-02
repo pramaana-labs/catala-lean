@@ -1021,6 +1021,28 @@ let rec format_expr
         let dots = String.concat "" (List.init index (fun _ -> ".2")) in
         Printf.sprintf "(%s)%s.1" base dots
   | EApp { f; args; tys } ->
+      (* Transformation C: Beta-reduce immediate lambda applications.
+         (fun (x : T) => body) arg  →  (let x : T := arg; body)
+         Catala desugars let-bindings as EApp(EAbs, [arg]). *)
+      (match Mark.remove f with
+       | EAbs { binder; tys = param_tys; _ }
+           when List.length args = List.length param_tys ->
+           let vars, body = Bindlib.unmbind binder in
+           let params = Array.to_list vars in
+           let fmt = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context in
+           let body_str = fmt body in
+           let pairs = List.combine (List.combine params param_tys) args in
+           List.fold_right (fun ((var, ty), arg) acc ->
+             match Mark.remove ty with
+             | TLit TUnit -> acc
+             | _ ->
+              Printf.sprintf "(let %s : %s := %s\n  %s)"
+                (sanitize_name (Bindlib.name_of var))
+                (format_typ ty)
+                (fmt arg)
+                acc
+           ) pairs body_str
+       | _ ->
       let f_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context f in
       (* Detuplify: convert single tuple argument to multiple curried arguments.
          Two-tier logic matching Expr.detuplify_application from shared_ast/expr.ml:
@@ -1107,7 +1129,7 @@ let rec format_expr
        | _ ->
            (* Multiple args - format normally *)
            let args_str = List.map fmt_expr args in
-           Printf.sprintf "(%s %s)" f_str (String.concat " " args_str))
+           Printf.sprintf "(%s %s)" f_str (String.concat " " args_str)))
   | EStruct { name = name; fields } ->
       let bindings = StructField.Map.bindings fields in
       let formatted_fields = List.map (fun (field, e) ->
