@@ -1,0 +1,54 @@
+# R5 Reduction Test: Unit-typed enum constructors become nullary
+
+Tests that enum constructors carrying Unit are emitted as nullary constructors
+in Lean4, simplifying both declarations and usage sites.
+
+Before R5 reduction:
+```
+inductive Color : Type where
+ | Red : Unit -> Color
+ | Blue : Unit -> Color
+ | Custom : Int -> Color
+
+-- construction:  (Color.Red ())
+-- pattern match: | Color.Red x => ...
+-- equality test: decide (c = (Color.Red ()))
+```
+
+After R5 reduction:
+```
+inductive Color : Type where
+ | Red : Color
+ | Blue : Color
+ | Custom : Int -> Color
+
+-- construction:  Color.Red
+-- pattern match: | Color.Red => ...
+-- equality test: decide (c = Color.Red)
+```
+
+Note: runtime library enums like Optional are NOT changed:
+  `(Optional.Absent ())` and `| Optional.Absent _ =>` remain as-is.
+
+```catala
+declaration enumeration Color:
+  -- Red
+  -- Blue
+  -- Custom content integer
+
+declaration scope PaintMixer:
+  input color content Color
+  output color_code content integer
+  output is_custom content boolean
+
+scope PaintMixer:
+  definition color_code equals match color with pattern
+    -- Red : 1
+    -- Blue : 2
+    -- Custom content x : x
+
+  definition is_custom equals match color with pattern
+    -- Red : false
+    -- Blue : false
+    -- Custom content x : true
+```

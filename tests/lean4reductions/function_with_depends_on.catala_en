@@ -1,0 +1,36 @@
+## R1 Reduction Test: Function with depends on
+
+Tests that function-typed variables with a single unconditional rule
+do NOT produce `match some(e) with | some r => r | _ => default` inside
+the lambda body.
+
+Before R1 reduction, the leaf function would be:
+```
+def ComputeTax_compute_leaf_0 (input : ComputeTax_Input) : Option (Money → Money) :=
+  some (fun (x : Money) => match some ((multiply x input.rate)) with | some r => r | _ => default)
+```
+
+After R1 reduction, the leaf function becomes:
+```
+def ComputeTax_compute_leaf_0 (input : ComputeTax_Input) : Option (Money → Money) :=
+  some (fun (x : Money) => (multiply x input.rate))
+```
+
+```catala
+declaration scope ComputeTax:
+  input rate content decimal
+  output compute content money depends on x content money
+
+scope ComputeTax:
+  definition compute of x equals x * rate
+```
+
+```catala-test-cli
+$ catala Typecheck --check-invariants
+┌─[RESULT]─
+│ All invariant checks passed
+└─
+┌─[RESULT]─
+│ Typechecking successful!
+└─
+```

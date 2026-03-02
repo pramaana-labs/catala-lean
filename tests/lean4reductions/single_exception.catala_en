@@ -1,0 +1,67 @@
+# R6 Test: Single-argument processExceptions elimination
+
+Tests that when a variable has exactly one exception tree (a Node with a
+single exception subtree), the generated Lean4 code does NOT wrap the call
+in `processExceptions [...]`. Instead, the single exception call is used
+directly in the match expression.
+
+## Before R6 (Lean4 output):
+
+```
+-- For the exception_result variable:
+def SingleExceptionScope_exception_result_tree_0_exception_0 ... : Option Int :=
+  if (x > 100) then some (x + 999) else none
+
+def SingleExceptionScope_exception_result_tree_0 ... : Option Int :=
+  (match processExceptions [SingleExceptionScope_exception_result_tree_0_exception_0 ...]
+    with | none => some (x + 1) | some r => some r)
+```
+
+## After R6 (Lean4 output):
+
+```
+-- processExceptions wrapper removed, single call used directly:
+def SingleExceptionScope_exception_result_tree_0_exception_0 ... : Option Int :=
+  if (x > 100) then some (x + 999) else none
+
+def SingleExceptionScope_exception_result_tree_0 ... : Option Int :=
+  (match SingleExceptionScope_exception_result_tree_0_exception_0 ...
+    with | none => some (x + 1) | some r => some r)
+```
+
+## Multi-exception case (should still use processExceptions):
+
+```
+-- multi_exception_result has 2 exceptions, so processExceptions is preserved:
+def MultiExceptionScope_multi_exception_result_tree_0 ... : Option Int :=
+  (match processExceptions [exception_0_call, exception_1_call]
+    with | none => some (x + 1) | some r => some r)
+```
+
+```catala
+declaration scope SingleExceptionScope:
+  input x content integer
+  output exception_result content integer
+
+scope SingleExceptionScope:
+  definition exception_result equals x + 1
+
+  exception definition exception_result equals
+    if x > 100 then x + 999
+    else x + 1
+
+declaration scope MultiExceptionScope:
+  input x content integer
+  output multi_exception_result content integer
+
+scope MultiExceptionScope:
+  definition multi_exception_result equals x + 1
+
+  exception definition multi_exception_result equals
+    if x > 100 then x + 999
+    else x + 1
+
+  exception definition multi_exception_result equals
+    if x > 200 then x + 9999
+    else x + 1
+```

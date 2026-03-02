@@ -919,6 +919,10 @@ let format_location
       | "Integer_en.min" | "Integer_internal.min" -> "min"
       | _ -> sanitize_name topdef_name)
 
+(** R5: No enums are excluded -- all Unit-typed constructors become nullary,
+    including stdlib types like Optional whose declarations have been updated. *)
+let is_runtime_enum (_name : EnumName.t) : bool = false
+
 (** Check if an expression is a boolean operator (And, Or, Xor, Not) *)
 let is_bool_operator (e : (desugared, untyped) gexpr) : bool =
   match Mark.remove e with
@@ -1069,10 +1073,15 @@ let rec format_expr
   | EStructAccess { e; field; name = name } ->
       Printf.sprintf "(%s).%s" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e) (sanitize_name (StructField.to_string field))
   | EInj { e; cons; name } ->
-      Printf.sprintf "(%s.%s %s)"
-        (sanitize_name (EnumName.to_string name))
-        (sanitize_name (EnumConstructor.to_string cons))
-        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e)
+      let enum_str = sanitize_name (EnumName.to_string name) in
+      let cons_str = sanitize_name (EnumConstructor.to_string cons) in
+      (match Mark.remove e with
+       | ELit LUnit when not (is_runtime_enum name) ->
+           (* R5: nullary constructor for user-defined enums only *)
+           Printf.sprintf "%s.%s" enum_str cons_str
+       | _ ->
+           Printf.sprintf "(%s.%s %s)" enum_str cons_str
+             (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e))
   | EArray es ->
       let formatted = List.map (format_expr ~scope_defs ~use_input_prefix ~program_ctx) es in
       Printf.sprintf "[%s]" (String.concat ", " formatted)
@@ -1087,13 +1096,24 @@ let rec format_expr
         let cons_name = sanitize_name (EnumConstructor.to_string cons) in
         (* Each case is typically a lambda: fun (x : T) => body *)
         match Mark.remove case_expr with
-        | EAbs { binder; tys = _; _ } ->
-            let vars, body = Bindlib.unmbind binder in
-            let params = Array.to_list vars in
-            let param_names = List.map (fun var -> sanitize_name (Bindlib.name_of var)) params in
-            let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body in
-            Printf.sprintf "| %s.%s %s => %s" 
-              enum_name_str cons_name (String.concat " " param_names) body_str
+        | EAbs { binder; tys; _ } ->
+            let is_unit_cons = match tys with
+              | [ty] -> (match Mark.remove ty with TLit TUnit -> true | _ -> false)
+              | _ -> false
+            in
+            if is_unit_cons && not (is_runtime_enum enum_name) then begin
+              (* R5: nullary constructor for user-defined enums, no binding variable *)
+              let _, body = Bindlib.unmbind binder in
+              let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body in
+              Printf.sprintf "| %s.%s => %s" enum_name_str cons_name body_str
+            end else begin
+              let vars, body = Bindlib.unmbind binder in
+              let params = Array.to_list vars in
+              let param_names = List.map (fun var -> sanitize_name (Bindlib.name_of var)) params in
+              let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body in
+              Printf.sprintf "| %s.%s %s => %s" 
+                enum_name_str cons_name (String.concat " " param_names) body_str
+            end
         | _ ->
             (* Not a lambda - just format the expression directly *)
             let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context case_expr in
@@ -1342,6 +1362,26 @@ let format_rule_consequence
       (* No parameters OR skip_lambda_wrap=true - just format the expression *)
       format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context cons_expr
 
+(** Check if a rule has an unconditional justification (always true) *)
+let is_unconditional_rule (rule : Ast.rule) : bool =
+  match Mark.remove (Expr.unbox rule.Ast.rule_just) with
+  | ELit (LBool true) -> true
+  | _ -> false
+
+(** Check if a rule has function parameters (from "depends on") *)
+let has_function_params (rule : Ast.rule) : bool =
+  match rule.Ast.rule_parameter with Some _ -> true | None -> false
+
+(** R2/R3: Check if a variable always produces a value (single unconditional
+    rule in a single Leaf tree, no function params, not a sub-scope).
+    Such variables can return T instead of Option T. *)
+let is_always_some_leaf (var_def : var_def_info) : bool =
+  (not var_def.is_sub_scope) &&
+  (match var_def.rule_trees with
+   | [Scopelang.From_desugared.Leaf [single_rule]] ->
+       is_unconditional_rule single_rule && not (has_function_params single_rule)
+   | _ -> false)
+
 (** Format a single rule body (justification and consequence) wrapped in Option *)
 let format_rule_body 
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
@@ -1505,6 +1545,7 @@ let context_to_input (ctx : context_var_info) : input_info = {
 *)
 let rec format_rule_tree_method
     ?(program_ctx : Shared_ast.decl_ctx option = None)
+    ?(always_some : bool = false)
     (scope_name : string)
     (var_name : string)
     (var_type : typ)
@@ -1530,7 +1571,10 @@ let rec format_rule_tree_method
       let method_name = format_tree_method_name scope_name var_name tree index in
       let dependencies = rules_locations_used base_rules in
       let params = format_method_params ~has_input_struct all_inputs scope_name dependencies scope_defs in
-      let return_type = Printf.sprintf "Option %s" (format_typ var_type) in
+      let return_type =
+        if always_some then format_typ var_type
+        else Printf.sprintf "Option %s" (format_typ var_type)
+      in
       
       (* Check if rules have function parameters (from "depends on").
          If so, we need to add those params to the leaf function signature
@@ -1555,17 +1599,32 @@ let rec format_rule_tree_method
                 | None -> [])
             | [] -> []
           in
-          let inner_body = match base_rules with
-            | [] -> "none"
-            | [single_rule] -> format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true ~program_ctx single_rule
-            | multiple_rules ->
-                let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true ~program_ctx) multiple_rules in
-                Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies)
-          in
-          (* Wrap the inner body in some(fun params => match ... with | some r => r | _ => default) *)
           let params_str = String.concat " " func_params in
-          let wrapped = Printf.sprintf "some (fun %s => match %s with | some r => r | _ => default)" params_str inner_body in
+          let wrapped = match base_rules with
+            | [single_rule] when is_unconditional_rule single_rule ->
+                (* R1 reduction: single unconditional rule - emit consequence directly
+                   without the redundant match some(e) with | some r => r | _ => default *)
+                let cons_str = format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:true ~skip_lambda_wrap:true ~program_ctx single_rule in
+                Printf.sprintf "some (fun %s => %s)" params_str cons_str
+            | _ ->
+                let inner_body = match base_rules with
+                  | [] -> "none"
+                  | [single_rule] -> format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true ~program_ctx single_rule
+                  | multiple_rules ->
+                      let rule_bodies = List.map (format_rule_body ~scope_defs:(Some scope_defs) ~skip_lambda_wrap:true ~program_ctx) multiple_rules in
+                      Printf.sprintf "processExceptions [%s]" (String.concat ", " rule_bodies)
+                in
+                Printf.sprintf "some (fun %s => match %s with | some r => r | _ => default)" params_str inner_body
+          in
           (wrapped, " " ^ params_str)
+        else if always_some then
+          (* R2 reduction: single unconditional rule, return T directly *)
+          let body = match base_rules with
+            | [single_rule] ->
+                format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:true ~program_ctx single_rule
+            | _ -> failwith "always_some should only be set for single unconditional rules"
+          in
+          (body, "")
         else
           let body = match base_rules with
             | [] -> "none"
@@ -1669,9 +1728,13 @@ let rec format_rule_tree_method
         if exception_calls = [] then
           local_default
         else
+          let exceptions_expr = match exception_calls with
+            | [single] -> single
+            | multiple -> Printf.sprintf "processExceptions [%s]" (String.concat ", " multiple)
+          in
           Printf.sprintf 
-            "(match processExceptions [%s] with    | none => %s    | some r => some r)"
-            (String.concat ", " exception_calls)
+            "(match %s with    | none => %s    | some r => some r)"
+            exceptions_expr
             local_default
       in
       
@@ -1701,7 +1764,6 @@ let format_var_methods
   (* For input-output variables with no rule trees, generate a simple passthrough method *)
   if var_def.is_input_output && var_def.rule_trees = [] then
     let method_name = Printf.sprintf "%s_%s" scope_name var_name_str in
-    let return_type = Printf.sprintf "Option %s" (format_typ var_def.var_type) in
     let has_inputs = inputs <> [] || contexts <> [] in
     let input_param = if has_inputs then Printf.sprintf "(input : %s_Input)" scope_name else "" in
     (* Context variables are Option T in the struct, so input.field is already Option T.
@@ -1710,17 +1772,22 @@ let format_var_methods
       ScopeVar.equal ctx.ctx_var_name var_def.var_name &&
       ctx.ctx_state = var_def.var_state
     ) contexts in
-    let body = 
-      if is_context_io then 
-        Printf.sprintf "input.%s" var_name_str  (* Already Option T *)
+    let return_type, body = 
+      if is_context_io then
+        (* Context input-output: already Option T, can't simplify *)
+        Printf.sprintf "Option %s" (format_typ var_def.var_type),
+        Printf.sprintf "input.%s" var_name_str
       else
-        Printf.sprintf "some input.%s" var_name_str  (* T -> Option T *)
+        (* R2 reduction: pure input passthrough returns T directly *)
+        format_typ var_def.var_type,
+        Printf.sprintf "input.%s" var_name_str
     in
     [Printf.sprintf "def %s %s : %s :=\n  %s\n" method_name input_param return_type body]
   else
     (* Normal case: generate methods from rule trees *)
+    let always_some = is_always_some_leaf var_def in
     List.concat (List.mapi (fun i tree ->
-      let methods, _deps = format_rule_tree_method scope_name var_name_str var_def.var_type inputs contexts tree i scope_defs ~program_ctx in
+      let methods, _deps = format_rule_tree_method ~always_some scope_name var_name_str var_def.var_type inputs contexts tree i scope_defs ~program_ctx in
       methods
     ) var_def.rule_trees)
 
@@ -2041,26 +2108,23 @@ let format_enum_decl ?(ctx_structs : typ StructField.Map.t StructName.Map.t opti
     let lacks_eq = enum_lacks_decidable_eq ~ctx_structs fields in
     let deriving = if lacks_eq then "deriving Inhabited"
                    else "deriving Inhabited, DecidableEq, Repr" in
-    if num_forall_ty = 0 then 
-      (let formatted_fields =  (List.map (fun (field, ty) ->
-      Printf.sprintf " | %s : %s -> %s"
-      (sanitize_name (EnumConstructor.to_string field))
-      (format_typ ty)
-      name 
-      ) constructor_list )
-      in
+    let format_constructor name_suffix (field, ty) =
+      let cons_name = sanitize_name (EnumConstructor.to_string field) in
+      match Mark.remove ty with
+      | TLit TUnit ->
+          (* R5: Unit-typed constructor becomes nullary *)
+          Printf.sprintf " | %s : %s%s" cons_name name name_suffix
+      | _ ->
+          Printf.sprintf " | %s : %s -> %s%s" cons_name (format_typ ty) name name_suffix
+    in
+    if num_forall_ty = 0 then
+      (let formatted_fields = List.map (format_constructor "") constructor_list in
       Printf.sprintf "inductive %s : Type where\n%s\n%s"
         name
         (String.concat "\n" formatted_fields)
         deriving)
-    else 
-      (let formatted_fields = (List.map (fun (field, ty) ->
-      Printf.sprintf " | %s : %s -> %s TForall"
-      (sanitize_name (EnumConstructor.to_string field))
-      (format_typ ty)
-      name 
-      ) constructor_list)
-      in 
+    else
+      (let formatted_fields = List.map (format_constructor " TForall") constructor_list in
       Printf.sprintf "inductive %s (TForall:Type) : Type where\n%s\n%s"
         name
         (String.concat "\n" formatted_fields)
@@ -2319,6 +2383,14 @@ let format_scope
           Printf.sprintf "processExceptions [%s]" (String.concat ", " calls)
   in
   
+  (* R2: Check if a variable's leaf function returns T directly (not Option T).
+     This is true for always-some leaf variables and non-context input-output passthroughs. *)
+  let returns_direct_value var_def =
+    is_always_some_leaf var_def ||
+    (var_def.is_input_output && var_def.rule_trees = [] &&
+     not (is_context_var_specific var_def.var_name var_def.var_state))
+  in
+
   (* Build let bindings for ALL variables in dependency order, excluding context variables.
      Add _ prefix to binding names to avoid shadowing scope function names. *)
   let all_bindings = List.filter_map (fun var_def ->
@@ -2334,10 +2406,18 @@ let format_scope
         (* Context variable with no rules and no default: just unwrap from input or use default *)
         Some (Printf.sprintf "let %s := match input.%s with | some v => v | none => default "
           binding_name base_name)
+      else if returns_direct_value var_def then
+        (* R2: leaf returns T directly, no inner match needed *)
+        let call = get_method_call var_def in
+        Some (Printf.sprintf "let %s := match input.%s with | some v => v | none => %s "
+          binding_name base_name call)
       else
         let call = get_method_call var_def in
         Some (Printf.sprintf "let %s := match input.%s with | some v => v | none => match %s with | some val => val | _ => default "
           binding_name base_name call)
+    else if returns_direct_value var_def then
+      (* R2: leaf returns T directly, no match needed *)
+      Some (Printf.sprintf "let %s := %s " binding_name (get_method_call var_def))
     else
       (* Internal/output variable: compute via leaf function call *)
       Some (Printf.sprintf "let %s := match %s with | some val => val | _ => default " binding_name (get_method_call var_def))

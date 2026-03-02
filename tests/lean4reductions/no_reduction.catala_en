@@ -1,0 +1,35 @@
+# R2 Negative Test: Cases where leaf functions should NOT be simplified
+
+Tests that leaf functions with conditional rules, multiple rules, or exceptions
+retain their Option T return type and match-unwrap at call sites.
+
+These should NOT be reduced because:
+- `conditional_var` uses `under condition` (rule justification is not always true → may return none)
+- `multi_rule_var` has two conditional rules (processExceptions needed)
+- `exception_var` has an exception tree (Node, not a simple Leaf)
+
+Expected: all leaf/node functions still return Option T, scope body still uses
+`match ... with | some val => val | _ => default`.
+
+```catala
+declaration scope NoReduction:
+  input x content integer
+  output conditional_var content integer
+  output multi_rule_var content integer
+  output exception_var content integer
+
+scope NoReduction:
+  definition conditional_var under condition x > 0
+    consequence equals x * 2
+
+  definition multi_rule_var under condition x > 10
+    consequence equals x + 10
+  definition multi_rule_var under condition x > 0
+    consequence equals x + 1
+
+  definition exception_var equals x + 1
+
+  exception definition exception_var equals
+    if x > 100 then x + 999
+    else x + 1
+```
