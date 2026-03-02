@@ -69,6 +69,14 @@
  (libraries catala.driver desugared scopelang))
 
 (library
+ (name lean4_project)
+ (public_name catala.plugins.lean4_project)
+ (synopsis
+  "Catala plugin that generates a self-contained Lean4 project directory")
+ (modules lean4_project)
+ (libraries catala.driver desugared scopelang lean4_desugared unix))
+
+(library
  (name dependency_graph)
  (public_name catala.plugins.dependency_graph)
  (synopsis "Catala plugin that generates dependency graphs as JSON")
