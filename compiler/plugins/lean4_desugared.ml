@@ -937,6 +937,50 @@ let is_bool_operator (e : (desugared, untyped) gexpr) : bool =
   | EIfThenElse _ -> true  (* If-then-else expressions that return Bool *)
   | _ -> false
 
+(** Strip an outermost `decide (...)` wrapper from a condition string, handling
+    any number of leading/trailing parentheses.  Returns the inner Prop expression
+    if `decide` covers the entire string, otherwise returns the string unchanged.
+
+    Examples:
+      "decide (x = y)"       → "(x = y)"
+      "(decide (x = y))"     → "(x = y)"
+      "((decide (x = y)))"   → "(x = y)"
+      "(decide (a) && decide (b))" → unchanged (decide doesn't cover all)
+      "my_bool"              → unchanged (no decide)                           *)
+let strip_outer_decide (s : string) : string =
+  let len = String.length s in
+  (* Count leading '(' characters *)
+  let n_outer = ref 0 in
+  while !n_outer < len && s.[!n_outer] = '(' do incr n_outer done;
+  let n = !n_outer in
+  let decide_kw = "decide " in
+  let dk_len = String.length decide_kw in
+  if n + dk_len >= len then s
+  else if String.sub s n dk_len <> decide_kw then s
+  else
+    let arg_start = n + dk_len in
+    if arg_start >= len || s.[arg_start] <> '(' then s
+    else
+      (* Find the matching ')' for the '(' at arg_start using depth tracking *)
+      let depth = ref 0 in
+      let match_pos = ref (-1) in
+      for i = arg_start to len - 1 do
+        if !match_pos = -1 then begin
+          if s.[i] = '(' then incr depth
+          else if s.[i] = ')' then begin
+            decr depth;
+            if !depth = 0 then match_pos := i
+          end
+        end
+      done;
+      if !match_pos = -1 then s
+      else
+        (* After the matching ')', we should have exactly n closing ')' *)
+        let remaining = String.sub s (!match_pos + 1) (len - !match_pos - 1) in
+        if remaining = String.make n ')' then
+          String.sub s arg_start (!match_pos - arg_start + 1)
+        else s
+
 (** Format an expression to Lean code *)
 let rec format_expr 
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
@@ -949,8 +993,10 @@ let rec format_expr
   | ELit l -> format_lit l
   | EVar v -> sanitize_name (Bindlib.name_of v)
   | EIfThenElse { cond; etrue; efalse } ->
+      let cond_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context cond in
+      let cond_str = strip_outer_decide cond_str in
       Printf.sprintf "(if %s then %s else %s)"
-        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context cond)
+        cond_str
         (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context etrue)
         (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context efalse)
   | ETuple es ->
@@ -1400,8 +1446,10 @@ let format_rule_body
     Printf.sprintf "some (%s)" (format_rule_consequence ~scope_defs ~use_input_prefix ~skip_lambda_wrap ~in_scope_body_context ~program_ctx rule)
   | _ ->
     (* Conditional rule: if-then-else *)
+    let cond_str = strip_outer_decide
+        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context just_expr) in
     Printf.sprintf "if %s then some (%s) else none"
-        (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context just_expr)
+        cond_str
         (format_rule_consequence ~scope_defs ~use_input_prefix ~skip_lambda_wrap ~in_scope_body_context ~program_ctx rule)
 
 (** Extract all variable locations used in a list of rules *)
@@ -1688,12 +1736,12 @@ let rec format_rule_tree_method
               (match Mark.remove just_expr with
                | ELit (LBool true) -> Printf.sprintf "some (fun %s => %s)" params_str cons_str
                | _ -> Printf.sprintf "if %s then some (fun %s => %s) else none"
-                        (format_expr ~scope_defs:(Some scope_defs) just_expr) params_str cons_str)
+                        (strip_outer_decide (format_expr ~scope_defs:(Some scope_defs) just_expr)) params_str cons_str)
             else
               (match Mark.remove just_expr with
                | ELit (LBool true) -> Printf.sprintf "some (%s)" (format_expr ~scope_defs:(Some scope_defs) cons_expr)
                | _ -> Printf.sprintf "if %s then some (%s) else none"
-                        (format_expr ~scope_defs:(Some scope_defs) just_expr) (format_expr ~scope_defs:(Some scope_defs) cons_expr))
+                        (strip_outer_decide (format_expr ~scope_defs:(Some scope_defs) just_expr)) (format_expr ~scope_defs:(Some scope_defs) cons_expr))
         | multiple_rules ->
             (* Multiple piecewise rules - process them first *)
             if has_rule_params then
@@ -1824,7 +1872,7 @@ let rec format_rule_tree_inline
             (match Mark.remove just_expr with
             | ELit (LBool true) -> Printf.sprintf "some (%s)" (format_expr ~scope_defs ~use_input_prefix:false ~program_ctx cons_expr)
             | _ -> Printf.sprintf "if %s then some (%s) else none"
-                     (format_expr ~scope_defs ~use_input_prefix:false ~program_ctx just_expr) 
+                     (strip_outer_decide (format_expr ~scope_defs ~use_input_prefix:false ~program_ctx just_expr)) 
                      (format_expr ~scope_defs ~use_input_prefix:false ~program_ctx cons_expr))
         | multiple_rules ->
             let rule_bodies = List.map (format_rule_body ~scope_defs ~use_input_prefix:false ~skip_lambda_wrap ~program_ctx) multiple_rules in

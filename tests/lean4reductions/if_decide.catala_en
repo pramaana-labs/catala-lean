@@ -1,0 +1,47 @@
+# Transformation A Test: Strip standalone `decide` from `if` conditions
+
+Tests that standalone `if (decide P)` conditions are simplified to `if P`,
+while compound boolean conditions with `&&`/`||` retain `decide` wrapping.
+
+## Before Transformation A (Lean4 output):
+
+```
+-- Standalone comparison in if:
+if (decide (x > 100)) then x + 999 else x + 1
+
+-- Compound boolean in filter lambda (should keep decide):
+List.filter (fun (item : Int) => (decide (item > 0)) && (decide (item < 100)))
+```
+
+## After Transformation A (Lean4 output):
+
+```
+-- Standalone: decide stripped, Prop-based condition
+if (x > 100) then x + 999 else x + 1
+
+-- Compound boolean: decide preserved (needed for Bool return type)
+List.filter (fun (item : Int) => (decide (item > 0)) && (decide (item < 100)))
+```
+
+```catala
+declaration scope IfDecideScope:
+  input x content integer
+  input items content list of integer
+  output standalone_if content integer
+  output nested_if content integer
+  output filtered_items content list of integer
+
+scope IfDecideScope:
+  definition standalone_if equals
+    if x > 100 then x + 999
+    else x + 1
+
+  definition nested_if equals
+    if x > 10 then
+      if x > 50 then x * 3
+      else x * 2
+    else x
+
+  definition filtered_items equals
+    list of item among items such that item > 0 and item < 100
+```

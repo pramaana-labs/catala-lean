@@ -666,6 +666,122 @@ module SplitWrapperTests = struct
   ]
 end
 
+(** {1 Test Category 5: strip_outer_decide} *)
+
+module StripOuterDecideTests = struct
+
+  let test_standalone_single_paren () =
+    let result = strip_outer_decide "(decide (x = y))" in
+    Alcotest.(check string) "single outer paren" "(x = y)" result
+
+  let test_standalone_double_paren () =
+    let result = strip_outer_decide "((decide (x = y)))" in
+    Alcotest.(check string) "double outer paren" "(x = y)" result
+
+  let test_standalone_triple_paren () =
+    let result = strip_outer_decide "(((decide (x = y))))" in
+    Alcotest.(check string) "triple outer paren" "(x = y)" result
+
+  let test_no_outer_paren () =
+    let result = strip_outer_decide "decide (x = y)" in
+    Alcotest.(check string) "no outer paren" "(x = y)" result
+
+  let test_nested_inner_parens () =
+    let result = strip_outer_decide "(decide ((a + b) = (c + d)))" in
+    Alcotest.(check string) "nested inner parens" "((a + b) = (c + d))" result
+
+  let test_compound_and_unchanged () =
+    let input = "((decide (a = b)) && (decide (c = d)))" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "compound && unchanged" input result
+
+  let test_compound_or_unchanged () =
+    let input = "((decide (x > 0)) || (decide (y < 10)))" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "compound || unchanged" input result
+
+  let test_negation_unchanged () =
+    let input = "(!(decide (x = y)))" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "negation unchanged" input result
+
+  let test_bool_var_unchanged () =
+    let input = "my_flag" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "bool var unchanged" input result
+
+  let test_function_call_unchanged () =
+    let input = "(f x)" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "function call unchanged" input result
+
+  let test_bool_literal_unchanged () =
+    let input = "true" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "bool literal unchanged" input result
+
+  let test_empty_string () =
+    let result = strip_outer_decide "" in
+    Alcotest.(check string) "empty string" "" result
+
+  let test_decide_no_arg_paren () =
+    let input = "decide x" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "decide without arg parens unchanged" input result
+
+  let test_decide_partial_coverage () =
+    let input = "(decide (a = b) && something_else)" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "decide partial coverage unchanged" input result
+
+  let test_realistic_comparison () =
+    let result = strip_outer_decide "(decide (income ≤ (CatalaRuntime.Money.ofCents 3690000)))" in
+    Alcotest.(check string) "realistic money comparison"
+      "(income ≤ (CatalaRuntime.Money.ofCents 3690000))" result
+
+  let test_realistic_equality () =
+    let result = strip_outer_decide "(decide (((m).spouse_1).id = (p).id))" in
+    Alcotest.(check string) "realistic struct equality"
+      "(((m).spouse_1).id = (p).id)" result
+
+  let test_realistic_compound_unchanged () =
+    let input = "((decide (((m).spouse_1).id = (p).id)) || (decide (((m).spouse_2).id = (p).id)))" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "realistic compound unchanged" input result
+
+  let test_decide_keyword_in_varname () =
+    let input = "decide_result" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "decide in varname unchanged" input result
+
+  let test_only_parens () =
+    let input = "((()))" in
+    let result = strip_outer_decide input in
+    Alcotest.(check string) "only parens unchanged" input result
+
+  let suite = [
+    Alcotest.test_case "standalone single paren" `Quick test_standalone_single_paren;
+    Alcotest.test_case "standalone double paren" `Quick test_standalone_double_paren;
+    Alcotest.test_case "standalone triple paren" `Quick test_standalone_triple_paren;
+    Alcotest.test_case "no outer paren" `Quick test_no_outer_paren;
+    Alcotest.test_case "nested inner parens" `Quick test_nested_inner_parens;
+    Alcotest.test_case "compound && unchanged" `Quick test_compound_and_unchanged;
+    Alcotest.test_case "compound || unchanged" `Quick test_compound_or_unchanged;
+    Alcotest.test_case "negation unchanged" `Quick test_negation_unchanged;
+    Alcotest.test_case "bool var unchanged" `Quick test_bool_var_unchanged;
+    Alcotest.test_case "function call unchanged" `Quick test_function_call_unchanged;
+    Alcotest.test_case "bool literal unchanged" `Quick test_bool_literal_unchanged;
+    Alcotest.test_case "empty string" `Quick test_empty_string;
+    Alcotest.test_case "decide without arg parens" `Quick test_decide_no_arg_paren;
+    Alcotest.test_case "decide partial coverage" `Quick test_decide_partial_coverage;
+    Alcotest.test_case "realistic money comparison" `Quick test_realistic_comparison;
+    Alcotest.test_case "realistic struct equality" `Quick test_realistic_equality;
+    Alcotest.test_case "realistic compound unchanged" `Quick test_realistic_compound_unchanged;
+    Alcotest.test_case "decide in varname" `Quick test_decide_keyword_in_varname;
+    Alcotest.test_case "only parens unchanged" `Quick test_only_parens;
+  ]
+end
+
 (** {1 Main Test Suite} *)
 
 let suite = [
@@ -673,4 +789,5 @@ let suite = [
   ("Detuplification & Function Application", DetuplificationTests.suite);
   ("Expression Formatting", ExpressionFormattingTests.suite);
   ("Split Wrapper Generation", SplitWrapperTests.suite);
+  ("strip_outer_decide", StripOuterDecideTests.suite);
 ]
