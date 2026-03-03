@@ -6,15 +6,18 @@ This server provides an API endpoint to convert Catala code to Lean4 code
 using the Catala compiler.
 """
 
+import io
 import os
 import re
 import subprocess
 import tempfile
 import shutil
+import zipfile
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(
@@ -229,6 +232,126 @@ async def convert(request: ConvertRequest):
         )
 
 
+@app.post("/convert-project")
+async def convert_project(request: ConvertRequest):
+    """
+    Convert Catala code to a self-contained Lean4 project (zip).
+
+    Uses the `lean4-project` compiler plugin to produce a full Lean 4 project
+    directory (compiled source, CatalaRuntime.lean, Stdlib/, lakefile.toml,
+    lean-toolchain), then returns it as a zip archive.
+
+    - **code**: Catala code as string (provide this OR file)
+    - **file**: Path to Catala file (provide this OR code)
+    - **extension**: File extension hint (optional, default: '.catala_en')
+    """
+    try:
+        if not request.code and not request.file:
+            raise HTTPException(
+                status_code=400,
+                detail="Either 'code' or 'file' must be provided"
+            )
+
+        file_ext = request.extension or ".catala_en"
+        if not file_ext.startswith("."):
+            file_ext = "." + file_ext
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            if request.file:
+                input_file = Path(request.file)
+                if not input_file.exists():
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"File not found: {input_file}"
+                    )
+                temp_input = tmpdir_path / input_file.name
+                shutil.copy(input_file, temp_input)
+                stem = input_file.stem
+            else:
+                if not request.code:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Code cannot be empty"
+                    )
+                module_match = re.search(
+                    r'>\s*Module\s+(\w+)', request.code, re.IGNORECASE
+                )
+                stem = module_match.group(1).lower() if module_match else "input"
+                temp_input = tmpdir_path / f"{stem}{file_ext}"
+                temp_input.write_text(request.code, encoding="utf-8")
+
+            project_output_dir = tmpdir_path / "lean_project"
+
+            app_dir = Path(__file__).resolve().parent
+            if (app_dir / "stdlib").exists():
+                project_root = app_dir
+            else:
+                project_root = app_dir.parent
+
+            stdlib_path = project_root / "_build" / "libcatala"
+            stdlib_source = project_root / "stdlib"
+
+            cmd = [
+                str(CATALA_EXE.absolute()),
+                "lean4-project",
+            ]
+
+            if not stdlib_path.exists() and stdlib_source.exists():
+                cmd.append(f"--stdlib={stdlib_source}")
+
+            cmd.extend([
+                str(temp_input),
+                "-o",
+                str(project_output_dir)
+            ])
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=project_root
+            )
+
+            if result.returncode != 0:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Compiler error: {result.stderr}"
+                )
+
+            if not project_output_dir.exists():
+                raise HTTPException(
+                    status_code=500,
+                    detail="Output project directory was not created"
+                )
+
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for file_path in project_output_dir.rglob("*"):
+                    if file_path.is_file():
+                        arcname = file_path.relative_to(project_output_dir)
+                        zf.write(file_path, arcname)
+            buf.seek(0)
+
+            zip_filename = f"{stem}_lean4_project.zip"
+            return StreamingResponse(
+                buf,
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{zip_filename}"'
+                }
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
 @app.get("/")
 async def root():
     """API information and documentation"""
@@ -238,7 +361,8 @@ async def root():
         "description": "API to convert Catala code to Lean4 code",
         "endpoints": {
             "GET /health": "Health check endpoint",
-            "POST /convert": "Convert Catala code to Lean4",
+            "POST /convert": "Convert Catala code to Lean4 (single file)",
+            "POST /convert-project": "Convert Catala code to Lean4 project (zip)",
             "GET /": "This information",
             "GET /docs": "Interactive API documentation (Swagger UI)",
             "GET /redoc": "Alternative API documentation (ReDoc)"

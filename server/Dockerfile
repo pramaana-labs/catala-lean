@@ -33,6 +33,7 @@ COPY compiler/ compiler/
 COPY stdlib/ stdlib/
 COPY deps/ deps/
 COPY runtimes/ runtimes/
+COPY Sara_lean/ Sara_lean/
 COPY syntax_highlighting/ syntax_highlighting/
 COPY Makefile ./
 COPY runtimes/python/pyproject.toml runtimes/python/pyproject.toml
@@ -62,7 +63,8 @@ RUN sudo chown -R $(id -u):$(id -g) /app && \
     eval $(opam env) && \
     opam exec -- dune build @catala && \
     opam exec -- dune build @install && \
-    opam exec -- dune build compiler/plugins/lean4_desugared.cmxs
+    opam exec -- dune build compiler/plugins/lean4_desugared.cmxs && \
+    opam exec -- dune build compiler/plugins/lean4_project.cmxs
 
 # Clerk is not built in this image; API server uses --stdlib=stdlib when _build/libcatala is absent
 
@@ -87,13 +89,18 @@ RUN apk add --no-cache \
         gcc \
         musl-dev
 
-# Copy catala executable and plugin from builder (built for Alpine/musl)
+# Copy catala executable and plugins from builder (built for Alpine/musl)
 COPY --from=builder /app/catala.exe /app/catala.exe
 COPY --from=builder /app/_build/default/compiler/plugins/lean4_desugared.cmxs /app/lean4_desugared.cmxs
+COPY --from=builder /app/_build/default/compiler/plugins/lean4_project.cmxs /app/lean4_project.cmxs
 
 # Copy standard library source (always needed)
 # The compiler needs access to the stdlib
 COPY --from=builder /app/stdlib ./stdlib
+
+# lean4-project plugin copies these into the output project directory
+COPY --from=builder /app/runtimes/lean4/CatalaRuntime.lean ./runtimes/lean4/CatalaRuntime.lean
+COPY --from=builder /app/Sara_lean/Stdlib/Stdlib.lean ./Sara_lean/Stdlib/Stdlib.lean
 
 # Note: We rely on the API server's automatic stdlib detection:
 # - If _build/libcatala exists (created by clerk start), the compiler will find it automatically
@@ -114,6 +121,7 @@ COPY server/api_server.py .
 RUN mkdir -p _build/default/compiler/plugins && \
     mv /app/catala.exe _build/default/compiler/catala.exe && \
     cp /app/lean4_desugared.cmxs _build/default/compiler/plugins/lean4_desugared.cmxs && \
+    cp /app/lean4_project.cmxs _build/default/compiler/plugins/lean4_project.cmxs && \
     chmod +x _build/default/compiler/catala.exe
 
 # Cloud Run sets PORT environment variable
