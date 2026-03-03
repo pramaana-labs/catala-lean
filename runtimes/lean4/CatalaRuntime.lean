@@ -4,6 +4,12 @@
   Minimal runtime support for Catala programs compiled to Lean4.
 -/
 
+-- Nat.gcd and Nat.div are defined by well-founded recursion and marked
+-- @[irreducible] in Lean 4.9+.  Unsealing them lets the kernel reduce
+-- Rat.mk, Rat.mul, etc. so that `rfl` proofs over Rat/Money arithmetic
+-- go through.
+unseal Nat.gcd Nat.div
+
 namespace CatalaRuntime
 
 -- ============================================================================
@@ -260,10 +266,18 @@ namespace Money
 @[inline,simp, grind]  def mulFloat (m : Money) (f : Float) : Money :=
   ⟨(Float.toInt64 (Float.round (Float.ofInt m.cents * f))).toInt⟩
 
-/-- Multiply Money by Rat (rational number) -/
+/-- Multiply Money by Rat (rational number).
+    Uses pure Int arithmetic so the kernel can reduce it (needed for rfl proofs). -/
 @[inline,simp, grind]  def mulRat (m : Money) (r : Rat) : Money :=
-  let rat_float := (Float.ofInt (Rat.num r)) / (Float.ofInt (Rat.den r))
-  mulFloat m rat_float
+  let num := m.cents * r.num
+  let den := r.den
+  let quot := num / den
+  let rem  := num % den
+  -- round half-away-from-zero
+  if 2 * rem.natAbs ≥ den then
+    if num ≥ 0 then ⟨quot + 1⟩ else ⟨quot - 1⟩
+  else
+    ⟨quot⟩
 
 @[inline,simp, grind]  def divMoney (m1: Money) (m2: Money) : Rat :=
   (m1.cents : Rat) / (m2.cents : Rat)
