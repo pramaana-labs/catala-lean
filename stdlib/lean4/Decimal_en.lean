@@ -1,5 +1,4 @@
 import CatalaRuntime
-import Stdlib.Optional
 
 
 open CatalaRuntime

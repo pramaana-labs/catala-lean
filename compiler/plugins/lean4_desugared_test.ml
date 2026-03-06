@@ -604,7 +604,7 @@ module SplitWrapperTests = struct
     check_contains ~msg:"wrapper maps pure.income"
       result "income := pure.income";
     check_contains ~msg:"wrapper is reducible"
-      result "@[reducible]"
+      result "@[simp, reducible]"
 
   let test_context_inputs_only () =
     let contexts = [
@@ -926,6 +926,522 @@ module StripOuterDecideTests = struct
   ]
 end
 
+(** {1 Test Category 7: expr_uses_var (P3 helper)} *)
+
+module ExprUsesVarTests = struct
+  open Helpers
+
+  let mk_named_var name =
+    Var.make name
+
+  let evar v = Expr.evar v nomark
+
+  (** Variable directly referenced *)
+  let test_var_found () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (evar v) in
+    Alcotest.(check bool) "var found" true (expr_uses_var v e)
+
+  (** A different variable with same name is NOT the same variable *)
+  let test_different_var_same_name () =
+    let v1 = mk_named_var "x" in
+    let v2 = mk_named_var "x" in
+    let e = Expr.unbox (evar v2) in
+    Alcotest.(check bool) "different var same name" false (expr_uses_var v1 e)
+
+  (** Literal contains no variables *)
+  let test_literal_no_var () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_int 42) in
+    Alcotest.(check bool) "literal has no var" false (expr_uses_var v e)
+
+  (** Boolean literal *)
+  let test_bool_literal () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_bool true) in
+    Alcotest.(check bool) "bool literal" false (expr_uses_var v e)
+
+  (** Variable in function position of EApp *)
+  let test_var_in_app_function () =
+    let v = mk_named_var "f" in
+    let e = Expr.unbox (mk_app (evar v) [mk_int 1]) in
+    Alcotest.(check bool) "var in app function" true (expr_uses_var v e)
+
+  (** Variable in argument position of EApp *)
+  let test_var_in_app_arg () =
+    let v = mk_named_var "x" in
+    let f = mk_var "g" in
+    let e = Expr.unbox (mk_app f [evar v]) in
+    Alcotest.(check bool) "var in app arg" true (expr_uses_var v e)
+
+  (** Variable not in EApp at all *)
+  let test_var_not_in_app () =
+    let v = mk_named_var "x" in
+    let f = mk_var "g" in
+    let e = Expr.unbox (mk_app f [mk_int 1]) in
+    Alcotest.(check bool) "var not in app" false (expr_uses_var v e)
+
+  (** Variable in EAppOp argument *)
+  let test_var_in_appop () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_appop (Mark.add Pos.void Op.Not) [evar v]) in
+    Alcotest.(check bool) "var in appop" true (expr_uses_var v e)
+
+  (** Variable not in EAppOp *)
+  let test_var_not_in_appop () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_appop (Mark.add Pos.void Op.Not) [mk_bool true]) in
+    Alcotest.(check bool) "var not in appop" false (expr_uses_var v e)
+
+  (** Variable in if-then-else condition *)
+  let test_var_in_if_cond () =
+    let v = mk_named_var "flag" in
+    let e = Expr.unbox (mk_if (evar v) (mk_int 1) (mk_int 0)) in
+    Alcotest.(check bool) "var in if cond" true (expr_uses_var v e)
+
+  (** Variable in if-then-else true branch *)
+  let test_var_in_if_true () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_if (mk_bool true) (evar v) (mk_int 0)) in
+    Alcotest.(check bool) "var in if true" true (expr_uses_var v e)
+
+  (** Variable in if-then-else false branch *)
+  let test_var_in_if_false () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_if (mk_bool true) (mk_int 1) (evar v)) in
+    Alcotest.(check bool) "var in if false" true (expr_uses_var v e)
+
+  (** Variable not in if-then-else *)
+  let test_var_not_in_if () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_if (mk_bool true) (mk_int 1) (mk_int 0)) in
+    Alcotest.(check bool) "var not in if" false (expr_uses_var v e)
+
+  (** Variable in tuple element *)
+  let test_var_in_tuple () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_tuple [mk_int 1; evar v; mk_int 3]) in
+    Alcotest.(check bool) "var in tuple" true (expr_uses_var v e)
+
+  (** Variable not in tuple *)
+  let test_var_not_in_tuple () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_tuple [mk_int 1; mk_int 2]) in
+    Alcotest.(check bool) "var not in tuple" false (expr_uses_var v e)
+
+  (** Variable in tuple access expression *)
+  let test_var_in_tuple_access () =
+    let v = mk_named_var "t" in
+    let e = Expr.unbox (mk_tuple_access (evar v) 0 2) in
+    Alcotest.(check bool) "var in tuple access" true (expr_uses_var v e)
+
+  (** Variable inside EAbs body (free occurrence) *)
+  let test_var_in_abs_body_free () =
+    let outer = mk_named_var "outer" in
+    let abs = mk_abs "y" (mk_int_ty ()) (fun _y -> evar outer) in
+    let e = Expr.unbox abs in
+    Alcotest.(check bool) "free var in abs body" true (expr_uses_var outer e)
+
+  (** Variable bound by EAbs — still detected by expr_uses_var because
+      Bindlib.unmbind substitutes fresh variables, so the original target
+      variable won't appear as the bound variable. However, if the body
+      only uses the bound variable (not target), expr_uses_var returns false. *)
+  let test_var_not_free_in_abs () =
+    let outer = mk_named_var "outer" in
+    let abs = mk_abs "x" (mk_int_ty ()) (fun x -> x) in
+    let e = Expr.unbox abs in
+    Alcotest.(check bool) "bound-only var not found" false (expr_uses_var outer e)
+
+  (** Variable in deeply nested expression *)
+  let test_var_deeply_nested () =
+    let v = mk_named_var "deep" in
+    let inner = mk_if (mk_bool true) (evar v) (mk_int 0) in
+    let mid = mk_app (mk_var "f") [inner] in
+    let outer = mk_tuple [mk_int 1; mid] in
+    let e = Expr.unbox outer in
+    Alcotest.(check bool) "var deeply nested" true (expr_uses_var v e)
+
+  (** Variable not in deeply nested expression *)
+  let test_var_not_deeply_nested () =
+    let v = mk_named_var "missing" in
+    let inner = mk_if (mk_bool true) (mk_int 1) (mk_int 0) in
+    let mid = mk_app (mk_var "f") [inner] in
+    let outer = mk_tuple [mk_int 1; mid] in
+    let e = Expr.unbox outer in
+    Alcotest.(check bool) "var not deeply nested" false (expr_uses_var v e)
+
+  (** Multiple occurrences of same variable *)
+  let test_multiple_occurrences () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (mk_appop (Mark.add Pos.void Op.Add) [evar v; evar v]) in
+    Alcotest.(check bool) "multiple occurrences" true (expr_uses_var v e)
+
+  (** Variable in EArray *)
+  let test_var_in_array () =
+    let v = mk_named_var "x" in
+    let arr = Expr.earray [mk_int 1; evar v; mk_int 3] nomark in
+    let e = Expr.unbox arr in
+    Alcotest.(check bool) "var in array" true (expr_uses_var v e)
+
+  (** Variable not in EArray *)
+  let test_var_not_in_array () =
+    let v = mk_named_var "x" in
+    let arr = Expr.earray [mk_int 1; mk_int 2] nomark in
+    let e = Expr.unbox arr in
+    Alcotest.(check bool) "var not in array" false (expr_uses_var v e)
+
+  (** EFatalError has no variables *)
+  let test_fatal_error () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.efatalerror Runtime.NoValue nomark) in
+    Alcotest.(check bool) "fatal error" false (expr_uses_var v e)
+
+  (** EPureDefault wrapping *)
+  let test_var_in_pure_default () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.epuredefault (evar v) nomark) in
+    Alcotest.(check bool) "var in pure default" true (expr_uses_var v e)
+
+  (** EErrorOnEmpty wrapping *)
+  let test_var_in_error_on_empty () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.eerroronempty (evar v) nomark) in
+    Alcotest.(check bool) "var in error on empty" true (expr_uses_var v e)
+
+  (** EDefault — variable in just *)
+  let test_var_in_default_just () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.edefault ~excepts:[] ~just:(evar v) ~cons:(mk_int 1) nomark) in
+    Alcotest.(check bool) "var in default just" true (expr_uses_var v e)
+
+  (** EDefault — variable in cons *)
+  let test_var_in_default_cons () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.edefault ~excepts:[] ~just:(mk_bool true) ~cons:(evar v) nomark) in
+    Alcotest.(check bool) "var in default cons" true (expr_uses_var v e)
+
+  (** EDefault — variable in excepts *)
+  let test_var_in_default_excepts () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.edefault ~excepts:[evar v] ~just:(mk_bool true) ~cons:(mk_int 1) nomark) in
+    Alcotest.(check bool) "var in default excepts" true (expr_uses_var v e)
+
+  (** EDefault — variable not present *)
+  let test_var_not_in_default () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.edefault ~excepts:[] ~just:(mk_bool true) ~cons:(mk_int 1) nomark) in
+    Alcotest.(check bool) "var not in default" false (expr_uses_var v e)
+
+  (** EEmpty has no variables *)
+  let test_empty () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.eempty nomark) in
+    Alcotest.(check bool) "empty" false (expr_uses_var v e)
+
+  (** EAssert wrapping *)
+  let test_var_in_assert () =
+    let v = mk_named_var "x" in
+    let e = Expr.unbox (Expr.eassert (evar v) nomark) in
+    Alcotest.(check bool) "var in assert" true (expr_uses_var v e)
+
+  let suite = [
+    Alcotest.test_case "var directly referenced" `Quick test_var_found;
+    Alcotest.test_case "different var same name" `Quick test_different_var_same_name;
+    Alcotest.test_case "literal has no var" `Quick test_literal_no_var;
+    Alcotest.test_case "bool literal" `Quick test_bool_literal;
+    Alcotest.test_case "var in app function" `Quick test_var_in_app_function;
+    Alcotest.test_case "var in app arg" `Quick test_var_in_app_arg;
+    Alcotest.test_case "var not in app" `Quick test_var_not_in_app;
+    Alcotest.test_case "var in appop" `Quick test_var_in_appop;
+    Alcotest.test_case "var not in appop" `Quick test_var_not_in_appop;
+    Alcotest.test_case "var in if cond" `Quick test_var_in_if_cond;
+    Alcotest.test_case "var in if true branch" `Quick test_var_in_if_true;
+    Alcotest.test_case "var in if false branch" `Quick test_var_in_if_false;
+    Alcotest.test_case "var not in if" `Quick test_var_not_in_if;
+    Alcotest.test_case "var in tuple" `Quick test_var_in_tuple;
+    Alcotest.test_case "var not in tuple" `Quick test_var_not_in_tuple;
+    Alcotest.test_case "var in tuple access" `Quick test_var_in_tuple_access;
+    Alcotest.test_case "free var in abs body" `Quick test_var_in_abs_body_free;
+    Alcotest.test_case "bound-only var not found" `Quick test_var_not_free_in_abs;
+    Alcotest.test_case "var deeply nested" `Quick test_var_deeply_nested;
+    Alcotest.test_case "var not deeply nested" `Quick test_var_not_deeply_nested;
+    Alcotest.test_case "multiple occurrences" `Quick test_multiple_occurrences;
+    Alcotest.test_case "var in array" `Quick test_var_in_array;
+    Alcotest.test_case "var not in array" `Quick test_var_not_in_array;
+    Alcotest.test_case "fatal error" `Quick test_fatal_error;
+    Alcotest.test_case "var in pure default" `Quick test_var_in_pure_default;
+    Alcotest.test_case "var in error on empty" `Quick test_var_in_error_on_empty;
+    Alcotest.test_case "var in default just" `Quick test_var_in_default_just;
+    Alcotest.test_case "var in default cons" `Quick test_var_in_default_cons;
+    Alcotest.test_case "var in default excepts" `Quick test_var_in_default_excepts;
+    Alcotest.test_case "var not in default" `Quick test_var_not_in_default;
+    Alcotest.test_case "empty expr" `Quick test_empty;
+    Alcotest.test_case "var in assert" `Quick test_var_in_assert;
+  ]
+end
+
+(** {1 Test Category 8: try_fold_to_any_all (P3 pattern detection)} *)
+
+module FoldToAnyAllTests = struct
+  open Helpers
+
+  let mk_named_var name =
+    Var.make name
+
+  let evar v = Expr.evar v nomark
+
+  (** Build a Fold(fn, init, collection) expression and format it.
+      Returns the formatted string for the whole EAppOp Fold. *)
+  let format_fold fn init collection =
+    let fold_expr = Expr.eappop
+      ~op:(Mark.add Pos.void Op.Fold)
+      ~args:[fn; init; collection]
+      ~tys:[] nomark in
+    format_expr (Expr.unbox fold_expr)
+
+  (** Build an EAbs with given variables, types, and body *)
+  let mk_fold_fn vars tys body_fn =
+    let var_exprs = Array.map (fun v -> Expr.evar v nomark) vars in
+    let body = body_fn var_exprs in
+    let binder = Bindlib.bind_mvar vars (Expr.Box.lift body) in
+    Expr.eabs_ghost binder tys nomark
+
+  (** Test: Exists pattern — List.foldl (fun acc x => acc || pred(x)) false list
+      should become List.any (fun x => pred(x)) list *)
+  let test_exists_pattern () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.Or) [acc_e; x_e]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_bool true; mk_bool false] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"uses List.any" result "List.any";
+    check_not_contains ~msg:"no List.foldl" result "List.foldl";
+    check_contains ~msg:"has lambda" result "fun"
+
+  (** Test: Forall pattern — List.foldl (fun acc x => acc && pred(x)) true list
+      should become List.all (fun x => pred(x)) list *)
+  let test_forall_pattern () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.And) [acc_e; x_e]
+    ) in
+    let init = mk_bool true in
+    let collection = Expr.earray [mk_bool true; mk_bool false] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"uses List.all" result "List.all";
+    check_not_contains ~msg:"no List.foldl" result "List.foldl";
+    check_contains ~msg:"has lambda" result "fun"
+
+  (** Test: Non-boolean init — should stay as List.foldl *)
+  let test_non_bool_init () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let int_ty = mk_int_ty () in
+    let fn = mk_fold_fn [|acc; x|] [int_ty; int_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.Add) [acc_e; x_e]
+    ) in
+    let init = mk_int 0 in
+    let collection = Expr.earray [mk_int 1; mk_int 2] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"uses List.foldl" result "List.foldl";
+    check_not_contains ~msg:"no List.any" result "List.any";
+    check_not_contains ~msg:"no List.all" result "List.all"
+
+  (** Test: Mismatched init/op — init=false but body uses && (should stay foldl) *)
+  let test_mismatched_init_and_op () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.And) [acc_e; x_e]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"stays as List.foldl" result "List.foldl"
+
+  (** Test: Mismatched init/op — init=true but body uses || (should stay foldl) *)
+  let test_mismatched_init_or_op () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.Or) [acc_e; x_e]
+    ) in
+    let init = mk_bool true in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"stays as List.foldl" result "List.foldl"
+
+  (** Test: Predicate uses accumulator — safety check prevents transformation *)
+  let test_pred_uses_acc_exists () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let pred = mk_appop (Mark.add Pos.void Op.And) [vars.(1); vars.(0)] in
+      mk_appop (Mark.add Pos.void Op.Or) [acc_e; pred]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"stays as List.foldl due to acc in pred" result "List.foldl"
+
+  (** Test: Predicate uses accumulator — safety check for forall *)
+  let test_pred_uses_acc_forall () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let pred = mk_appop (Mark.add Pos.void Op.Or) [vars.(1); vars.(0)] in
+      mk_appop (Mark.add Pos.void Op.And) [acc_e; pred]
+    ) in
+    let init = mk_bool true in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"stays as List.foldl due to acc in pred" result "List.foldl"
+
+  (** Test: Acc on rhs — body = pred || acc should still become List.any
+      (handles Member desugaring where acc is on right side of ||) *)
+  let test_acc_on_rhs () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.Or) [x_e; acc_e]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"acc on rhs still List.any" result "List.any";
+    check_not_contains ~msg:"no List.foldl" result "List.foldl"
+
+  (** Test: Neither side is acc — should stay foldl *)
+  let test_neither_side_acc () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; bool_ty] (fun vars ->
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.Or) [x_e; mk_bool true]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"stays as List.foldl" result "List.foldl"
+
+  (** Test: Complex predicate — (fun acc x => acc || (x > 0)) false list
+      should become List.any (fun x => ...) list *)
+  let test_complex_predicate_exists () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let int_ty = mk_int_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; int_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let pred = mk_appop (Mark.add Pos.void Op.Gt) [vars.(1); mk_int 0] in
+      mk_appop (Mark.add Pos.void Op.Or) [acc_e; pred]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_int 1; mk_int 2] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"uses List.any" result "List.any";
+    check_not_contains ~msg:"no List.foldl" result "List.foldl";
+    check_contains ~msg:"has comparison in predicate" result ">"
+
+  (** Test: Complex predicate — (fun acc x => acc && (x > 0)) true list
+      should become List.all (fun x => ...) list *)
+  let test_complex_predicate_forall () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let int_ty = mk_int_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; int_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let pred = mk_appop (Mark.add Pos.void Op.Gt) [vars.(1); mk_int 0] in
+      mk_appop (Mark.add Pos.void Op.And) [acc_e; pred]
+    ) in
+    let init = mk_bool true in
+    let collection = Expr.earray [mk_int 1; mk_int 2] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"uses List.all" result "List.all";
+    check_not_contains ~msg:"no List.foldl" result "List.foldl"
+
+  (** Test: Only 1 param in fn (just acc, no predicate var) — should stay foldl *)
+  let test_single_param_fn () =
+    let acc = mk_named_var "_acc" in
+    let bool_ty = mk_bool_ty () in
+    let fn = mk_fold_fn [|acc|] [bool_ty] (fun vars ->
+      mk_appop (Mark.add Pos.void Op.Not) [vars.(0)]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"stays as List.foldl" result "List.foldl"
+
+  (** Test: fn is not EAbs (e.g. a variable reference) — should stay foldl *)
+  let test_fn_not_abs () =
+    let f = mk_var "myFolder" in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_bool true] nomark in
+    let result = format_fold f init collection in
+    check_contains ~msg:"stays as List.foldl" result "List.foldl"
+
+  (** Test: Exists with type annotation in lambda output *)
+  let test_exists_type_annotation () =
+    let acc = mk_named_var "_acc" in
+    let x = mk_named_var "x" in
+    let bool_ty = mk_bool_ty () in
+    let int_ty = mk_int_ty () in
+    let fn = mk_fold_fn [|acc; x|] [bool_ty; int_ty] (fun vars ->
+      let acc_e = vars.(0) in
+      let x_e = vars.(1) in
+      mk_appop (Mark.add Pos.void Op.Or) [acc_e; x_e]
+    ) in
+    let init = mk_bool false in
+    let collection = Expr.earray [mk_int 1] nomark in
+    let result = format_fold fn init collection in
+    check_contains ~msg:"lambda has type annotation" result "(x : Int)";
+    check_contains ~msg:"uses List.any" result "List.any"
+
+  let suite = [
+    Alcotest.test_case "exists pattern → List.any" `Quick test_exists_pattern;
+    Alcotest.test_case "forall pattern → List.all" `Quick test_forall_pattern;
+    Alcotest.test_case "non-bool init → List.foldl" `Quick test_non_bool_init;
+    Alcotest.test_case "mismatched init(false)/op(&&) → List.foldl" `Quick test_mismatched_init_and_op;
+    Alcotest.test_case "mismatched init(true)/op(||) → List.foldl" `Quick test_mismatched_init_or_op;
+    Alcotest.test_case "pred uses acc (exists) → List.foldl" `Quick test_pred_uses_acc_exists;
+    Alcotest.test_case "pred uses acc (forall) → List.foldl" `Quick test_pred_uses_acc_forall;
+    Alcotest.test_case "acc on rhs → List.any" `Quick test_acc_on_rhs;
+    Alcotest.test_case "neither side is acc → List.foldl" `Quick test_neither_side_acc;
+    Alcotest.test_case "complex pred (exists) → List.any" `Quick test_complex_predicate_exists;
+    Alcotest.test_case "complex pred (forall) → List.all" `Quick test_complex_predicate_forall;
+    Alcotest.test_case "single param fn → List.foldl" `Quick test_single_param_fn;
+    Alcotest.test_case "fn not EAbs → List.foldl" `Quick test_fn_not_abs;
+    Alcotest.test_case "exists with type annotation" `Quick test_exists_type_annotation;
+  ]
+end
+
 (** {1 Main Test Suite} *)
 
 let suite = [
@@ -935,4 +1451,6 @@ let suite = [
   ("Split Wrapper Generation", SplitWrapperTests.suite);
   ("Beta-Reduction (Transformation C)", BetaReductionTests.suite);
   ("strip_outer_decide", StripOuterDecideTests.suite);
+  ("expr_uses_var", ExprUsesVarTests.suite);
+  ("Fold to Any/All (P3)", FoldToAnyAllTests.suite);
 ]

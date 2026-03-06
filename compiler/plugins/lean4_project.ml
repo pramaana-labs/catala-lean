@@ -179,12 +179,11 @@ let run includes stdlib (output : Global.raw_file option) lean4_root_opt options
     Filename.concat lean4_root (Filename.concat "stdlib" "lean4")
   in
   copy_dir_files stdlib_lean4_src stdlib_dst;
-  (* Stdlib.lean aggregator from Sara_lean/Stdlib/ *)
-  let stdlib_lean_src =
-    Filename.concat lean4_root
-      (Filename.concat "Sara_lean" (Filename.concat "Stdlib" "Stdlib.lean"))
+  (* Copy stdlib/lean4/Stdlib.lean to the project root (not inside Stdlib/) *)
+  let stdlib_lean_file =
+    Filename.concat stdlib_lean4_src "Stdlib.lean"
   in
-  copy_file stdlib_lean_src (Filename.concat stdlib_dst "Stdlib.lean");
+  copy_file stdlib_lean_file (Filename.concat output_dir "Stdlib.lean");
   Message.debug "Populated Stdlib/";
 
   (* ── 7. Generate lakefile.toml ────────────────────────────────────────── *)

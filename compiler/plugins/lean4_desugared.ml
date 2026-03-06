@@ -135,7 +135,7 @@ Catala Type → Lean Type:
   - `boolean` → `Bool`
   - `(A, B, C)` → `(A × B × C)` (nested pairs in Lean)
   - `collection T` → `(List T)`
-  - `optional T` → `(Optional T)` (Catala's custom Optional type)
+  - `optional T` → `(Option T)` (mapped to Lean's native Option)
   - `A → B → C` → `(A → B → C)` (curried functions)
   - `structure S` → `structure S` (with deriving clauses)
   - `enumeration E` → `inductive E : Type where` (sum type)
@@ -759,7 +759,7 @@ let rec format_typ (ty : typ) : string =
   | TStruct s -> sanitize_name (StructName.to_string s)
   | TEnum e -> sanitize_name (EnumName.to_string e)
   | TOption t ->
-      Printf.sprintf "(Optional %s)" (format_typ t)
+      Printf.sprintf "(Option %s)" (format_typ t)
   | TArrow (args, ret) ->
       let all_types = args @ [ret] in
       let formatted = List.map format_typ all_types in
@@ -923,6 +923,10 @@ let format_location
     including stdlib types like Optional whose declarations have been updated. *)
 let is_runtime_enum (_name : EnumName.t) : bool = false
 
+(** P5: Check if an enum is Catala's Optional type, which maps to Lean's native Option. *)
+let is_optional_enum (name : EnumName.t) : bool =
+  sanitize_name (EnumName.to_string name) = "Optional"
+
 (** Check if an expression is a boolean operator (And, Or, Xor, Not) *)
 let is_bool_operator (e : (desugared, untyped) gexpr) : bool =
   match Mark.remove e with
@@ -936,6 +940,45 @@ let is_bool_operator (e : (desugared, untyped) gexpr) : bool =
   | EMatch _ -> true  (* Match expressions that return Bool shouldn't be wrapped with decide *)
   | EIfThenElse _ -> true  (* If-then-else expressions that return Bool *)
   | _ -> false
+
+(** Check if a Bindlib variable appears free in an expression.
+    Used to verify that a fold predicate does not reference the accumulator,
+    which is the safety condition for converting foldl to List.any/List.all. *)
+let rec expr_uses_var target (e : Ast.expr) : bool =
+  match Mark.remove e with
+  | EVar v -> Bindlib.eq_vars v target
+  | ELit _ | EFatalError _ | EEmpty | EPos _ | ELocation _ | EBad -> false
+  | EApp { f; args; _ } ->
+      expr_uses_var target f || List.exists (expr_uses_var target) args
+  | EAppOp { args; _ } ->
+      List.exists (expr_uses_var target) args
+  | EAbs { binder; _ } ->
+      let _, body = Bindlib.unmbind binder in
+      expr_uses_var target body
+  | EIfThenElse { cond; etrue; efalse } ->
+      expr_uses_var target cond
+      || expr_uses_var target etrue
+      || expr_uses_var target efalse
+  | ETuple es | EArray es ->
+      List.exists (expr_uses_var target) es
+  | ETupleAccess { e; _ } | EStructAccess { e; _ }
+  | EDStructAccess { e; _ } | EInj { e; _ }
+  | EAssert e | EPureDefault e | EErrorOnEmpty e ->
+      expr_uses_var target e
+  | EStruct { fields; _ } ->
+      StructField.Map.exists (fun _ e -> expr_uses_var target e) fields
+  | EDStructAmend { e; fields; _ } ->
+      expr_uses_var target e
+      || Ident.Map.exists (fun _ e -> expr_uses_var target e) fields
+  | EMatch { e; cases; _ } ->
+      expr_uses_var target e
+      || EnumConstructor.Map.exists (fun _ e -> expr_uses_var target e) cases
+  | EScopeCall { args; _ } ->
+      ScopeVar.Map.exists (fun _ (_, e) -> expr_uses_var target e) args
+  | EDefault { excepts; just; cons } ->
+      List.exists (expr_uses_var target) excepts
+      || expr_uses_var target just
+      || expr_uses_var target cons
 
 (** Strip an outermost `decide (...)` wrapper from a condition string, handling
     any number of leading/trailing parentheses.  Returns the inner Prop expression
@@ -1036,7 +1079,7 @@ let rec format_expr
              match Mark.remove ty with
              | TLit TUnit -> acc
              | _ ->
-              Printf.sprintf "(let %s : %s := %s\n  %s)"
+              Printf.sprintf "(let %s : %s := %s; %s)"
                 (sanitize_name (Bindlib.name_of var))
                 (format_typ ty)
                 (fmt arg)
@@ -1141,36 +1184,57 @@ let rec format_expr
   | EStructAccess { e; field; name = name } ->
       Printf.sprintf "(%s).%s" (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e) (sanitize_name (StructField.to_string field))
   | EInj { e; cons; name } ->
-      let enum_str = sanitize_name (EnumName.to_string name) in
-      let cons_str = sanitize_name (EnumConstructor.to_string cons) in
-      (match Mark.remove e with
-       | ELit LUnit when not (is_runtime_enum name) ->
-           (* R5: nullary constructor for user-defined enums only *)
-           Printf.sprintf "%s.%s" enum_str cons_str
-       | _ ->
-           Printf.sprintf "(%s.%s %s)" enum_str cons_str
-             (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e))
+      if is_optional_enum name then begin
+        let cons_str = sanitize_name (EnumConstructor.to_string cons) in
+        match cons_str with
+        | "Absent" -> "none"
+        | "Present" ->
+            Printf.sprintf "(some %s)"
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e)
+        | _ ->
+            Printf.sprintf "(Option.%s %s)" cons_str
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e)
+      end else begin
+        let enum_str = sanitize_name (EnumName.to_string name) in
+        let cons_str = sanitize_name (EnumConstructor.to_string cons) in
+        match Mark.remove e with
+        | ELit LUnit when not (is_runtime_enum name) ->
+            Printf.sprintf "%s.%s" enum_str cons_str
+        | _ ->
+            Printf.sprintf "(%s.%s %s)" enum_str cons_str
+              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context e)
+      end
   | EArray es ->
       let formatted = List.map (format_expr ~scope_defs ~use_input_prefix ~program_ctx) es in
       Printf.sprintf "[%s]" (String.concat ", " formatted)
   | EAppOp { op; args; tys = _ } ->
       format_operator ~scope_defs ~use_input_prefix ~in_scope_body_context ~program_ctx op args
   | EMatch { e = matched_expr; name = enum_name; cases } ->
-      (* Pattern matching: match expr with | Case1 var => body1 | Case2 var => body2 *)
       let matched_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context matched_expr in
+      let is_optional = is_optional_enum enum_name in
       let enum_name_str = sanitize_name (EnumName.to_string enum_name) in
       let cases_list = EnumConstructor.Map.bindings cases in
       let formatted_cases = List.map (fun (cons, case_expr) ->
         let cons_name = sanitize_name (EnumConstructor.to_string cons) in
-        (* Each case is typically a lambda: fun (x : T) => body *)
         match Mark.remove case_expr with
         | EAbs { binder; tys; _ } ->
             let is_unit_cons = match tys with
               | [ty] -> (match Mark.remove ty with TLit TUnit -> true | _ -> false)
               | _ -> false
             in
-            if is_unit_cons && not (is_runtime_enum enum_name) then begin
-              (* R5: nullary constructor for user-defined enums, no binding variable *)
+            if is_optional then begin
+              if cons_name = "Absent" then begin
+                let _, body = Bindlib.unmbind binder in
+                let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body in
+                Printf.sprintf "| none => %s" body_str
+              end else begin
+                let vars, body = Bindlib.unmbind binder in
+                let params = Array.to_list vars in
+                let param_names = List.map (fun var -> sanitize_name (Bindlib.name_of var)) params in
+                let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body in
+                Printf.sprintf "| some %s => %s" (String.concat " " param_names) body_str
+              end
+            end else if is_unit_cons && not (is_runtime_enum enum_name) then begin
               let _, body = Bindlib.unmbind binder in
               let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context body in
               Printf.sprintf "| %s.%s => %s" enum_name_str cons_name body_str
@@ -1183,12 +1247,13 @@ let rec format_expr
                 enum_name_str cons_name (String.concat " " param_names) body_str
             end
         | _ ->
-            (* Not a lambda - just format the expression directly *)
             let body_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context case_expr in
-            Printf.sprintf "| %s.%s _ => %s" enum_name_str cons_name body_str
+            if is_optional then
+              Printf.sprintf "| %s => %s" (if cons_name = "Absent" then "none" else "some _") body_str
+            else
+              Printf.sprintf "| %s.%s _ => %s" enum_name_str cons_name body_str
       ) cases_list in
-      (* Generate match as single line to avoid indentation issues in struct literals *)
-      Printf.sprintf "(match %s with %s)" matched_str (String.concat "" formatted_cases)
+      Printf.sprintf "(match %s with %s)" matched_str (String.concat " " formatted_cases)
   | EAbs { binder; tys; _ } ->
       (* Lambda abstraction: fun (x : T) (y : U) => body 
          NOTE: Inline lambdas CANNOT have explicit type parameters in Lean.
@@ -1236,6 +1301,78 @@ let rec format_expr
       "default /-unsupported expression-/"
 
 (** Format an operator and its arguments to Lean code *)
+(** P3: Detect if a Fold(fn, init, collection) is a desugared Exists/Forall.
+    Returns [Some ("List.any", formatted_predicate_lambda)] or
+    [Some ("List.all", formatted_predicate_lambda)] if the pattern matches,
+    [None] otherwise.
+
+    Pattern for Exists: init = false, fn = (fun acc x => acc || pred(x))
+      where pred does not reference acc.
+    Pattern for Forall: init = true,  fn = (fun acc x => acc && pred(x))
+      where pred does not reference acc. *)
+and try_fold_to_any_all
+    ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
+    ?(use_input_prefix : bool = true)
+    ?(in_scope_body_context : bool = false)
+    ?(program_ctx : Shared_ast.decl_ctx option = None)
+    (fn : Ast.expr) (init : Ast.expr)
+    : (string * string) option =
+  let init_val = match Mark.remove init with
+    | ELit (LBool b) -> Some b
+    | _ -> None
+  in
+  match init_val with
+  | None -> None
+  | Some init_bool ->
+    match Mark.remove fn with
+    | EAbs { binder; tys; _ } ->
+      let vars, body = Bindlib.unmbind binder in
+      let n = Array.length vars in
+      if n < 2 then None
+      else
+        let acc_var = vars.(0) in
+        let pred_vars = Array.sub vars 1 (n - 1) in
+        let pred_tys = match tys with _ :: rest -> rest | [] -> [] in
+        (match Mark.remove body with
+         | EAppOp { op = (Or, _); args = [lhs; rhs]; _ } when not init_bool ->
+           let lhs_is_acc = match Mark.remove lhs with
+             | EVar v -> Bindlib.eq_vars v acc_var | _ -> false in
+           let rhs_is_acc = match Mark.remove rhs with
+             | EVar v -> Bindlib.eq_vars v acc_var | _ -> false in
+           let pred_expr = if lhs_is_acc then Some rhs
+                           else if rhs_is_acc then Some lhs
+                           else None in
+           (match pred_expr with
+            | Some pred when not (expr_uses_var acc_var pred) ->
+              let fmt = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context in
+              let pred_params = Array.to_list pred_vars in
+              let param_strs = List.map2 (fun v ty ->
+                Printf.sprintf "(%s : %s)" (sanitize_name (Bindlib.name_of v)) (format_typ ty)
+              ) pred_params pred_tys in
+              let body_str = fmt pred in
+              Some ("List.any", Printf.sprintf "(fun %s => %s)" (String.concat " " param_strs) body_str)
+            | _ -> None)
+         | EAppOp { op = (And, _); args = [lhs; rhs]; _ } when init_bool ->
+           let lhs_is_acc = match Mark.remove lhs with
+             | EVar v -> Bindlib.eq_vars v acc_var | _ -> false in
+           let rhs_is_acc = match Mark.remove rhs with
+             | EVar v -> Bindlib.eq_vars v acc_var | _ -> false in
+           let pred_expr = if lhs_is_acc then Some rhs
+                           else if rhs_is_acc then Some lhs
+                           else None in
+           (match pred_expr with
+            | Some pred when not (expr_uses_var acc_var pred) ->
+              let fmt = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context in
+              let pred_params = Array.to_list pred_vars in
+              let param_strs = List.map2 (fun v ty ->
+                Printf.sprintf "(%s : %s)" (sanitize_name (Bindlib.name_of v)) (format_typ ty)
+              ) pred_params pred_tys in
+              let body_str = fmt pred in
+              Some ("List.all", Printf.sprintf "(fun %s => %s)" (String.concat " " param_strs) body_str)
+            | _ -> None)
+         | _ -> None)
+    | _ -> None
+
 and format_operator 
     ?(scope_defs : Ast.scope_def Ast.ScopeDef.Map.t option = None)
     ?(use_input_prefix : bool = true)
@@ -1346,10 +1483,12 @@ and format_operator
   | Fold ->
       (match args with
         | [fn; init; arr] ->
-            Printf.sprintf "(List.foldl (%s) %s %s)"
-              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context fn)
-              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context init)
-              (format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arr)
+            let fmt = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context in
+            (match try_fold_to_any_all ~scope_defs ~use_input_prefix ~in_scope_body_context ~program_ctx fn init with
+             | Some (lean_fn, pred_lambda_str) ->
+                 Printf.sprintf "(%s %s %s)" lean_fn (fmt arr) pred_lambda_str
+             | None ->
+                 Printf.sprintf "(List.foldl (%s) %s %s)" (fmt fn) (fmt init) (fmt arr))
         | _ -> "default -- wrong args for Fold")
   | Concat ->
       (match args with
@@ -1440,14 +1579,15 @@ let is_unconditional_rule (rule : Ast.rule) : bool =
 let has_function_params (rule : Ast.rule) : bool =
   match rule.Ast.rule_parameter with Some _ -> true | None -> false
 
-(** R2/R3: Check if a variable always produces a value (single unconditional
-    rule in a single Leaf tree, no function params, not a sub-scope).
-    Such variables can return T instead of Option T. *)
+(** R2/P4: Check if a variable always produces a value (single unconditional
+    rule in a single Leaf tree, not a sub-scope).
+    Such variables can return T instead of Option T.
+    P4 extends this to include functions with "depends on" parameters. *)
 let is_always_some_leaf (var_def : var_def_info) : bool =
   (not var_def.is_sub_scope) &&
   (match var_def.rule_trees with
    | [Scopelang.From_desugared.Leaf [single_rule]] ->
-       is_unconditional_rule single_rule && not (has_function_params single_rule)
+       is_unconditional_rule single_rule
    | _ -> false)
 
 (** Format a single rule body (justification and consequence) wrapped in Option *)
@@ -1672,10 +1812,13 @@ let rec format_rule_tree_method
           let params_str = String.concat " " func_params in
           let wrapped = match base_rules with
             | [single_rule] when is_unconditional_rule single_rule ->
-                (* R1 reduction: single unconditional rule - emit consequence directly
-                   without the redundant match some(e) with | some r => r | _ => default *)
+                (* R1/P4: single unconditional rule - emit consequence directly *)
                 let cons_str = format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:true ~skip_lambda_wrap:true ~program_ctx single_rule in
-                Printf.sprintf "some (fun %s => %s)" params_str cons_str
+                if always_some then
+                  (* P4: return T directly, no some wrapper *)
+                  Printf.sprintf "fun %s => %s" params_str cons_str
+                else
+                  Printf.sprintf "some (fun %s => %s)" params_str cons_str
             | _ ->
                 let inner_body = match base_rules with
                   | [] -> "none"
@@ -1707,7 +1850,7 @@ let rec format_rule_tree_method
       in
       let _ = func_params_str in  (* params are embedded in the lambda, not in the def signature *)
       
-      let method_def = Printf.sprintf "def %s %s : %s :=\n  %s\n" 
+      let method_def = Printf.sprintf "@[simp, reducible]\ndef %s %s : %s :=\n  %s\n" 
         method_name params return_type body in
       [method_def], dependencies
       
@@ -1803,12 +1946,12 @@ let rec format_rule_tree_method
             | multiple -> Printf.sprintf "processExceptions [%s]" (String.concat ", " multiple)
           in
           Printf.sprintf 
-            "(match %s with    | none => %s    | some r => some r)"
+            "(match %s with | none => %s | some r => some r)"
             exceptions_expr
             local_default
       in
       
-      let method_def = Printf.sprintf "def %s %s : %s :=\n  %s\n"
+      let method_def = Printf.sprintf "@[simp, reducible]\ndef %s %s : %s :=\n  %s\n"
         method_name params return_type body in
       
       (* Return all exception methods plus this method *)
@@ -1852,7 +1995,7 @@ let format_var_methods
         format_typ var_def.var_type,
         Printf.sprintf "input.%s" var_name_str
     in
-    [Printf.sprintf "def %s %s : %s :=\n  %s\n" method_name input_param return_type body]
+    [Printf.sprintf "@[simp, reducible]\ndef %s %s : %s :=\n  %s\n" method_name input_param return_type body]
   else
     (* Normal case: generate methods from rule trees *)
     let always_some = is_always_some_leaf var_def in
@@ -2083,7 +2226,7 @@ let format_split_wrapper
   ) ctx_fields in
   let all_assignments = pure_assignments @ ctx_assignments in
   let wrapper_func = Printf.sprintf
-    "@[reducible]\ndef %s_theorem (pure : %s_PureInput) (ctx : %s_ContextInput := {}) : %s :=\n  %s {\n    %s }\n"
+    "@[simp, reducible]\ndef %s_theorem (pure : %s_PureInput) (ctx : %s_ContextInput := {}) : %s :=\n  %s {\n    %s }\n"
     func_name scope_name scope_name scope_name
     func_name
     (String.concat ",\n    " all_assignments) in
@@ -2223,7 +2366,7 @@ let format_toplevel
             (* No type variables - simple lambda, keep as is *)
             let type_str = format_typ toplevel_decl.Ast.topdef_type in
             let body_str = format_expr ~program_ctx expr in
-            Printf.sprintf "def %s : %s := %s" toplevel_name_str type_str body_str
+            Printf.sprintf "@[simp, reducible]\ndef %s : %s := %s" toplevel_name_str type_str body_str
           else
             (* Has type variables - generate def with implicit type parameters *)
             let type_param_strs = List.concat_map (fun tv -> [Printf.sprintf "{%s : Type}" tv; Printf.sprintf "[Inhabited %s]" tv]) type_vars in
@@ -2261,7 +2404,7 @@ let format_toplevel
                   substitute_type_vars ret_str var_mapping
               | _ -> format_typ toplevel_decl.Ast.topdef_type
             in
-            Printf.sprintf "def %s %s : %s := %s" 
+            Printf.sprintf "@[simp, reducible]\ndef %s %s : %s := %s" 
               toplevel_name_str 
               (String.concat " " all_params)
               return_type_str
@@ -2270,11 +2413,11 @@ let format_toplevel
           (* Not a lambda - format as expression *)
           let type_str = format_typ toplevel_decl.Ast.topdef_type in
           let body_str = format_expr ~program_ctx expr in
-          Printf.sprintf "def %s : %s := %s" toplevel_name_str type_str body_str)
+          Printf.sprintf "@[simp, reducible]\ndef %s : %s := %s" toplevel_name_str type_str body_str)
   | None ->
       (* No expression - external or undefined *)
       let type_str = format_typ toplevel_decl.Ast.topdef_type in
-      Printf.sprintf "def %s : %s := default /- external or undefined -/" toplevel_name_str type_str
+      Printf.sprintf "@[reducible]\ndef %s : %s := default /- external or undefined -/" toplevel_name_str type_str
 
  
 
@@ -2504,13 +2647,13 @@ let format_scope
   let func_def =
     if output_assignments = [] then
       (* No variables at all (shouldn't happen, but handle it) *)
-      Printf.sprintf "def %s %s : %s :=\n  {  }"
+      Printf.sprintf "@[reducible]\ndef %s %s : %s :=\n  {  }"
         scope_func_name
         input_param
         scope_name_str
     else
       (* Generate let bindings for all variables, then construct struct *)
-      Printf.sprintf "def %s %s : %s :=\n  %s\n  { %s }"
+      Printf.sprintf "@[reducible]\ndef %s %s : %s :=\n  %s\n  { %s }"
         scope_func_name
         input_param
         scope_name_str

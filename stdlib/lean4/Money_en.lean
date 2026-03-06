@@ -7,12 +7,6 @@ open CatalaRuntime
 namespace Money_en
 
 
-inductive Optional (TForall : Type) : Type where
-  | Absent : Unit → Optional TForall
-  | Present : TForall → Optional TForall
-deriving Repr
-
-
 /-- Round Money to the nearest whole unit (e.g., dollar/euro)
     Rounds to nearest 100 cents -/
 @[simp, grind] def round (m : CatalaRuntime.Money) : CatalaRuntime.Money :=
@@ -71,5 +65,7 @@ deriving Repr
 @[simp, grind] def floor := (fun (_variable : CatalaRuntime.Money) (min_value : CatalaRuntime.Money) => (max _variable min_value))
 
 @[simp, grind] def positive := (fun (_variable : CatalaRuntime.Money) => (floor _variable (CatalaRuntime.Money.ofCents 0)))
+
+@[simp, grind] def sum := (fun (list : List CatalaRuntime.Money) => (List.foldl (fun (acc : CatalaRuntime.Money) (x : CatalaRuntime.Money) => (acc + x)) (CatalaRuntime.Money.ofCents 0) list))
 
 end Money_en

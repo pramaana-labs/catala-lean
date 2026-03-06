@@ -1,0 +1,42 @@
+# P3 Test: Replace List.foldl with List.any / List.all
+
+Tests that Catala's `exists` and `for all` collection operations compile
+to `List.any` and `List.all` in Lean4 instead of `List.foldl`.
+
+## Before P3 (Lean4 output):
+
+```
+-- exists x in collection such that x > 0:
+(List.foldl (fun (_acc : Bool) (x : Int) => _acc || (decide (x > 0))) false items)
+
+-- for all x in collection we have x > 0:
+(List.foldl (fun (_acc : Bool) (x : Int) => _acc && (decide (x > 0))) true items)
+```
+
+## After P3 (Lean4 output):
+
+```
+-- exists x in collection such that x > 0:
+(List.any items (fun (x : Int) => (decide (x > 0))))
+
+-- for all x in collection we have x > 0:
+(List.all items (fun (x : Int) => (decide (x > 0))))
+```
+
+```catala
+declaration scope CollectionOps:
+  input items content list of integer
+  output has_positive content boolean
+  output all_positive content boolean
+  output has_large content boolean
+
+scope CollectionOps:
+  definition has_positive equals
+    exists item among items such that item > 0
+
+  definition all_positive equals
+    for all item among items we have item > 0
+
+  definition has_large equals
+    exists item among items such that item > 100
+```

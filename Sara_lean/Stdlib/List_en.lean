@@ -1,5 +1,4 @@
 import CatalaRuntime
-import Stdlib.Optional
 
 open CatalaRuntime
 
@@ -10,11 +9,9 @@ namespace List_en
 
 
 /-- Get nth element from list (1-based index) -/
-@[simp, grind] def nth_element {t : Type} (lst : List t) (index : Int) : Optional t :=
+@[simp, grind] def nth_element {t : Type} (lst : List t) (index : Int) : Option t :=
   let idx := index.toNat - 1  -- Convert to 0-based
-  match lst[idx]? with
-  | some v => Optional.Present v
-  | none => Optional.Absent
+  lst[idx]?
 
 /-- Remove nth element from list (1-based index) -/
 @[simp, grind] def remove_nth_element {t : Type} (lst : List t) (index : Int) : List t :=

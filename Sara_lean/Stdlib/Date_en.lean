@@ -1,6 +1,5 @@
 import CatalaRuntime
 import Stdlib.Date_internal
-import Stdlib.Optional
 
 open CatalaRuntime
 
