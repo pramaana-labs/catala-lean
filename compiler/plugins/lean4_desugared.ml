@@ -1850,9 +1850,35 @@ let rec format_rule_tree_method
       in
       let _ = func_params_str in  (* params are embedded in the lambda, not in the def signature *)
       
-      let method_def = Printf.sprintf "@[simp, reducible]\ndef %s %s : %s :=\n  %s\n" 
-        method_name params return_type body in
-      [method_def], dependencies
+      (* P6: Generate companion @[simp] theorem for conditional functions
+         returning Option Bool with consequence = true.
+         Pattern: if cond then some (true) else none
+         Lemma: (match func params with | some val => val | _ => false) = cond
+         This lets simp eliminate the match-unwrap at call sites. *)
+      let p6_simp_lemma =
+        if (not always_some) && (not has_rule_params) then
+          match base_rules with
+          | [single_rule] when not (is_unconditional_rule single_rule) ->
+              let cons_expr = Expr.unbox single_rule.Ast.rule_cons in
+              (match Mark.remove cons_expr with
+              | ELit (LBool true) ->
+                  let just_expr = Expr.unbox single_rule.Ast.rule_just in
+                  let cond_raw = format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:true ~program_ctx just_expr in
+                  let param_names = format_method_param_names ~has_input_struct all_inputs scope_name dependencies scope_defs in
+                  Some (Printf.sprintf "@[simp] theorem %s_unwrap %s :\n    (match %s %s with | some val => val | _ => false) =\n    %s := by\n  unfold %s; split <;> simp_all\n"
+                    method_name params method_name param_names cond_raw method_name)
+              | _ -> None)
+          | _ -> None
+        else None
+      in
+      let annotation = match p6_simp_lemma with Some _ -> "@[reducible]" | None -> "@[simp, reducible]" in
+      let method_def = Printf.sprintf "%s\ndef %s %s : %s :=\n  %s\n" 
+        annotation method_name params return_type body in
+      let all_defs = match p6_simp_lemma with
+        | Some lemma -> [method_def; lemma]
+        | None -> [method_def]
+      in
+      all_defs, dependencies
       
   | Scopelang.From_desugared.Node (exception_trees, base_rules) ->
       (* Node: generate methods for exceptions, then this node's method *)
