@@ -45,7 +45,7 @@ instance : ToString Duration where
   toString d := s!"{d.years}y {d.months}m {d.days}d"
 
 /-- Helper method to convert Duration to days (integer division) -/
-
+@[inline, simp, grind]
 instance : HDiv Duration Duration Int where
   hDiv a b := a.years * 365 + a.months * 30 + a.days / (b.years * 365 + b.months * 30 + b.days)
 
@@ -80,14 +80,17 @@ namespace Money
 @[inline,simp, grind]  def toIntRound (m: Money) : Int := if m.cents % 100 >= 50 then m.cents / 100 + 1 else m.cents / 100
 
 /-- Addition -/
+@[inline, simp, grind]
 instance : Add Money where
   add a b := ⟨a.cents + b.cents⟩
 
 /-- Subtraction -/
+@[inline, simp, grind]
 instance : Sub Money where
   sub a b := ⟨a.cents - b.cents⟩
 
 /-- Negation -/
+@[inline, simp, grind]
 instance : Neg Money where
   neg a := ⟨-a.cents⟩
 
@@ -95,15 +98,19 @@ instance : Neg Money where
 @[inline,simp, grind]  def mulInt (m : Money) (n : Int) : Money := ⟨m.cents * n⟩
 
 /-- Comparison -/
+@[inline, simp, grind]
 instance : LE Money where
   le a b := a.cents ≤ b.cents
 
+@[inline, simp, grind]
 instance : LT Money where
   lt a b := a.cents < b.cents
 
+@[inline, simp, grind]
 instance : DecidableRel (α := Money) (· ≤ ·) :=
   fun a b => inferInstanceAs (Decidable (a.cents ≤ b.cents))
 
+@[inline, simp, grind]
 instance : DecidableRel (α := Money) (· < ·) :=
   fun a b => inferInstanceAs (Decidable (a.cents < b.cents))
 
@@ -111,6 +118,7 @@ instance : DecidableRel (α := Money) (· < ·) :=
 end Money
 
 -- Multiplication operator for Money
+@[inline, simp, grind]
 instance : HMul Money Int Money where
   hMul := Money.mulInt
 
@@ -138,17 +146,20 @@ namespace Date
 end Date
 
 -- Subtraction operator for Date
+@[inline, simp, grind]
 instance : HSub Date Date Duration where
   hSub := Date.difference
 
+@[inline, simp, grind]
 instance : HSub Date Duration Date where
   hSub := Date.subDuration
 
 -- adding a duration to a date
-
+@[inline, simp, grind]
 instance : HAdd Duration Date Date where
   hAdd dur dat := Date.addDuration dat dur
 
+@[inline, simp, grind]
 instance : HAdd Date Duration Date where
   hAdd dat dur := Date.addDuration dat dur
 -- ============================================================================
@@ -161,14 +172,17 @@ namespace Duration
 @[inline,simp, grind]  def create (y m d : Int) : Duration := ⟨y, m, d⟩
 
 /-- Addition -/
+@[inline, simp, grind]
 instance : Add Duration where
   add a b := ⟨a.years + b.years, a.months + b.months, a.days + b.days⟩
 
 /-- Subtraction -/
+@[inline, simp, grind]
 instance : Sub Duration where
   sub a b := ⟨a.years - b.years, a.months - b.months, a.days - b.days⟩
 
 /-- Negation -/
+@[inline, simp, grind]
 instance : Neg Duration where
   neg a := ⟨-a.years, -a.months, -a.days⟩
 
@@ -181,6 +195,7 @@ end Duration
 set_option autoImplicit false
 
 -- Multiplication operator for Duration
+@[inline, simp, grind]
 instance : HMul Duration Int Duration where
   hMul := Duration.mulInt
 
@@ -237,6 +252,7 @@ def processExceptions0 {α : Type} [DecidableEq α] (exceptions : List (D α)) :
     (.ok none)
 
 
+@[inline, simp, grind]
 def processExceptions {α : Type} (exceptions : List (Option α)) : Option α :=
   exceptions.foldl (fun acc ex => match acc with
   | none => ex
@@ -266,18 +282,15 @@ namespace Money
 @[inline,simp, grind]  def mulFloat (m : Money) (f : Float) : Money :=
   ⟨(Float.toInt64 (Float.round (Float.ofInt m.cents * f))).toInt⟩
 
-/-- Multiply Money by Rat (rational number).
-    Uses pure Int arithmetic so the kernel can reduce it (needed for rfl proofs). -/
-@[inline,simp, grind]  def mulRat (m : Money) (r : Rat) : Money :=
+/-- Multiply Money by Rat (rational number), rounded half-away-from-zero.
+    Stays in Int arithmetic (no natAbs/Float) so omega can close concrete goals. -/
+@[inline,simp, grind] def mulRat (m : Money) (r : Rat) : Money :=
   let num := m.cents * r.num
-  let den := r.den
-  let quot := num / den
-  let rem  := num % den
-  -- round half-away-from-zero
-  if 2 * rem.natAbs ≥ den then
-    if num ≥ 0 then ⟨quot + 1⟩ else ⟨quot - 1⟩
+  let den : Int := ↑r.den
+  if num ≥ 0 then
+    ⟨(2 * num + den) / (2 * den)⟩
   else
-    ⟨quot⟩
+    ⟨-((- 2 * num + den) / (2 * den))⟩
 
 @[inline,simp, grind]  def divMoney (m1: Money) (m2: Money) : Rat :=
   (m1.cents : Rat) / (m2.cents : Rat)
@@ -301,19 +314,21 @@ namespace Money
 end Money
 
 -- Float multiplication for Money
+@[inline, simp, grind]
 instance : HMul Money Float Money where
   hMul := Money.mulFloat
 
 -- Division of Money by Money to give a Rational number
-
+@[inline, simp, grind]
 instance: HDiv Money Money Rat where
   hDiv m1 m2 := Money.divMoney m1 m2
 
 -- Division of Money by rationals and integers to give Money
-
+@[inline, simp, grind]
 instance: HDiv Money Rat Money where
   hDiv m q := Money.mulRat m (1/q)
 
+@[inline, simp, grind]
 instance: HDiv Money Int Money where
   hDiv m i := {cents := m.cents / i}
 -- ============================================================================
@@ -324,12 +339,15 @@ instance: HDiv Money Int Money where
 class CatalatoMoney (α: Type) (γ: outParam Type) where
   toMoney : α → γ
 
+@[inline, simp, grind]
 instance: CatalatoMoney Int Money where
   toMoney := Money.ofInt
 
+@[inline, simp, grind]
 instance: CatalatoMoney Rat Money where
   toMoney r := Money.ofInt (r.floor)
 
+@[inline, simp, grind]
 def toMoney {α γ: Type} [CatalatoMoney α γ] (a: α) : γ :=
   CatalatoMoney.toMoney a
 
@@ -337,19 +355,22 @@ def toMoney {α γ: Type} [CatalatoMoney α γ] (a: α) : γ :=
 class CatalatoRat (α: Type) (γ: outParam Type) where
   toRat : α → γ
 
+@[inline, simp, grind]
 instance : CatalatoRat Money Rat where
   toRat m := Rat.ofInt (Money.toInt m)
 
+@[inline, simp, grind]
 instance : CatalatoRat Int Rat where
   toRat m := Rat.ofInt m
 
+@[inline, simp, grind]
 def toRat {α γ : Type} [CatalatoRat α γ] (a : α) : γ :=
   CatalatoRat.toRat a
 
 /-- Round a rational to the nearest integer, returning a rational.
     Uses round-half-away-from-zero semantics: round(q) = sgn(q) * floor(|q| + 0.5),
     matching Catala's OCaml runtime. -/
-def round (q : Rat) : Rat :=
+@[inline, simp, grind] def round (q : Rat) : Rat :=
   -- sgn(q) * floor(|q| + 1/2)
   -- floor(|q| + 1/2) = floor((2*|num| + den) / (2*den))
   let n := q.num.natAbs
@@ -363,56 +384,70 @@ class CatalaMul (α : Type) (β : Type) (γ : outParam Type) where
   multiply : α → β → γ
 
 /-- Money * Rat -> Money -/
+@[inline, simp, grind]
 instance : CatalaMul Money Rat Money where
   multiply := Money.mulRat
 
 /-- Rat * Money -> Money -/
+@[inline, simp, grind]
 instance : CatalaMul Rat Money Money where
   multiply r m := Money.mulRat m r
 
 /-- Money * Int -> Money -/
+@[inline, simp, grind]
 instance : CatalaMul Money Int Money where
   multiply := Money.mulInt
 
 /-- Int * Money -> Money -/
+@[inline, simp, grind]
 instance : CatalaMul Int Money Money where
   multiply i m := Money.mulInt m i
 
 /-- Money * Float -> Money -/
+@[inline, simp, grind]
 instance : CatalaMul Money Float Money where
   multiply := Money.mulFloat
 
 /-- Float * Money -> Money -/
+@[inline, simp, grind]
 instance : CatalaMul Float Money Money where
   multiply f m := Money.mulFloat m f
 
 /-- Duration * Int -> Duration -/
+@[inline, simp, grind]
 instance : CatalaMul Duration Int Duration where
   multiply := Duration.mulInt
 
 /-- Int * Duration -> Duration -/
+@[inline, simp, grind]
 instance : CatalaMul Int Duration Duration where
   multiply i d := Duration.mulInt d i
 
 /-- Int * Int -> Int -/
+@[inline, simp, grind]
 instance : CatalaMul Int Int Int where
   multiply i1 i2 := i1 * i2
 
+@[inline, simp, grind]
 instance : CatalaMul Int Rat Rat where
   multiply i r := ↑(i:Int) * r
 
+@[inline, simp, grind]
 instance: CatalaMul Rat Int Rat where
   multiply r i := ↑(i:Int) * r
 
 /-- Rat * Rat -> Rat -/
+@[inline, simp, grind]
 instance : CatalaMul Rat Rat Rat where
   multiply := (· * ·)
 
 /-- Float * Float -> Float -/
+@[inline, simp, grind]
 instance : CatalaMul Float Float Float where
   multiply := (· * ·)
 
 /-- Generic multiplication function -/
+@[inline, simp, grind]
 def multiply {α β γ : Type} [CatalaMul α β γ] (a : α) (b : β) : γ :=
   CatalaMul.multiply a b
 
@@ -444,18 +479,22 @@ namespace Date
 @[simp, grind] def eq (d1 d2 : Date) : Bool :=
   d1.year = d2.year && d1.month = d2.month && d1.day = d2.day
 
+@[inline, simp, grind]
 instance : LT Duration where
   lt a b := (a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
     (a.years = b.years ∧ a.months = b.months ∧ a.days < b.days)
 
+@[inline, simp, grind]
 instance : LE Duration where
   le a b := (a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
     (a.years = b.years ∧ a.months = b.months ∧ a.days ≤ b.days)
 
+@[inline, simp, grind]
 instance : LT Date where
   lt a b := (a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
     (a.year = b.year ∧ a.month = b.month ∧ a.day < b.day)
 
+@[inline, simp, grind]
 instance : LE Date where
   le a b := (a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
     (a.year = b.year ∧ a.month = b.month ∧ a.day ≤ b.day)
@@ -463,18 +502,22 @@ instance : LE Date where
 -- instance : DecidableRel (α := Money) (· ≤ ·) :=
 --   fun a b => inferInstanceAs (Decidable (a.cents ≤ b.cents))
 
+@[inline, simp, grind]
 instance : DecidableRel (α := Date) (· < ·) :=
   fun a b => inferInstanceAs (Decidable ((a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
     (a.year = b.year ∧ a.month = b.month ∧ a.day < b.day)))
 
+@[inline, simp, grind]
 instance : DecidableRel (α := Date) (· ≤ ·) :=
   fun a b => inferInstanceAs (Decidable ((a.year < b.year) ∨ (a.year = b.year ∧ a.month < b.month) ∨
     (a.year = b.year ∧ a.month = b.month ∧ a.day ≤ b.day)))
 
+@[inline, simp, grind]
 instance : DecidableRel (α := Duration) (· < ·) :=
   fun a b => inferInstanceAs (Decidable ((a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
     (a.years = b.years ∧ a.months = b.months ∧ a.days < b.days)))
 
+@[inline, simp, grind]
 instance : DecidableRel (α := Duration)  (· ≤ ·) :=
   fun a b => inferInstanceAs (Decidable ((a.years < b.years) ∨ (a.years = b.years ∧ a.months < b.months) ∨
     (a.years = b.years ∧ a.months = b.months ∧ a.days ≤ b.days)))
@@ -543,9 +586,11 @@ namespace D
 end D
 
 -- Operator instances for D Money
+@[inline, simp, grind]
 instance : HAdd (D Money) (D Money) (D Money) where
   hAdd := D.addMoney
 
+@[inline, simp, grind]
 instance : HSub (D Money) (D Money) (D Money) where
   hSub := D.subMoney
 
