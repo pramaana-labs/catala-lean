@@ -117,10 +117,14 @@ instance : DecidableRel (α := Money) (· < ·) :=
 
 end Money
 
--- Multiplication operator for Money
+-- Multiplication operators for Money
 @[inline, simp, grind]
 instance : HMul Money Int Money where
   hMul := Money.mulInt
+
+@[inline, simp, grind]
+instance : HMul Int Money Money where
+  hMul i m := Money.mulInt m i
 
 -- ============================================================================
 -- Date Operations
@@ -194,10 +198,14 @@ end Duration
 
 set_option autoImplicit false
 
--- Multiplication operator for Duration
+-- Multiplication operators for Duration
 @[inline, simp, grind]
 instance : HMul Duration Int Duration where
   hMul := Duration.mulInt
+
+@[inline, simp, grind]
+instance : HMul Int Duration Duration where
+  hMul i d := Duration.mulInt d i
 
 -- ============================================================================
 -- Rational Number Helpers
@@ -313,10 +321,31 @@ namespace Money
 
 end Money
 
--- Float multiplication for Money
+-- Multiplication operators for Money (extended)
+@[inline, simp, grind]
+instance : HMul Money Rat Money where
+  hMul := Money.mulRat
+
+@[inline, simp, grind]
+instance : HMul Rat Money Money where
+  hMul r m := Money.mulRat m r
+
 @[inline, simp, grind]
 instance : HMul Money Float Money where
   hMul := Money.mulFloat
+
+@[inline, simp, grind]
+instance : HMul Float Money Money where
+  hMul f m := Money.mulFloat m f
+
+-- Int * Rat and Rat * Int
+@[inline, simp, grind]
+instance : HMul Int Rat Rat where
+  hMul i r := ↑(i:Int) * r
+
+@[inline, simp, grind]
+instance : HMul Rat Int Rat where
+  hMul r i := ↑(i:Int) * r
 
 -- Division of Money by Money to give a Rational number
 @[inline, simp, grind]
@@ -379,51 +408,43 @@ def toRat {α γ : Type} [CatalatoRat α γ] (a : α) : γ :=
   if q.num ≥ 0 then Rat.ofInt (Int.ofNat absRound)
   else Rat.ofInt (-(Int.ofNat absRound))
 
-/-- Type class for Catala multiplication -/
+/-- Type class for Catala multiplication — DEPRECATED: use HMul (* operator) instead.
+    All type combinations are now covered by HMul instances above. -/
 class CatalaMul (α : Type) (β : Type) (γ : outParam Type) where
   multiply : α → β → γ
 
-/-- Money * Rat -> Money -/
 @[inline, simp, grind]
 instance : CatalaMul Money Rat Money where
   multiply := Money.mulRat
 
-/-- Rat * Money -> Money -/
 @[inline, simp, grind]
 instance : CatalaMul Rat Money Money where
   multiply r m := Money.mulRat m r
 
-/-- Money * Int -> Money -/
 @[inline, simp, grind]
 instance : CatalaMul Money Int Money where
   multiply := Money.mulInt
 
-/-- Int * Money -> Money -/
 @[inline, simp, grind]
 instance : CatalaMul Int Money Money where
   multiply i m := Money.mulInt m i
 
-/-- Money * Float -> Money -/
 @[inline, simp, grind]
 instance : CatalaMul Money Float Money where
   multiply := Money.mulFloat
 
-/-- Float * Money -> Money -/
 @[inline, simp, grind]
 instance : CatalaMul Float Money Money where
   multiply f m := Money.mulFloat m f
 
-/-- Duration * Int -> Duration -/
 @[inline, simp, grind]
 instance : CatalaMul Duration Int Duration where
   multiply := Duration.mulInt
 
-/-- Int * Duration -> Duration -/
 @[inline, simp, grind]
 instance : CatalaMul Int Duration Duration where
   multiply i d := Duration.mulInt d i
 
-/-- Int * Int -> Int -/
 @[inline, simp, grind]
 instance : CatalaMul Int Int Int where
   multiply i1 i2 := i1 * i2
@@ -436,18 +457,16 @@ instance : CatalaMul Int Rat Rat where
 instance: CatalaMul Rat Int Rat where
   multiply r i := ↑(i:Int) * r
 
-/-- Rat * Rat -> Rat -/
 @[inline, simp, grind]
 instance : CatalaMul Rat Rat Rat where
   multiply := (· * ·)
 
-/-- Float * Float -> Float -/
 @[inline, simp, grind]
 instance : CatalaMul Float Float Float where
   multiply := (· * ·)
 
-/-- Generic multiplication function -/
-@[inline, simp, grind]
+/-- DEPRECATED: use the * operator (HMul) instead. -/
+@[inline, simp, grind, deprecated "Use the * operator (HMul) instead of CatalaRuntime.multiply"]
 def multiply {α β γ : Type} [CatalaMul α β γ] (a : α) (b : β) : γ :=
   CatalaMul.multiply a b
 

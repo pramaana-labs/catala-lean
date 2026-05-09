@@ -1180,7 +1180,217 @@ module ExprUsesVarTests = struct
   ]
 end
 
-(** {1 Test Category 8: try_fold_to_any_all (P3 pattern detection)} *)
+(** {1 Test Category 8: Arithmetic Operator Formatting} *)
+
+module ArithmeticOperatorTests = struct
+  open Helpers
+
+  (** {2 Baseline: Add, Sub, Div use binop style} *)
+
+  let test_add_uses_binop () =
+    let a = mk_var "a" in
+    let b = mk_var "b" in
+    let expr = mk_appop (Mark.add Pos.void Op.Add) [a; b] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Add uses infix +"
+      "(a + b)" formatted
+
+  let test_sub_uses_binop () =
+    let a = mk_var "a" in
+    let b = mk_var "b" in
+    let expr = mk_appop (Mark.add Pos.void Op.Sub) [a; b] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Sub uses infix -"
+      "(a - b)" formatted
+
+  let test_div_uses_binop () =
+    let a = mk_var "a" in
+    let b = mk_var "b" in
+    let expr = mk_appop (Mark.add Pos.void Op.Div) [a; b] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Div uses infix /"
+      "(a / b)" formatted
+
+  (** {2 Mult uses infix * (HMul via binop)}
+
+      Each type combination below requires a corresponding HMul instance
+      in CatalaRuntime.lean. The translator emits (a * b) which Lean
+      desugars to HMul.hMul a b, resolved by typeclass inference. *)
+
+  (** Int * Int — covered by Lean's built-in Mul Int *)
+  let test_mult_int_int () =
+    let a = mk_var "count" in
+    let b = mk_var "factor" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [a; b] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Int*Int"
+      "(count * factor)" formatted
+
+  (** Rat * Rat — covered by Lean's built-in Mul Rat *)
+  let test_mult_rat_rat () =
+    let a = mk_var "rate1" in
+    let b = mk_var "rate2" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [a; b] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Rat*Rat"
+      "(rate1 * rate2)" formatted
+
+  (** Money * Int — HMul Money Int Money instance *)
+  let test_mult_money_int () =
+    let m = mk_var "salary" in
+    let n = mk_var "months" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [m; n] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Money*Int"
+      "(salary * months)" formatted
+
+  (** Int * Money — HMul Int Money Money instance *)
+  let test_mult_int_money () =
+    let n = mk_var "months" in
+    let m = mk_var "salary" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [n; m] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Int*Money"
+      "(months * salary)" formatted
+
+  (** Money * Rat — HMul Money Rat Money instance *)
+  let test_mult_money_rat () =
+    let m = mk_var "gross_income" in
+    let r = mk_var "tax_rate" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [m; r] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Money*Rat"
+      "(gross_income * tax_rate)" formatted
+
+  (** Rat * Money — HMul Rat Money Money instance *)
+  let test_mult_rat_money () =
+    let r = mk_var "tax_rate" in
+    let m = mk_var "gross_income" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [r; m] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Rat*Money"
+      "(tax_rate * gross_income)" formatted
+
+  (** Duration * Int — HMul Duration Int Duration instance *)
+  let test_mult_duration_int () =
+    let d = mk_var "one_year" in
+    let n = mk_var "years" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [d; n] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Duration*Int"
+      "(one_year * years)" formatted
+
+  (** Int * Duration — HMul Int Duration Duration instance *)
+  let test_mult_int_duration () =
+    let n = mk_var "years" in
+    let d = mk_var "one_year" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [n; d] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "Mult Int*Duration"
+      "(years * one_year)" formatted
+
+  (** {2 Mult with literal arguments} *)
+
+  (** Literal int * literal int *)
+  let test_mult_literal_ints () =
+    let a = mk_int 3 in
+    let b = mk_int 7 in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [a; b] in
+    let formatted = format_expr (Expr.unbox expr) in
+    check_contains ~msg:"has * operator" formatted "*";
+    check_contains ~msg:"has 3" formatted "3";
+    check_contains ~msg:"has 7" formatted "7"
+
+  (** Literal money * literal int *)
+  let test_mult_literal_money_int () =
+    let m = mk_money 5000 in
+    let n = mk_int 12 in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [m; n] in
+    let formatted = format_expr (Expr.unbox expr) in
+    check_contains ~msg:"has * operator" formatted "*";
+    check_contains ~msg:"has Money literal" formatted "CatalaRuntime.Money.ofCents";
+    check_contains ~msg:"has int 12" formatted "12"
+
+  (** Variable * literal rational *)
+  let test_mult_var_literal_rat () =
+    let m = mk_var "income" in
+    let r = mk_rat 15 100 in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [m; r] in
+    let formatted = format_expr (Expr.unbox expr) in
+    check_contains ~msg:"has * operator" formatted "*";
+    check_contains ~msg:"has income" formatted "income";
+    check_contains ~msg:"has Rat.mk" formatted "Rat.mk"
+
+  (** {2 Mult in compound expressions} *)
+
+  (** Nested multiplication: (a * b) * c *)
+  let test_mult_nested () =
+    let a = mk_var "a" in
+    let b = mk_var "b" in
+    let c = mk_var "c" in
+    let inner = mk_appop (Mark.add Pos.void Op.Mult) [a; b] in
+    let outer = mk_appop (Mark.add Pos.void Op.Mult) [inner; c] in
+    let formatted = format_expr (Expr.unbox outer) in
+    Alcotest.(check string) "nested mult" "((a * b) * c)" formatted
+
+  (** Multiplication inside if-then-else *)
+  let test_mult_in_conditional () =
+    let income = mk_var "income" in
+    let high_rate = mk_var "high_rate" in
+    let low_rate = mk_var "low_rate" in
+    let cond = mk_bool true in
+    let then_branch = mk_appop (Mark.add Pos.void Op.Mult) [income; high_rate] in
+    let else_branch = mk_appop (Mark.add Pos.void Op.Mult) [income; low_rate] in
+    let expr = mk_if cond then_branch else_branch in
+    let formatted = format_expr (Expr.unbox expr) in
+    check_contains ~msg:"has if" formatted "if";
+    check_contains ~msg:"has * in then branch" formatted "(income * high_rate)";
+    check_contains ~msg:"has * in else branch" formatted "(income * low_rate)"
+
+  (** Addition of two multiplications: (a*b) + (c*d) *)
+  let test_mult_in_addition () =
+    let a = mk_var "base" in
+    let b = mk_var "rate" in
+    let c = mk_var "bonus" in
+    let d = mk_var "factor" in
+    let left = mk_appop (Mark.add Pos.void Op.Mult) [a; b] in
+    let right = mk_appop (Mark.add Pos.void Op.Mult) [c; d] in
+    let expr = mk_appop (Mark.add Pos.void Op.Add) [left; right] in
+    let formatted = format_expr (Expr.unbox expr) in
+    Alcotest.(check string) "mult in addition"
+      "((base * rate) + (bonus * factor))" formatted
+
+  (** {2 Edge cases} *)
+
+  let test_mult_wrong_arg_count () =
+    let a = mk_var "a" in
+    let expr = mk_appop (Mark.add Pos.void Op.Mult) [a] in
+    let formatted = format_expr (Expr.unbox expr) in
+    check_contains ~msg:"fallback on wrong arity" formatted "default"
+
+  let suite = [
+    Alcotest.test_case "Add uses binop +" `Quick test_add_uses_binop;
+    Alcotest.test_case "Sub uses binop -" `Quick test_sub_uses_binop;
+    Alcotest.test_case "Div uses binop /" `Quick test_div_uses_binop;
+    Alcotest.test_case "Mult Int*Int" `Quick test_mult_int_int;
+    Alcotest.test_case "Mult Rat*Rat" `Quick test_mult_rat_rat;
+    Alcotest.test_case "Mult Money*Int" `Quick test_mult_money_int;
+    Alcotest.test_case "Mult Int*Money (reversed)" `Quick test_mult_int_money;
+    Alcotest.test_case "Mult Money*Rat" `Quick test_mult_money_rat;
+    Alcotest.test_case "Mult Rat*Money (reversed)" `Quick test_mult_rat_money;
+    Alcotest.test_case "Mult Duration*Int" `Quick test_mult_duration_int;
+    Alcotest.test_case "Mult Int*Duration (reversed)" `Quick test_mult_int_duration;
+    Alcotest.test_case "Mult literal ints" `Quick test_mult_literal_ints;
+    Alcotest.test_case "Mult literal Money*Int" `Quick test_mult_literal_money_int;
+    Alcotest.test_case "Mult var * literal Rat" `Quick test_mult_var_literal_rat;
+    Alcotest.test_case "Mult nested" `Quick test_mult_nested;
+    Alcotest.test_case "Mult in conditional" `Quick test_mult_in_conditional;
+    Alcotest.test_case "Mult in addition" `Quick test_mult_in_addition;
+    Alcotest.test_case "Mult wrong arg count" `Quick test_mult_wrong_arg_count;
+  ]
+end
+
+(** {1 Test Category 9: try_fold_to_any_all (P3 pattern detection)} *)
 
 module FoldToAnyAllTests = struct
   open Helpers
@@ -1452,5 +1662,6 @@ let suite = [
   ("Beta-Reduction (Transformation C)", BetaReductionTests.suite);
   ("strip_outer_decide", StripOuterDecideTests.suite);
   ("expr_uses_var", ExprUsesVarTests.suite);
+  ("Arithmetic Operators", ArithmeticOperatorTests.suite);
   ("Fold to Any/All (P3)", FoldToAnyAllTests.suite);
 ]

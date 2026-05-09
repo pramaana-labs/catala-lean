@@ -634,15 +634,7 @@ and format_operator
   (* Overloaded operators in desugared AST *)
   | Add -> binop "+"
   | Sub -> binop "-"
-  | Mult ->
-      (* Use CatalaRuntime.multiply which handles all type combinations *)
-      (match args with
-      | [arg1; arg2] ->
-          let arg1_str = format_expr ~scope_defs ~use_input_prefix ~output_func_prefix arg1 in
-          let arg2_str = format_expr ~scope_defs ~use_input_prefix ~output_func_prefix arg2 in
-          Printf.sprintf "(CatalaRuntime.multiply %s %s)"
-            arg1_str arg2_str
-      | _ -> "default -- wrong number of args for Mult")
+  | Mult -> binop "*"
   | Div -> binop "/"
   | Minus -> unop "-"
   | Lt -> binop "<"

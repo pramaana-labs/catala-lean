@@ -322,7 +322,7 @@ def TaxComputation_tax_rate_leaf_0 (input : TaxComputation_Input) (num_dependent
   if (num_dependents > 2) then some (Rat.mk 15 100) else some (Rat.mk 20 100)
 
 def TaxComputation_tax_owed_leaf_0 (input : TaxComputation_Input) (gross_income : Money) (tax_rate : Rat) : Option Money :=
-  some (CatalaRuntime.multiply gross_income tax_rate)
+  some (gross_income * tax_rate)
 
 structure TaxComputation where
   tax_owed : Money
@@ -1424,15 +1424,7 @@ and format_operator
   (* Overloaded operators in desugared AST *)
   | Add -> binop "+"
   | Sub -> binop "-"
-  | Mult ->
-      (* Use CatalaRuntime.multiply which handles all type combinations *)
-      (match args with
-      | [arg1; arg2] ->
-          let arg1_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg1 in
-          let arg2_str = format_expr ~scope_defs ~use_input_prefix ~program_ctx ~in_scope_body_context arg2 in
-          Printf.sprintf "(CatalaRuntime.multiply %s %s)"
-            arg1_str arg2_str
-      | _ -> "default -- wrong number of args for Mult")
+  | Mult -> binop "*"
   | Div -> binop "/"
   | Minus -> unop "-"
   (* Comparison operators - wrap with decide to convert Prop to Bool *)
