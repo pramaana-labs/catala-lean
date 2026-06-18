@@ -1857,7 +1857,7 @@ let rec format_rule_tree_method
                   let just_expr = Expr.unbox single_rule.Ast.rule_just in
                   let cond_raw = format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:true ~program_ctx just_expr in
                   let param_names = format_method_param_names ~has_input_struct all_inputs scope_name dependencies scope_defs in
-                  Some (Printf.sprintf "@[simp] theorem %s_unwrap %s :\n    (match %s %s with | some val => val | _ => false) =\n    %s := by\n  unfold %s; split <;> simp_all\n"
+                  Some (Printf.sprintf "@[simp] theorem %s_unwrap %s :\n    (match %s %s with | some val => val | _ => false) =\n    %s := by\n  unfold %s; split <;> simp_all\n  try grind\n"
                     method_name params method_name param_names cond_raw method_name)
               | _ -> None)
           | _ -> None
