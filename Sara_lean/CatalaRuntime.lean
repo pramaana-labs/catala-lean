@@ -396,17 +396,38 @@ instance : CatalatoRat Int Rat where
 def toRat {α γ : Type} [CatalatoRat α γ] (a : α) : γ :=
   CatalatoRat.toRat a
 
-/-- Round a rational to the nearest integer, returning a rational.
+/-- Typeclass for Catala rounding. Covers Round_rat (Rat → Rat) and
+    Round_mon (Money → Money), both emitted as `round` by the translator. -/
+class CatalaRound (α : Type) (β : outParam Type) where
+  round : α → β
+
+/-- Round a rational to the nearest integer.
     Uses round-half-away-from-zero semantics: round(q) = sgn(q) * floor(|q| + 0.5),
     matching Catala's OCaml runtime. -/
-@[inline, simp, grind] def round (q : Rat) : Rat :=
-  -- sgn(q) * floor(|q| + 1/2)
-  -- floor(|q| + 1/2) = floor((2*|num| + den) / (2*den))
-  let n := q.num.natAbs
-  let d := q.den
-  let absRound := (2 * n + d) / (2 * d)
-  if q.num ≥ 0 then Rat.ofInt (Int.ofNat absRound)
-  else Rat.ofInt (-(Int.ofNat absRound))
+@[inline, simp, grind]
+instance : CatalaRound Rat Rat where
+  round q :=
+    let n := q.num.natAbs
+    let d := q.den
+    let absRound := (2 * n + d) / (2 * d)
+    if q.num ≥ 0 then Rat.ofInt (Int.ofNat absRound)
+    else Rat.ofInt (-(Int.ofNat absRound))
+
+/-- Round Money to the nearest whole monetary unit (100 cents).
+    Uses round-half-away-from-zero semantics, matching Catala's OCaml runtime. -/
+@[inline, simp, grind]
+instance : CatalaRound Money Money where
+  round m :=
+    let n := m.cents.natAbs
+    let frac := n % 100
+    let whole := n / 100
+    let roundedWhole := if frac ≥ 50 then whole + 1 else whole
+    ⟨if m.cents ≥ 0 then Int.ofNat (roundedWhole * 100)
+     else -(Int.ofNat (roundedWhole * 100))⟩
+
+/-- Generic round dispatching via CatalaRound typeclass. -/
+@[inline, simp, grind]
+def round {α β : Type} [CatalaRound α β] (x : α) : β := CatalaRound.round x
 
 /-- Type class for Catala multiplication — DEPRECATED: use HMul (* operator) instead.
     All type combinations are now covered by HMul instances above. -/
