@@ -1652,6 +1652,81 @@ module FoldToAnyAllTests = struct
   ]
 end
 
+(** {1 Test Category 10: Rule Tree Generation Regressions} *)
+
+module RuleTreeGenerationTests = struct
+  open Helpers
+
+  let mk_parameterized_conditional_rule () =
+    let x_var = Var.make "x" in
+    let x_expr = Expr.evar x_var nomark in
+    let cons =
+      mk_appop (Mark.add Pos.void Op.Add) [x_expr; mk_int 100]
+    in
+    {
+      Ast.rule_id = RuleName.fresh ("conditional_param_rule", Pos.void);
+      rule_just = mk_var "cond";
+      rule_cons = cons;
+      rule_parameter =
+        Some (Mark.add Pos.void [Mark.add Pos.void x_var, mk_int_ty ()]);
+      rule_exception = Ast.BaseCase;
+      rule_label = Ast.Unlabeled;
+    }
+
+  let test_conditional_parameterized_leaf_preserves_none () =
+    let rule = mk_parameterized_conditional_rule () in
+    let var_def =
+      ({
+        var_name = ScopeVar.fresh ("f", Pos.void);
+        var_state = None;
+        var_type = mk_arrow_ty [mk_int_ty ()] (mk_int_ty ());
+        is_output = false;
+        is_input_output = false;
+        rules = RuleName.Map.empty;
+        dependencies = ScopeVar.Map.empty;
+        rule_trees = [Scopelang.From_desugared.Leaf [rule]];
+        exception_graph = Desugared.Dependency.ExceptionsDependencies.empty;
+        is_sub_scope = false;
+        sub_scope_name = None;
+      } : Lean4_desugared.var_def_info)
+    in
+    Alcotest.(check bool)
+      "conditional parameterized leaf is not always-some"
+      false
+      (Lean4_desugared.is_always_some_leaf var_def);
+    let methods, _deps =
+      Lean4_desugared.format_rule_tree_method
+        "S"
+        "f"
+        var_def.var_type
+        []
+        []
+        (Scopelang.From_desugared.Leaf [rule])
+        0
+        Ast.ScopeDef.Map.empty
+    in
+    let generated = String.concat "\n" methods in
+    check_contains
+      ~msg:"condition is preserved at Option-returning leaf level"
+      generated
+      "if cond then some (fun (x : Int) =>";
+    check_contains
+      ~msg:"false condition preserves none for exception fallback"
+      generated
+      "else none";
+    check_not_contains
+      ~msg:"does not hide none inside an always-present function"
+      generated
+      "some (fun (x : Int) => match if cond then some"
+
+  let suite = [
+    Alcotest.test_case
+      "REGRESSION: conditional parameterized leaf preserves none"
+      `Quick
+      test_conditional_parameterized_leaf_preserves_none;
+  ]
+end
+
 (** {1 Main Test Suite} *)
 
 let suite = [
@@ -1664,4 +1739,5 @@ let suite = [
   ("expr_uses_var", ExprUsesVarTests.suite);
   ("Arithmetic Operators", ArithmeticOperatorTests.suite);
   ("Fold to Any/All (P3)", FoldToAnyAllTests.suite);
+  ("Rule Tree Generation", RuleTreeGenerationTests.suite);
 ]

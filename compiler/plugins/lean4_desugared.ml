@@ -1571,6 +1571,18 @@ let is_unconditional_rule (rule : Ast.rule) : bool =
 let has_function_params (rule : Ast.rule) : bool =
   match rule.Ast.rule_parameter with Some _ -> true | None -> false
 
+(** Check if a rule's justification depends on its function parameters.
+    If it does not, the rule applicability can be decided before constructing
+    the function value, preserving [none] for exception fallback. *)
+let rule_just_uses_function_param (rule : Ast.rule) : bool =
+  match rule.Ast.rule_parameter with
+  | None -> false
+  | Some (params, _pos) ->
+      let just_expr = Expr.unbox rule.Ast.rule_just in
+      List.exists (fun ((var, _var_pos), _param_ty) ->
+        expr_uses_var var just_expr
+      ) params
+
 (** R2/P4: Check if a variable always produces a value (single unconditional
     rule in a single Leaf tree, not a sub-scope).
     Such variables can return T instead of Option T.
@@ -1811,6 +1823,16 @@ let rec format_rule_tree_method
                   Printf.sprintf "fun %s => %s" params_str cons_str
                 else
                   Printf.sprintf "some (fun %s => %s)" params_str cons_str
+            | [single_rule] when not (rule_just_uses_function_param single_rule) ->
+                (* Conditional rule whose guard is independent of function params:
+                   decide applicability at the Option-returning leaf level so
+                   exception fallback still sees none when the rule does not apply. *)
+                let just_expr = Expr.unbox single_rule.Ast.rule_just in
+                let cond_str = strip_outer_decide
+                  (format_expr ~scope_defs:(Some scope_defs) ~use_input_prefix:true ~program_ctx just_expr) in
+                let cons_str = format_rule_consequence ~scope_defs:(Some scope_defs) ~use_input_prefix:true ~skip_lambda_wrap:true ~program_ctx single_rule in
+                Printf.sprintf "if %s then some (fun %s => %s) else none"
+                  cond_str params_str cons_str
             | _ ->
                 let inner_body = match base_rules with
                   | [] -> "none"
