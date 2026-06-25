@@ -22,7 +22,13 @@ namespace CatalaRuntime
   deriving Repr, BEq, DecidableEq, Inhabited
 
 instance : ToString Money where
-  toString m := s!"${m.cents / 100}.{(m.cents % 100).natAbs}"
+  toString m :=
+    let absCents := m.cents.natAbs
+    let whole := absCents / 100
+    let cents := absCents % 100
+    let centsText := if cents < 10 then s!"0{cents}" else s!"{cents}"
+    let sign := if m.cents < 0 then "-" else ""
+    s!"{sign}${whole}.{centsText}"
 
 /-- Date type -/
  structure Date where
@@ -47,7 +53,10 @@ instance : ToString Duration where
 /-- Helper method to convert Duration to days (integer division) -/
 @[inline, simp, grind]
 instance : HDiv Duration Duration Int where
-  hDiv a b := a.years * 365 + a.months * 30 + a.days / (b.years * 365 + b.months * 30 + b.days)
+  hDiv a b :=
+    let aDays := a.years * 365 + a.months * 30 + a.days
+    let bDays := b.years * 365 + b.months * 30 + b.days
+    aDays / bDays
 
 /-- Source position for error reporting -/
  structure SourcePosition where
@@ -77,7 +86,12 @@ namespace Money
 /-- Convert Money to Int (dollars/euros, truncated) -/
 @[inline,simp, grind]  def toInt (m : Money) : Int := m.cents / 100
 
-@[inline,simp, grind]  def toIntRound (m: Money) : Int := if m.cents % 100 >= 50 then m.cents / 100 + 1 else m.cents / 100
+@[inline,simp, grind]  def toIntRound (m: Money) : Int :=
+  let absCents := m.cents.natAbs
+  let whole := absCents / 100
+  let cents := absCents % 100
+  let rounded := if cents >= 50 then whole + 1 else whole
+  if m.cents < 0 then -(Int.ofNat rounded) else Int.ofNat rounded
 
 /-- Addition -/
 @[inline, simp, grind]
@@ -172,9 +186,11 @@ namespace Date
   let normalizedMonth := totalMonths % 12 + 1
   (normalizedYear, normalizedMonth)
 
-/-- Add duration to date (simplified) -/
+/-- Add duration to date. Month/year components are applied first, then days. -/
 @[inline,simp, grind]  def addDuration (d : Date) (dur : Duration) : Date :=
-  ⟨d.year + dur.years, d.month + dur.months, d.day + dur.days⟩
+  let (year, month) := normalizeYearMonth (d.year + dur.years) (d.month + dur.months)
+  let day := min d.day (daysInMonth year month)
+  civilFromDays (daysFromCivil year month day + dur.days)
 
 /-- Subtract duration from date -/
 @[inline,simp, grind]  def subDuration (d : Date) (dur : Duration) : Date :=
@@ -182,9 +198,9 @@ namespace Date
   let day := min d.day (daysInMonth year month)
   civilFromDays (daysFromCivil year month day - dur.days)
 
-/-- Subtract two dates to get duration (simplified) -/
+/-- Subtract two dates to get a day-count duration. -/
 @[inline,simp, grind]  def difference (d1 d2 : Date) : Duration :=
-  ⟨d1.year - d2.year, d1.month - d2.month, d1.day - d2.day⟩
+  ⟨0, 0, daysFromCivil d1.year d1.month d1.day - daysFromCivil d2.year d2.month d2.day⟩
 
 end Date
 
@@ -250,10 +266,7 @@ instance : HMul Int Duration Duration where
 -- Rational Number Helpers
 -- ============================================================================
 
-/-- Create rational from numerator and denominator -/
--- Note: Simplified implementation - just does integer division for now
-
-
+/-- Create rational from numerator and denominator. -/
 @[simp, grind] def mkRational (num den : Int) : Rat :=
   if den = 0 then
     default
@@ -312,12 +325,11 @@ def processExceptions {α : Type} (exceptions : List (Option α)) : Option α :=
   options.find? (·.isSome) |>.join
 
 /-- Division with error position tracking for Money -/
-@[simp, grind] def divWithErr (pos : SourcePosition) (a b : Money) : Money :=
+@[simp, grind] def divWithErr (_pos : SourcePosition) (a b : Money) : Money :=
   if b.cents = 0 then
     default
   else
-    -- Simplified: return integer division for now
-    ⟨a.cents / b.cents⟩
+    ⟨(a.cents * 100) / b.cents⟩
 
 -- ============================================================================
 -- Money Operations (Extended)
@@ -342,7 +354,6 @@ namespace Money
 @[inline,simp, grind]  def divMoney (m1: Money) (m2: Money) : Rat :=
   (m1.cents : Rat) / (m2.cents : Rat)
 
-#check Rat
 /-- Greater than or equal -/
 @[inline,simp, grind]  def ge (a b : Money) : Bool := a.cents ≥ b.cents
 
@@ -413,7 +424,12 @@ instance: CatalatoMoney Int Money where
 
 @[inline, simp, grind]
 instance: CatalatoMoney Rat Money where
-  toMoney r := Money.ofInt (r.floor)
+  toMoney r :=
+    let cents := r * 100
+    let n := cents.num.natAbs
+    let d := cents.den
+    let absRound := (2 * n + d) / (2 * d)
+    ⟨if cents.num ≥ 0 then Int.ofNat absRound else -(Int.ofNat absRound)⟩
 
 @[inline, simp, grind]
 def toMoney {α γ: Type} [CatalatoMoney α γ] (a: α) : γ :=
@@ -425,7 +441,7 @@ class CatalatoRat (α: Type) (γ: outParam Type) where
 
 @[inline, simp, grind]
 instance : CatalatoRat Money Rat where
-  toRat m := Rat.ofInt (Money.toInt m)
+  toRat m := (m.cents : Rat) / 100
 
 @[inline, simp, grind]
 instance : CatalatoRat Int Rat where
@@ -526,7 +542,7 @@ instance : CatalaMul Float Float Float where
   multiply := (· * ·)
 
 /-- DEPRECATED: use the * operator (HMul) instead. -/
-@[inline, simp, grind, deprecated "Use the * operator (HMul) instead of CatalaRuntime.multiply"]
+@[inline, simp, grind, deprecated "Use the * operator (HMul) instead of CatalaRuntime.multiply" (since := "2026-06-25")]
 def multiply {α β γ : Type} [CatalaMul α β γ] (a : α) (b : β) : γ :=
   CatalaMul.multiply a b
 
@@ -676,5 +692,4 @@ instance : HSub (D Money) (D Money) (D Money) where
 end CatalaRuntime
 
 -- Export Rat.mk as an alias
--- Note: Returns Int for now, not Rat (simplified)
 @[inline,simp, grind]  def Rat.mk := CatalaRuntime.mkRational
