@@ -1,0 +1,85 @@
+> Module Section_1_scenario_8
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_1_scenario_8:
+  output tax_result content IRC.IndividualTaxReturnSection1TaxOutput
+
+scope Section_1_scenario_8:
+  # Scenario: Head of household with taxable income $29,601 (just $1 over first §1(b) bracket)
+  # Tested law refs: §1(b)
+  # Legal correlation:
+  # - §1(b) second bracket: "Over $29,600 but not over $76,400 — $4,440 + 28% of excess over $29,600."
+  # - Excess = $29,601 - $29,600 = $1; 28% of $1 = $0.28; Total tax = $4,440.28.
+
+  definition tax_result equals
+    # Entities
+    let hho2 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Construct Head of Household return for 2023 with qualifying person c2
+    let hoh_details equals IRC.HeadOfHouseholdVariant {
+      -- taxpayer: hho2
+      -- qualifying_person: c2
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.HeadOfHousehold content hoh_details
+    } in
+
+    # Temporary §7703 marital status output (dependency for §1 scope input)
+    let taxpayer_marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: hho2
+        -- tax_year: 2023
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2023, 12, 31
+        -- is_married_7703_a_1: false
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: false
+      } in
+
+    # Compute §1(b) Head of Household second bracket amount for taxable income $29,601
+    let taxable_income_local equals $29601 in
+    let excess_over_first_bracket equals taxable_income_local - $29600 in
+    let tax_1_b_amount equals $4440 + (money of ((decimal of excess_over_first_bracket) * 28%)) in
+
+    # Compute §1 tax for HOH with explicit context variables
+    (output of IRC.IndividualTaxReturnSection1Tax with {
+      -- individual_tax_return: individual_tax_return
+      -- taxable_income: taxable_income_local
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: true
+      -- tax_1_a_1: $0
+      -- tax_1_a_2: $0
+      -- tax_1_b: tax_1_b_amount
+      -- tax_1_c: $0
+      -- tax_1_d: $0
+      -- tax: tax_1_b_amount
+    }).main_output
+
+  # Assertions mapping to expected_output:
+  # section_1_tax_amount = $4,440.28 (per §1(b) second bracket formula)
+  assertion (tax_result.tax = $4440.28)
+
+  # section_1_bracket_applied: Over $29,600 but not over $76,400
+  assertion (tax_result.tax_1_b = tax_result.tax)
+  assertion (tax_result.tax_1_a_1 = $0 and tax_result.tax_1_a_2 = $0 and tax_result.tax_1_c = $0 and tax_result.tax_1_d = $0)
+
+  # section_1_status_applied: HeadOfHousehold under §1(b)
+  assertion (
+    match tax_result.individual_tax_return.details with pattern
+    -- IRC.FilingStatusVariant.HeadOfHousehold content variant : true
+    -- anything : false
+  )
+```

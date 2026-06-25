@@ -1,0 +1,216 @@
+> Module Section_3306_scenario_15
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_15:
+  # Output is a tuple of booleans, one per value_to_be_computed in the same order:
+  # (employment_excluded_c10A_student,
+  #  employment_excluded_c10A_spouse_of_student,
+  #  employment_excluded_c10B_hospital_patient,
+  #  employment_excluded_c13_student_nurse)
+  output case_results content (boolean, boolean, boolean, boolean)
+
+scope Section_3306_scenario_15:
+  # Scenario: Exclusions under §3306(c)(10) and §3306(c)(13)
+  # Tested law refs: §3306(c)(10)(A)(i), §3306(c)(10)(A)(ii), §3306(c)(10)(B), §3306(c)(13)
+  definition case_results equals
+    # Entities
+    let stu equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let stu_spouse equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let patient equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+    let nurse_student equals IRC.Individual { -- id: 4 -- is_counterfactual: false } in
+
+    let univ equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.EducationalInstitution
+      -- is_counterfactual: false
+    } in
+    let hosp equals IRC.Organization {
+      -- id: 2
+      -- organization_type: IRC.OrganizationType.Hospital
+      -- is_counterfactual: false
+    } in
+    let nursing_school equals IRC.Organization {
+      -- id: 3
+      -- organization_type: IRC.OrganizationType.EducationalInstitution
+      -- is_counterfactual: false
+    } in
+
+    # Marriage linking student and spouse (for §3306(c)(10)(A)(ii))
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: stu
+      -- spouse2: stu_spouse
+      -- marriage_date: Date.of_year_month_day of 2022, 9, 1
+      -- is_counterfactual: false
+    } in
+
+    # Enrollment events
+    let enroll_stu equals IRC.StudentEnrollmentEvent {
+      -- id: 1
+      -- student: stu
+      -- institution: univ
+      -- start_date: Date.of_year_month_day of 2024, 1, 10
+      -- end_date: Date.of_year_month_day of 2024, 12, 20
+      -- is_regularly_attending: true
+      -- is_counterfactual: false
+    } in
+    let enroll_nurse equals IRC.StudentEnrollmentEvent {
+      -- id: 2
+      -- student: nurse_student
+      -- institution: nursing_school
+      -- start_date: Date.of_year_month_day of 2024, 2, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 20
+      -- is_regularly_attending: true
+      -- is_counterfactual: false
+    } in
+
+    # Hospital patient status for patient
+    let patient_status equals IRC.HospitalPatientEvent {
+      -- id: 1
+      -- patient: patient
+      -- hospital: hosp
+      -- start_date: Date.of_year_month_day of 2024, 2, 1
+      -- end_date: Date.of_year_month_day of 2024, 6, 1
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationships
+    let er_stu equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: univ
+      -- employee: stu
+      -- start_date: Date.of_year_month_day of 2024, 1, 15
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.SchoolCollegeUniversity
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let er_spouse equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: univ
+      -- employee: stu_spouse
+      -- start_date: Date.of_year_month_day of 2024, 1, 15
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.SchoolCollegeUniversity
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let er_patient equals IRC.EmploymentRelationshipEvent {
+      -- id: 3
+      -- employer: hosp
+      -- employee: patient
+      -- start_date: Date.of_year_month_day of 2024, 2, 1
+      -- end_date: Date.of_year_month_day of 2024, 6, 1
+      -- employment_category: IRC.EmploymentCategory.Hospital
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let er_nurse equals IRC.EmploymentRelationshipEvent {
+      -- id: 4
+      -- employer: hosp
+      -- employee: nurse_student
+      -- start_date: Date.of_year_month_day of 2024, 3, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.Hospital
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let all_employment_relationship_events equals
+      [ er_stu; er_spouse; er_patient; er_nurse ]
+    in
+
+    # Invoke §3306 employment scope for each relationship
+    let res_stu equals
+      (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+        -- employment_relationship_event: er_stu
+        -- calendar_year: 2024
+        -- wage_payment_events: []
+        -- employment_relationship_events: all_employment_relationship_events
+        -- student_enrollment_events: [ enroll_stu; enroll_nurse ]
+        -- hospital_patient_events: [ patient_status ]
+        -- immigration_admission_events: []
+        -- parenthood_events: []
+        -- birth_events: []
+        -- marriage_events: [ marriage1 ]
+      }).main_output
+    in
+    let res_spouse equals
+      (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+        -- employment_relationship_event: er_spouse
+        -- calendar_year: 2024
+        -- wage_payment_events: []
+        -- employment_relationship_events: all_employment_relationship_events
+        -- student_enrollment_events: [ enroll_stu; enroll_nurse ]
+        -- hospital_patient_events: [ patient_status ]
+        -- immigration_admission_events: []
+        -- parenthood_events: []
+        -- birth_events: []
+        -- marriage_events: [ marriage1 ]
+      }).main_output
+    in
+    let res_patient equals
+      (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+        -- employment_relationship_event: er_patient
+        -- calendar_year: 2024
+        -- wage_payment_events: []
+        -- employment_relationship_events: all_employment_relationship_events
+        -- student_enrollment_events: [ enroll_stu; enroll_nurse ]
+        -- hospital_patient_events: [ patient_status ]
+        -- immigration_admission_events: []
+        -- parenthood_events: []
+        -- birth_events: []
+        -- marriage_events: [ marriage1 ]
+      }).main_output
+    in
+    let res_nurse equals
+      (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+        -- employment_relationship_event: er_nurse
+        -- calendar_year: 2024
+        -- wage_payment_events: []
+        -- employment_relationship_events: all_employment_relationship_events
+        -- student_enrollment_events: [ enroll_stu; enroll_nurse ]
+        -- hospital_patient_events: [ patient_status ]
+        -- immigration_admission_events: []
+        -- parenthood_events: []
+        -- birth_events: []
+        -- marriage_events: [ marriage1 ]
+      }).main_output
+    in
+
+    # Build tuple in the order of values_to_be_computed
+    (
+      # §3306(c)(10)(A)(i): student employed by school, enrolled and regularly attending
+      res_stu.is_excluded_student_service,
+      # §3306(c)(10)(A)(ii): spouse of such a student employed by the school
+      res_spouse.is_excluded_student_service,
+      # §3306(c)(10)(B): hospital patient employed by the hospital
+      res_patient.is_excluded_hospital_patient_service,
+      # §3306(c)(13): student nurse (enrolled and regularly attending nurses' training school) employed by hospital
+      res_nurse.is_excluded_student_nurse
+    )
+
+  # Assertions - only reference the scope output (case_results)
+
+  # Tests §3306(c)(10)(A)(i): student exclusion
+  assertion (case_results.1 = true)
+
+  # Tests §3306(c)(10)(A)(ii): spouse of student exclusion
+  assertion (case_results.2 = true)
+
+  # Tests §3306(c)(10)(B): hospital patient exclusion
+  assertion (case_results.3 = true)
+
+  # Tests §3306(c)(13): student nurse exclusion
+  assertion (case_results.4 = true)
+```

@@ -1061,7 +1061,7 @@ let rec translate_expr
         local_vars params0 params
     in
     let f =
-      let acc_var = Var.make "acc" in
+      let acc_var = Var.make "_acc" in
       let acc =
         Expr.make_var acc_var (Untyped { pos = Mark.get (List.hd params0) })
       in
@@ -1135,7 +1135,7 @@ let rec translate_expr
     let param = Expr.make_var param_var emark in
     let collection = detuplify_list opos ["collection_member"] collection in
     let init = Expr.elit (LBool false) emark in
-    let acc_var = Var.make "acc" in
+    let acc_var = Var.make "_acc" in
     let acc = Expr.make_var acc_var emark in
     let f_body =
       let member = rec_helper member in

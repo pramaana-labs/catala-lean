@@ -1,0 +1,106 @@
+> Module Section_3306_scenario_12
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration structure Section3306Scenario12Output:
+  data employment_outside_us_included_under_cB_us_citizen_american_employer content boolean
+  data employment_outside_us_excluded_not_american_employer content boolean
+
+#[test]
+declaration scope Section_3306_scenario_12:
+  output computation content Section3306Scenario12Output
+
+scope Section_3306_scenario_12:
+  # Scenario: §3306(c)(B) - Employment outside the U.S. included if performed by a U.S. citizen as an employee of an American employer; excluded if not an American employer
+  # Tested law refs: §3306(c)(B)
+  # Two employment relationships outside the U.S. in 2024:
+  # - emp1: U.S. citizen for an American employer -> included as "employment"
+  # - emp2: U.S. citizen but NOT an American employer -> excluded (not "employment")
+
+  definition computation equals
+    # Entities
+    let i11 equals IRC.Individual { -- id: 11 -- is_counterfactual: false } in
+    let i12 equals IRC.Individual { -- id: 12 -- is_counterfactual: false } in
+
+    let org12a equals IRC.Organization {
+      -- id: 121
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+    let org12b equals IRC.Organization {
+      -- id: 122
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationship events (outside the United States in 2024)
+    let emp1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 201
+      -- employer: org12a
+      -- employee: i11
+      -- start_date: Date.of_year_month_day of 2024, 3, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.OutsideUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 202
+      -- employer: org12b
+      -- employee: i12
+      -- start_date: Date.of_year_month_day of 2024, 3, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.OutsideUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Compute §3306(c) "employment" determinations for each employment relationship
+    let emp1_result equals
+      (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+        -- employment_relationship_event: emp1
+        -- calendar_year: 2024
+        -- wage_payment_events: []
+        -- employment_relationship_events: [ emp1 ] ++ [ emp2 ]
+        -- student_enrollment_events: []
+        -- hospital_patient_events: []
+        -- immigration_admission_events: []
+        -- parenthood_events: []
+        -- birth_events: []
+        -- marriage_events: []
+      }).main_output in
+
+    let emp2_result equals
+      (output of IRC.EmploymentRelationshipEventSection3306Employment with {
+        -- employment_relationship_event: emp2
+        -- calendar_year: 2024
+        -- wage_payment_events: []
+        -- employment_relationship_events: [ emp1 ] ++ [ emp2 ]
+        -- student_enrollment_events: []
+        -- hospital_patient_events: []
+        -- immigration_admission_events: []
+        -- parenthood_events: []
+        -- birth_events: []
+        -- marriage_events: []
+      }).main_output in
+
+    # Build test output correlating to §3306(c)(B)
+    # - emp1_result.is_employment should be true (included as "employment" under §3306(c)(B))
+    # - emp2_result.is_employment should be false (excluded when not an American employer)
+    Section3306Scenario12Output {
+      -- employment_outside_us_included_under_cB_us_citizen_american_employer: emp1_result.is_employment
+      -- employment_outside_us_excluded_not_american_employer: not emp2_result.is_employment
+    }
+
+  # Assertions:
+  # Correlates with §3306(c)(B): service performed outside the U.S. by a U.S. citizen as an employee of an American employer is "employment"
+  assertion (computation.employment_outside_us_included_under_cB_us_citizen_american_employer = true)
+
+  # Correlates with §3306(c)(B): if not an American employer, service outside the U.S. is excluded (i.e., not "employment")
+  assertion (computation.employment_outside_us_excluded_not_american_employer = true)
+```

@@ -1,0 +1,174 @@
+> Module Tax_case_4
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase4:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase4:
+  # Alice has paid $3200 to Bob for domestic service done from Feb 1st, 2012 to Sep 2nd, 2012, in Baltimore, Maryland, USA. Bob has paid $4500 to Alice for work done from Apr 1st, 2012 to Dec 31st, 2012. Alice takes the standard deduction in 2012.
+
+  # How much tax does Alice have to pay in 2012? $192
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let bob_org equals
+      Sara.Organization {
+        -- id: 1
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let alice_org equals
+      Sara.Organization {
+        -- id: 2
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let bob_domestic_employment equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 1
+        -- employer: bob_org
+        -- employee: alice
+        -- start_date: Date.of_year_month_day of 2012, 2, 1
+        -- end_date: Date.of_year_month_day of 2012, 9, 2
+        -- employment_category: Sara.EmploymentCategory.DomesticService
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let alice_employment equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 2
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2012, 4, 1
+        -- end_date: Date.of_year_month_day of 2012, 12, 31
+        -- employment_category: Sara.EmploymentCategory.General
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_pays_alice equals
+      Sara.WagePaymentEvent {
+        -- id: 1
+        -- employer: bob_org
+        -- employee: alice
+        -- payment_date: Date.of_year_month_day of 2012, 9, 2
+        -- amount: $4500
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let alice_pays_bob equals
+      Sara.WagePaymentEvent {
+        -- id: 2
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2012, 9, 2
+        -- amount: $3200
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let alice_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2012
+        -- has_income: true
+        -- earned_income: $4500
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2012
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let single_variant equals
+      Sara.SingleVariant {
+        -- taxpayer: alice
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2012
+        -- details: Sara.FilingStatusVariant.Single content single_variant
+      } in
+    let employer_domestic_service_variant equals
+      Sara.EmployerDomesticServiceVariant {
+        -- employer: alice_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 0
+        -- tax_year: 2012
+        -- details: Sara.EmployerVariant.DomesticServiceEmployer content employer_domestic_service_variant
+      } in
+    let income_events_list equals [ alice_income ] in
+    let employment_events_list equals [ bob_domestic_employment ] ++ [ alice_employment ] in
+    let wage_payment_events_list equals [ bob_pays_alice ] ++ [ alice_pays_bob ] in
+    let adjusted_gross_income equals $4500 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ]
+      -- organizations: [ bob_org ] ++ [ alice_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: employment_events_list
+      -- wage_payment_events: wage_payment_events_list
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of (computation.tax) + round of (computation.employer_unemployment_excise_tax_result.excise_tax) = $192)
+```

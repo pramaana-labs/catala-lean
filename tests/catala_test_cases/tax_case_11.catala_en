@@ -1,0 +1,208 @@
+> Module Tax_case_11
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase11:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase11:
+  # Charlie is Bob's father since April 15th, 2014, and Bob has lived at Charlie's place since then. Alice is Charlie's sister since October 12th, 1992. Charlie's gross income in 2015 was $52650. In 2015, Alice's gross income was $2312. Alice takes the standard deduction in 2015.
+
+  # How much tax does Alice have to pay in 2015? $0
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let charlie equals
+      Sara.Individual {
+        -- id: 3
+        -- is_counterfactual: false
+      } in
+    let charlie_parenthood equals
+      Sara.ParenthoodEvent {
+        -- id: 1
+        -- parent: charlie
+        -- child: bob
+        -- start_date: Date.of_year_month_day of 2014, 4, 15
+        -- parent_type: Sara.ParentType.Biological
+        -- is_counterfactual: false
+      } in
+    let charlie_family_relationship_bob equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 1
+        -- person: charlie
+        -- relative: bob
+        -- start_date: Date.of_year_month_day of 2014, 4, 15
+        -- relationship_type: Sara.FamilyRelationshipType.Child
+        -- is_counterfactual: false
+      } in
+    let bob_family_relationship_charlie equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 2
+        -- person: bob
+        -- relative: charlie
+        -- start_date: Date.of_year_month_day of 2014, 4, 15
+        -- relationship_type: Sara.FamilyRelationshipType.Father
+        -- is_counterfactual: false
+      } in
+    let alice_family_relationship_charlie equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 3
+        -- person: alice
+        -- relative: charlie
+        -- start_date: Date.of_year_month_day of 1992, 10, 12
+        -- relationship_type: Sara.FamilyRelationshipType.Brother
+        -- is_counterfactual: false
+      } in
+    let charlie_family_relationship_alice equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 4
+        -- person: charlie
+        -- relative: alice
+        -- start_date: Date.of_year_month_day of 1992, 10, 12
+        -- relationship_type: Sara.FamilyRelationshipType.Sister
+        -- is_counterfactual: false
+      } in
+    let alice_family_relationship_bob equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 5
+        -- person: alice
+        -- relative: bob
+        -- start_date: Date.of_year_month_day of 2014, 4, 15
+        -- relationship_type: Sara.FamilyRelationshipType.NieceOrNephew
+        -- is_counterfactual: false
+      } in
+    let bob_family_relationship_alice equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 6
+        -- person: bob
+        -- relative: alice
+        -- start_date: Date.of_year_month_day of 2014, 4, 15
+        -- relationship_type: Sara.FamilyRelationshipType.UncleOrAunt
+        -- is_counterfactual: false
+      } in
+    let household equals
+      Sara.Household {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let charlie_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 1
+        -- individual: charlie
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- end_date: Date.of_year_month_day of 2015, 12, 31
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let bob_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 2
+        -- individual: bob
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2014, 4, 15
+        -- end_date: Date.of_year_month_day of 2015, 12, 31
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let alice_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2015
+        -- has_income: true
+        -- earned_income: $2312
+        -- is_counterfactual: false
+      } in
+    let charlie_income equals
+      Sara.IncomeEvent {
+        -- id: 2
+        -- individual: charlie
+        -- tax_year: 2015
+        -- has_income: true
+        -- earned_income: $52650
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2015
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let single_variant equals
+      Sara.SingleVariant {
+        -- taxpayer: alice
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2015
+        -- details: Sara.FilingStatusVariant.Single content single_variant
+      } in
+    let dummy_org equals
+      Sara.Organization {
+        -- id: 0
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let employer_general_variant equals
+      Sara.EmployerGeneralVariant {
+        -- employer: dummy_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 0
+        -- tax_year: 2015
+        -- details: Sara.EmployerVariant.GeneralEmployer content employer_general_variant
+      } in
+    let income_events_list equals [ alice_income ] ++ [ charlie_income ] in
+    let adjusted_gross_income equals $2312 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ] ++ [ charlie ]
+      -- organizations: [ dummy_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: [ charlie_residence ] ++ [ bob_residence ]
+      -- household_maintenance_events: []
+      -- parenthood_events: [ charlie_parenthood ]
+      -- family_relationship_events: [ charlie_family_relationship_bob ] ++ [ bob_family_relationship_charlie ] ++ [ alice_family_relationship_charlie ] ++ [ charlie_family_relationship_alice ] ++ [ alice_family_relationship_bob ] ++ [ bob_family_relationship_alice ]
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: []
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of computation.tax = $0)
+```

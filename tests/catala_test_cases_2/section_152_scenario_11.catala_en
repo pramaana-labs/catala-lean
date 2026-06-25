@@ -1,0 +1,208 @@
+> Module Section_152_scenario_11
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_11:
+  # We return a tuple:
+  # (1) t11's §152 dependents result,
+  # (2) c11's §152 dependents result,
+  # (3) the §152 qualifying child result for c11 relative to t11
+  output results
+    content (
+      IRC.IndividualSection152DependentsOutput,
+      IRC.IndividualSection152DependentsOutput,
+      IRC.IndividualSection152QualifyingChildOutput
+    )
+
+scope Section_152_scenario_11:
+  # Scenario: §152(b)(1) dependents ineligible; child c11 is a dependent (qualifying child) of taxpayer t11.
+  # Tested law refs: §152(a), §152(c)(1), §152(c)(2)(A), §152(c)(1)(B), §152(c)(3), §152(b)(1)
+
+  definition results equals
+    # Entities
+    let t11 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c11 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let d11 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h11 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Births
+    let b_t11 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t11
+      -- birth_date: Date.of_year_month_day of 1984, 4, 4
+      -- is_counterfactual: false
+    } in
+    let b_c11 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: c11
+      -- birth_date: Date.of_year_month_day of 2010, 10, 10
+      -- is_counterfactual: false
+    } in
+    let b_d11 equals IRC.BirthEvent {
+      -- id: 3
+      -- individual: d11
+      -- birth_date: Date.of_year_month_day of 2018, 8, 8
+      -- is_counterfactual: false
+    } in
+
+    # Residence: t11 and c11 share principal place of abode > half of 2023; d11 resides the full year at h11
+    let r_t11 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t11
+      -- household: h11
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let r_c11 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c11
+      -- household: h11
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 11, 1
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let r_d11 equals IRC.ResidencePeriodEvent {
+      -- id: 3
+      -- individual: d11
+      -- household: h11
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood events
+    let p_t11_c11 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: t11
+      -- child: c11
+      -- start_date: Date.of_year_month_day of 2010, 10, 10
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+    let p_c11_d11 equals IRC.ParenthoodEvent {
+      -- id: 2
+      -- parent: c11
+      -- child: d11
+      -- start_date: Date.of_year_month_day of 2018, 8, 8
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    # Family relationships to support §152(c)(2)(A) ("child of the taxpayer")
+    let fr_t11_c11 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t11
+      -- relative: c11
+      -- start_date: Date.of_year_month_day of 2010, 10, 10
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+    let fr_c11_d11 equals IRC.FamilyRelationshipEvent {
+      -- id: 2
+      -- person: c11
+      -- relative: d11
+      -- start_date: Date.of_year_month_day of 2018, 8, 8
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    # Income (for completeness; c11 has no income, aligns with scenario)
+    let inc_c11_2023 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: c11
+      -- tax_year: 2023
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+
+    # Tax return filing event for c11: not a joint return; lists d11 as QC/dependent
+    let tr_c11_2023 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: c11
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: [ d11 ]
+      -- dependents: [ d11 ]
+      -- is_counterfactual: false
+    } in
+
+    # Tax return filing event for t11: claims c11 as qualifying child/dependent (needed to trigger §152(b)(1) for c11)
+    let tr_t11_2023 equals IRC.TaxReturnEvent {
+      -- id: 2
+      -- individual: t11
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: [ c11 ]
+      -- dependents: [ c11 ]
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152 dependents for t11 (with c11 as candidate)
+    let dep_t11 equals
+      (output of IRC.IndividualSection152Dependents with {
+        -- taxpayer: t11
+        -- tax_year: 2023
+        -- individuals: [ c11 ]
+        -- family_relationship_events: [ fr_t11_c11 ] ++ [ fr_c11_d11 ]
+        -- birth_events: [ b_t11 ] ++ [ b_c11 ] ++ [ b_d11 ]
+        -- residence_period_events: [ r_t11 ] ++ [ r_c11 ] ++ [ r_d11 ]
+        -- tax_return_events: [ tr_t11_2023 ] ++ [ tr_c11_2023 ]
+        -- income_events: [ inc_c11_2023 ]
+        -- marriage_events: []
+      }).main_output in
+
+    # Compute §152 dependents for c11 (with d11 as candidate)
+    # This will reflect §152(b)(1): c11 is a dependent in 2023 → treated as having no dependents for their 2023 tax year.
+    let dep_c11 equals
+      (output of IRC.IndividualSection152Dependents with {
+        -- taxpayer: c11
+        -- tax_year: 2023
+        -- individuals: [ d11 ]
+        -- family_relationship_events: [ fr_t11_c11 ] ++ [ fr_c11_d11 ]
+        -- birth_events: [ b_t11 ] ++ [ b_c11 ] ++ [ b_d11 ]
+        -- residence_period_events: [ r_t11 ] ++ [ r_c11 ] ++ [ r_d11 ]
+        -- tax_return_events: [ tr_t11_2023 ] ++ [ tr_c11_2023 ]
+        -- income_events: [ inc_c11_2023 ]
+        -- marriage_events: []
+      }).main_output in
+
+    # Compute §152 qualifying child test for c11 relative to t11
+    let qc_c11_of_t11 equals
+      (output of IRC.IndividualSection152QualifyingChild with {
+        -- individual: c11
+        -- taxpayer: t11
+        -- tax_year: 2023
+        -- family_relationship_events: [ fr_t11_c11 ] ++ [ fr_c11_d11 ]
+        -- birth_events: [ b_t11 ] ++ [ b_c11 ] ++ [ b_d11 ]
+        -- residence_period_events: [ r_t11 ] ++ [ r_c11 ] ++ [ r_d11 ]
+        -- tax_return_events: [ tr_c11_2023 ]
+      }).main_output in
+
+    # Return tuple of outputs for assertions
+    (dep_t11, dep_c11, qc_c11_of_t11)
+
+  # Assertions (only reference the computed output "results")
+
+  # Assert §152(c)(1): c11 is a qualifying child of t11 for 2023
+  # Tests relationship (§152(c)(2)(A)), same abode > half-year (§152(c)(1)(B)), age (§152(c)(3)), and joint return test (§152(c)(1)(E)).
+  assertion (results.3.is_qualifying_child = true)
+
+  # Assert §152(a): c11 is a dependent of t11 (appears in dependents after applying §152(b)(1) and §152(b)(2) filters)
+  assertion (results.1.dependents_after_152b2 contains results.3.individual)
+
+  # Assert §152(b)(1): Because c11 is a dependent in 2023, c11 is treated as having no dependents for any taxable year of c11 beginning in 2023.
+  # We expect the dependents list for c11 after §152(b)(1) to be empty.
+  assertion (number of results.2.dependents_after_152b1 = 0)
+```

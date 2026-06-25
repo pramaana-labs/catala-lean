@@ -1,0 +1,103 @@
+> Module Section_152_scenario_14
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_14:
+  output qc_result content IRC.IndividualSection152QualifyingChildOutput
+
+scope Section_152_scenario_14:
+  # Scenario: Principal place of abode borderline per §152(c)(1)(B)
+  # Tested law refs: §152(c)(1)(B), §152(c)(1)
+
+  definition qc_result equals
+    let t14 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c14 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h14 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth events
+    let birth_t14 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t14
+      -- birth_date: Date.of_year_month_day of 1981, 1, 1
+      -- is_counterfactual: false
+    } in
+    let birth_c14 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: c14
+      -- birth_date: Date.of_year_month_day of 2012, 6, 6
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods (tax year 2023)
+    let res_t14 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t14
+      -- household: h14
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    # Child NOT a member / not principal place of abode from Jan 1 to Jul 1
+    let res_c14_half1 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c14
+      -- household: h14
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 7, 1
+      -- is_member_of_household: false
+      -- is_principal_place_of_abode: false
+      -- is_counterfactual: false
+    } in
+    # Child IS a member / principal place of abode from Jul 2 to Dec 31 (182 days = exactly half-year by days-between)
+    let res_c14_half2 equals IRC.ResidencePeriodEvent {
+      -- id: 3
+      -- individual: c14
+      -- household: h14
+      -- start_date: Date.of_year_month_day of 2023, 7, 2
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Child did not file a joint return (§152(c)(1)(E))
+    let taxret_c14_2023 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: c14
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Call §152 Qualifying Child scope
+    (output of IRC.IndividualSection152QualifyingChild with {
+      -- individual: c14
+      -- taxpayer: t14
+      -- tax_year: 2023
+      -- family_relationship_events: []
+      -- birth_events: [ birth_t14 ] ++ [ birth_c14 ]
+      -- residence_period_events: [ res_t14 ] ++ [ res_c14_half1 ] ++ [ res_c14_half2 ]
+      -- tax_return_events: [ taxret_c14_2023 ]
+
+      # Context overrides to reflect scenario facts for non-abode conditions:
+      # Relationship: child of taxpayer (satisfies §152(c)(1)(A))
+      -- relationship_requirement_met: true
+      # Joint return exception does not apply (satisfies §152(c)(1)(E))
+      -- joint_return_exception_applies: false
+      # NOTE: principal_place_of_abode_requirement_met is NOT overridden here;
+      # it is determined from the residence periods and must fail at exactly half-year.
+    }).main_output
+
+  # Assertions - ONLY reference the scope output:
+  # §152(c)(1)(B): same principal place of abode for more than one-half of the taxable year -> false at exactly half-year
+  assertion (qc_result.has_same_principal_place_of_abode_152_c_1_B = false)
+
+  # §152(c)(1): overall qualifying child status is false because (B) is not met
+  assertion (qc_result.is_qualifying_child = false)
+```

@@ -1,0 +1,179 @@
+> Module Section_152_scenario_10
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_10:
+  output results content (IRC.IndividualSection152DependentsOutput, IRC.IndividualSection152QualifyingRelativeOutput)
+
+scope Section_152_scenario_10:
+  # Scenario: Qualifying relative disqualified because the individual is a qualifying child of another taxpayer.
+  # Tested law refs: §152(c)(1), §152(c)(2)(A), §152(c)(1)(B), §152(c)(3), §152(d)(2)(E), §152(d)(1)(B), §152(d)(1)(D), §152(d)(1)
+
+  definition results equals
+    # Entities
+    let t10 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let ot10 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let n10 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h10_t equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+    let h10_ot equals IRC.Household { -- id: 2 -- is_counterfactual: false } in
+
+    # Birth events
+    let birth_t10 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t10
+      -- birth_date: Date.of_year_month_day of 1985, 1, 1
+      -- is_counterfactual: false
+    } in
+    let birth_ot10 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: ot10
+      -- birth_date: Date.of_year_month_day of 1980, 1, 1
+      -- is_counterfactual: false
+    } in
+    let birth_n10 equals IRC.BirthEvent {
+      -- id: 3
+      -- individual: n10
+      -- birth_date: Date.of_year_month_day of 2008, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods (principal abode and household membership)
+    let res_ot10 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: ot10
+      -- household: h10_ot
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_n10 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: n10
+      -- household: h10_ot
+      -- start_date: Date.of_year_month_day of 2023, 3, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_t10 equals IRC.ResidencePeriodEvent {
+      -- id: 3
+      -- individual: t10
+      -- household: h10_t
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood (ot10 is biological parent of n10) — not used by the §152 scopes but included for completeness
+    let parent_ot10_n10 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: ot10
+      -- child: n10
+      -- start_date: Date.of_year_month_day of 2008, 1, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    # Family relationships for §152:
+    # - t10 is aunt/uncle of n10 -> niece/nephew (for §152(d)(2)(E))
+    let rel_t10_n10 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t10
+      -- relative: n10
+      -- start_date: Date.of_year_month_day of 2008, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.NieceOrNephew
+      -- is_counterfactual: false
+    } in
+    # - ot10 is parent of n10 -> child (for §152(c)(2)(A) relationship in QC test)
+    let rel_ot10_n10_child equals IRC.FamilyRelationshipEvent {
+      -- id: 2
+      -- person: ot10
+      -- relative: n10
+      -- start_date: Date.of_year_month_day of 2008, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    # Income and tax return events for n10 (no income; no joint return)
+    let inc_n10_2023 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: n10
+      -- tax_year: 2023
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+    let tre_n10_2023 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: n10
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152 dependents for ot10 to establish that n10 is a qualifying child of ot10 in 2023
+    let dep_ot10 equals
+      (output of IRC.IndividualSection152Dependents with {
+        -- taxpayer: ot10
+        -- tax_year: 2023
+        -- individuals: [ n10 ]
+        -- family_relationship_events: [ rel_t10_n10 ] ++ [ rel_ot10_n10_child ]
+        -- birth_events: [ birth_t10 ] ++ [ birth_ot10 ] ++ [ birth_n10 ]
+        -- residence_period_events: [ res_ot10 ] ++ [ res_n10 ] ++ [ res_t10 ]
+        -- tax_return_events: [ tre_n10_2023 ]
+        -- income_events: [ inc_n10_2023 ]
+        -- marriage_events: []
+      }).main_output
+    in
+
+    # Compute §152(d) qualifying relative test for n10 with taxpayer t10, using QC results from ot10 to apply §152(d)(1)(D)
+    let qr_t10 equals
+      (output of IRC.IndividualSection152QualifyingRelative with {
+        -- individual: n10
+        -- taxpayer: t10
+        -- tax_year: 2023
+        -- family_relationship_events: [ rel_t10_n10 ]
+        -- residence_period_events: [ res_ot10 ] ++ [ res_n10 ] ++ [ res_t10 ]
+        -- qualifying_child_results: dep_ot10.qualifying_children
+        -- tax_return_events: [ tre_n10_2023 ]
+        -- income_events: [ inc_n10_2023 ]
+        -- marriage_events: []
+      }).main_output
+    in
+
+    # Return both results as a tuple: (dependents for ot10, qualifying relative result for t10)
+    (dep_ot10, qr_t10)
+
+  # Assertions - ONLY check the output from "results" per critical rules.
+
+  # §152(c)(1), (2)(A), (1)(B), (3), (1)(E): n10 is a qualifying child of ot10 in 2023
+  assertion (
+    let dep_ot10 equals results.1 in
+    exists qc among dep_ot10.qualifying_children
+      such that qc.is_qualifying_child
+        and qc.individual.id = 3
+        and qc.taxpayer.id = 2
+  )
+
+  # §152(d)(2)(E): Relationship (niece/nephew) for QR with taxpayer t10 is met
+  assertion (results.2.bears_relationship_152_d_1_A = true)
+
+  # §152(d)(1)(B): n10 has no income for 2023
+  assertion (results.2.has_no_income_152_d_1_B = true)
+
+  # §152(d)(1)(D): n10 IS a qualifying child of another taxpayer (ot10) -> "not QC of any taxpayer" is false
+  assertion (results.2.is_not_qualifying_child_152_d_1_D = false)
+
+  # §152(d)(1): Because (D) fails, n10 is not a qualifying relative of t10
+  assertion (results.2.is_qualifying_relative = false)
+```

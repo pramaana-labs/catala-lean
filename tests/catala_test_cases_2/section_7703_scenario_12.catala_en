@@ -1,0 +1,128 @@
+> Module Section_7703_scenario_12
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_7703_scenario_12:
+  output person_status content IRC.IndividualSection7703MaritalStatusOutput
+
+scope Section_7703_scenario_12:
+  # Scenario: Individual legally separated by divorce before year-end but attempts to claim §7703(b) status.
+  # Tested law refs: §7703(a)(2), §7703(b)
+  # Rationale:
+  # - §7703(a)(2): An individual legally separated under a decree of divorce is not considered married.
+  # - §7703(b): Applies only to an individual "who is married (within the meaning of subsection (a))".
+  #   Since §7703(a)(2) makes the individual not married at year-end, the §7703(b) precondition fails.
+
+  definition person_status equals
+    # Entities
+    let p1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let p2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let c1 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h1 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Marriage and divorce/legal separation
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: p1
+      -- spouse2: p2
+      -- marriage_date: Date.of_year_month_day of 2015, 1, 1
+      -- is_counterfactual: false
+    } in
+    let divorce1 equals IRC.DivorceOrLegalSeparationEvent {
+      -- id: 1
+      -- person1: p1
+      -- person2: p2
+      -- decree_date: Date.of_year_month_day of 2023, 2, 1
+      -- decree_type: IRC.DecreeType.Divorce
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood
+    let parenthood1 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: p1
+      -- child: c1
+      -- start_date: Date.of_year_month_day of 2010, 1, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods (home and child's abode)
+    let res_p1 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: p1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_c1 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 9, 30
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Household maintenance (over one-half furnished)
+    let hm_p1 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: p1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- cost_furnished_percentage: 0.6
+      -- is_counterfactual: false
+    } in
+
+    # Tax return (Married Filing Separately for tax year 2023)
+    let mfs_details equals IRC.MarriedFilingSeparateVariant {
+      -- taxpayer: p1
+      -- spouse: p2
+      -- itemization_election: false
+      -- spouse_itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.MarriedFilingSeparate content mfs_details
+    } in
+
+    # Call §7703 marital status scope.
+    # Note: For §7703(b)(1)'s §151 dependency, we provide empty qualifying_children list
+    # and empty individuals_entitled_to_exemptions_under_151 to focus the test on the §7703(a)(2) failure.
+    (output of IRC.IndividualSection7703MaritalStatus with {
+      -- individual: p1
+      -- tax_year: 2023
+      -- marriage_events: [ marriage1 ]
+      -- divorce_or_legal_separation_events: [ divorce1 ]
+      -- death_events: []
+      -- individual_tax_return: individual_tax_return
+      -- residence_period_events: [ res_p1 ] ++ [ res_c1 ]
+      -- household_maintenance_events: [ hm_p1 ]
+      -- qualifying_children: []  # not asserting §152 specifics in this test
+      -- individuals_entitled_to_exemptions_under_151: []  # not asserting §151 entitlement here
+    }).main_output
+
+  # Assertions - Only reference the computed scope output (person_status)
+  # 1) §7703(a)(2): Legally separated by divorce ⇒ not married at year-end
+  assertion (person_status.is_married_7703_a_1 = false)
+
+  # 2) §7703(b): Applies only if "married (within the meaning of subsection (a))"
+  #    Since §7703(a)(2) makes filer not married, the §7703(b) status does not apply.
+  #    We map "meets_7703b_conditions" to the effective §7703(b) outcome field.
+  assertion (person_status.considered_not_married_7703_b = false)
+
+  # 3) "is_not_considered_married_under_7703b" likewise corresponds to the same §7703(b) outcome.
+  assertion (person_status.considered_not_married_7703_b = false)
+```

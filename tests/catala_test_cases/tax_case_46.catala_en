@@ -1,0 +1,161 @@
+> Module Tax_case_46
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase46:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase46:
+  # Alice has paid $3200 to Bob for agricultural labor done from Feb 1st, 2020 to Sep 2nd, 2020. Alice paid Bob with eggs, grapes and hay. Alice has been married since 1999. Alice files a joint return with her spouse for 2020. Alice's and her spouse's gross income for the year 2020 is $103272. Alice takes the standard deduction.
+
+  # How much tax does Alice have to pay in 2020? $17399
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let spouse equals
+      Sara.Individual {
+        -- id: 3
+        -- is_counterfactual: false
+      } in
+    let alice_org equals
+      Sara.Organization {
+        -- id: 1
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let marriage equals
+      Sara.MarriageEvent {
+        -- id: 1
+        -- spouse1: alice
+        -- spouse2: spouse
+        -- marriage_date: Date.of_year_month_day of 1999, 12, 31
+        -- is_counterfactual: false
+      } in
+    let bob_employment equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2020, 2, 1
+        -- end_date: Date.of_year_month_day of 2020, 9, 2
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let alice_wage_payment equals
+      Sara.WagePaymentEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2020, 9, 2
+        -- amount: $3200
+        -- payment_medium: Sara.PaymentMedium.NonCash
+        -- payment_reason: Sara.PaymentReason.AgriculturalLaborNonCash
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let alice_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2020
+        -- has_income: true
+        -- earned_income: $103272
+        -- is_counterfactual: false
+      } in
+    let alice_tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2020
+        -- filed_joint_return: true
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let spouse_tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 2
+        -- individual: spouse
+        -- tax_year: 2020
+        -- filed_joint_return: true
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let joint_return_variant equals
+      Sara.JointReturnVariant {
+        -- taxpayer: alice
+        -- spouse: spouse
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2020
+        -- details: Sara.FilingStatusVariant.JointReturn content joint_return_variant
+      } in
+    let employer_agricultural_variant equals
+      Sara.EmployerAgriculturalLaborVariant {
+        -- employer: alice_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 1
+        -- tax_year: 2020
+        -- details: Sara.EmployerVariant.AgriculturalEmployer content employer_agricultural_variant
+      } in
+    let income_events_list equals [ alice_income ] in
+    let adjusted_gross_income equals $103272 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ] ++ [ spouse ]
+      -- organizations: [ alice_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: [ marriage ]
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ alice_tax_return_event ] ++ [ spouse_tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: [ bob_employment ]
+      -- wage_payment_events: [ alice_wage_payment ]
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of (computation.tax) + round of (computation.employer_unemployment_excise_tax_result.excise_tax) = $17399)
+```
+

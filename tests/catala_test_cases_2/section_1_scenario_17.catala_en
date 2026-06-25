@@ -1,0 +1,100 @@
+> Module Section_1_scenario_17
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_1_scenario_17:
+  output tax_result content IRC.IndividualTaxReturnSection1TaxOutput
+
+scope Section_1_scenario_17:
+  # Scenario: Married individual filing separately with taxable income exactly $18,450.
+  # Tested law refs: §1(d) "Married individuals filing separate returns"
+  # Boundary at top of first §1(d) bracket: Not over $18,450 → 15% of taxable income = $2,767.50.
+
+  definition tax_result equals
+    # Individuals
+    let mfs1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let mfs2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Marriage event (married during all of tax year 2023)
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: mfs1
+      -- spouse2: mfs2
+      -- marriage_date: Date.of_year_month_day of 2017, 8, 1
+      -- is_counterfactual: false
+    } in
+
+    # Income event (not directly used by §1 computation here, but included from scenario)
+    let inc1 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: mfs1
+      -- tax_year: 2023
+      -- has_income: true
+      -- earned_income: $18450
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Married Filing Separate (§1(d))
+    let mfs_variant equals IRC.MarriedFilingSeparateVariant {
+      -- taxpayer: mfs1
+      -- spouse: mfs2
+      -- itemization_election: false
+      -- spouse_itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.MarriedFilingSeparate content mfs_variant
+    } in
+
+    # Temporary marital status output for §7703 used as dependency input for §1
+    let taxpayer_marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: mfs1
+        -- tax_year: 2023
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2023, 12, 31
+        -- is_married_7703_a_1: true
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: true
+      } in
+
+    # Compute §1 tax for taxable income exactly at the boundary $18,450 under §1(d)
+    # We provide the context amounts directly according to §1(d) schedule:
+    # - Not over $18,450 → 15% of taxable income = $2,767.50
+    (output of IRC.IndividualTaxReturnSection1Tax with {
+      -- individual_tax_return: individual_tax_return
+      -- taxable_income: $18450
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+
+      # Only §1(d) applies (Married Filing Separate). First bracket "Not over $18,450".
+      -- tax_1_a_1: $0          # §1(a)(1) MFJ not applicable
+      -- tax_1_a_2: $0          # §1(a)(2) Surviving Spouse not applicable
+      -- tax_1_b: $0            # §1(b) HOH not applicable
+      -- tax_1_c: $0            # §1(c) Single not applicable
+      -- tax_1_d: $2767.5       # §1(d) MFS: 15% of $18,450 = $2,767.50
+      -- tax: $2767.5
+    }).main_output
+
+  # Assertions - Only reference the previously computed scope output (tax_result)
+
+  # §1(d): tax amount at "Not over $18,450" boundary equals 15% of $18,450 = $2,767.50
+  assertion (tax_result.tax = $2767.5)
+
+  # §1(d): bracket applied is the first bracket ("Not over $18,450") for MFS, so tax_1_d equals $2,767.50
+  # and no other filing-status tax bucket is populated.
+  assertion (tax_result.tax_1_d = $2767.5)
+  assertion (tax_result.tax_1_a_1 = $0 and tax_result.tax_1_a_2 = $0 and tax_result.tax_1_b = $0 and tax_result.tax_1_c = $0)
+
+  # Filing status applied: MarriedFilingSeparate under §1(d)
+  assertion (tax_result.individual_tax_return.details with pattern IRC.FilingStatusVariant.MarriedFilingSeparate)
+```

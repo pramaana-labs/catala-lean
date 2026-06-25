@@ -1,0 +1,77 @@
+> Module Section_68_scenario_3
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_68_scenario_3:
+  output itemized content IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput
+
+scope Section_68_scenario_3:
+  # Scenario: Single filer in 2020, AGI $500,000, §68(f) non-application window
+  # Tested law refs: §68(b)(1)(C), §68(f)
+  # Assumption from scenario: Adjusted gross income equals earned income ($500,000)
+
+  definition itemized equals
+    let i5 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    # Tax return: Single, tax year 2020, itemizing
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: i5
+      -- itemization_election: true
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2020
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Marital status for §7703: unmarried for tax purposes
+    let marital_status_i5 equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: i5
+      -- tax_year: 2020
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2020, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Inputs to §68: AGI and itemized deductions
+    let agi equals $500000 in
+    let itemized_deductions equals $100000 in
+
+    # Compute §68 outcome (applicable amount, reductions, §68(f) inapplicability)
+    (output of IRC.IndividualTaxReturnSection68ItemizedDeductions with {
+      -- individual_tax_return: individual_tax_return
+      -- adjusted_gross_income: agi
+      -- itemized_deductions: itemized_deductions
+      -- taxpayer_marital_status: marital_status_i5
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+    }).main_output
+
+  # Assertions
+
+  # §68(b)(1)(C): Applicable amount for an individual who is not married and not a surviving spouse or head of household is $250,000
+  assertion (itemized.applicable_amount_68_b_1 = $250000)
+
+  # §68(f): Section does not apply for tax years beginning after 12/31/2017 and before 01/01/2026 (2020 in window)
+  # Scenario value: section_68_applies_for_tax_year = false
+  assertion ((not itemized.section_not_applicable_68_f) = false)
+
+  # AGI exceeds applicable amount (500,000 > 250,000) — supports scenario value agi_exceeds_applicable_amount = true
+  assertion ($500000 > itemized.applicable_amount_68_b_1)
+
+  # AGI excess amount equals $250,000 (500,000 - applicable amount 250,000) — supports scenario value agi_excess_amount = 250,000
+  assertion (($500000 - itemized.applicable_amount_68_b_1) = $250000)
+
+  # Because §68(f) applies, no reduction applies: reduction amount under §68(a) equals $0
+  # Scenario value: itemized_deductions_reduction_applies = false
+  assertion (itemized.reduction_amount_68_a = $0)
+```

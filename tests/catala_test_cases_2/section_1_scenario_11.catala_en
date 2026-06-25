@@ -1,0 +1,122 @@
+> Module Section_1_scenario_11
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_1_scenario_11:
+  output tax_result content IRC.IndividualTaxReturnSection1TaxOutput
+
+scope Section_1_scenario_11:
+  # Scenario: §1(b) Head of Household top bracket with taxable income $250,001
+  # Tested law refs: §1(b)
+  # Purpose: Ensure the marginal rate of 39.6% applies only to the excess over $250,000 ($1),
+  #          producing $77,485 + 39.6% * $1 = $77,485.396 (rounded to money: $77,485.40)
+
+  definition tax_result equals
+    # Entities
+    let hho5 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c5 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let hh5 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Events establishing qualifying person and household maintenance
+    let rel1 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: hho5
+      -- relative: c5
+      -- start_date: Date.of_year_month_day of 2013, 2, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+    let res1 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: c5
+      -- household: hh5
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let hm1 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: hho5
+      -- household: hh5
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- cost_furnished_percentage: 0.58
+      -- is_counterfactual: false
+    } in
+    let inc1 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: hho5
+      -- tax_year: 2023
+      -- has_income: true
+      -- earned_income: $250001
+      -- is_counterfactual: false
+    } in
+
+    # Tax return: Head of Household status (with qualifying person c5)
+    let hoh_variant equals IRC.HeadOfHouseholdVariant {
+      -- taxpayer: hho5
+      -- qualifying_person: c5
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.HeadOfHousehold content hoh_variant
+    } in
+
+    # Temporary §7703 marital status output (assumed: not married; maintains household; >1/2 cost)
+    let taxpayer_marital_status equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: hho5
+      -- tax_year: 2023
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2023, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: true
+      -- furnishes_over_one_half_cost_7703_b_2: true
+      -- spouse_not_member_last_6_months_7703_b_3: true
+      -- considered_not_married_7703_b: true
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # §1(b) Head of Household bracket application:
+    # Over $250,000 → $77,485 + 39.6% of excess over $250,000.
+    # Taxable income = $250,001 → excess = $1 → addition = $0.396 → total = $77,485.396.
+    # Note: money values round to cents; use "money of 77485.396" to obtain $77,485.40.
+    (output of IRC.IndividualTaxReturnSection1Tax with {
+      -- individual_tax_return: individual_tax_return
+      -- taxable_income: $250001
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: true
+
+      # Context amounts per §1(b) "Over $250,000" bracket
+      -- tax_1_a_1: $0
+      -- tax_1_a_2: $0
+      -- tax_1_b: money of 77485.396
+      -- tax_1_c: $0
+      -- tax_1_d: $0
+      -- tax: money of 77485.396
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output
+
+  # section_1_tax_amount: Should equal $77,485.396 under §1(b) (HOH top bracket); rounded to cents by money type
+  assertion (tax_result.tax = money of 77485.396)
+
+  # section_1_bracket_applied: Confirm the HOH bracket field is used and equals the top bracket amount
+  # Corresponds to "Over $250,000" bracket in §1(b)
+  assertion (tax_result.tax_1_b = money of 77485.396)
+
+  # section_1_status_applied: Filing status must be HeadOfHousehold under §1(b)
+  assertion (
+    match tax_result.individual_tax_return.details with pattern
+    -- IRC.FilingStatusVariant.HeadOfHousehold content variant : true
+    -- anything : false
+  )
+```

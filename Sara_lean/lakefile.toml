@@ -1,0 +1,17 @@
+name = "Sara_lean"
+version = "0.1.0"
+defaultTargets = ["sara_lean"]
+
+[[lean_lib]]
+name = "CatalaRuntime"
+roots = ["CatalaRuntime"]
+
+[[lean_lib]]
+name = "SaraLean"
+
+[[lean_lib]]
+name = "Stdlib"
+
+[[lean_exe]]
+name = "sara_lean"
+root = "Main"

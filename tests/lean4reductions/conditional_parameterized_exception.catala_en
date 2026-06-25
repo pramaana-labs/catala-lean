@@ -1,0 +1,36 @@
+# Regression Test: Conditional parameterized exceptions preserve fallback
+
+Tests that a conditional exception for a function-valued (`depends on`)
+definition returns `none` when the condition is false, rather than returning
+`some (fun ... => default)`.
+
+The generated Lean4 exception leaf should have this shape:
+
+```
+if cond then some (fun (x : Int) => ...)
+else none
+```
+
+It must not have this shape:
+
+```
+some (fun (x : Int) => match if cond then some (...) else none with
+  | some r => r
+  | _ => default)
+```
+
+```catala
+declaration scope ConditionalParameterizedException:
+  input cond content boolean
+  output f content integer depends on x content integer
+  output out content integer
+
+scope ConditionalParameterizedException:
+  label base_f
+  definition f of x equals x + 1
+
+  exception base_f
+  definition f of x under condition cond consequence equals x + 100
+
+  definition out equals f of 10
+```

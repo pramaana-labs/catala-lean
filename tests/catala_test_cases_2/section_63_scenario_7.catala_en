@@ -1,0 +1,119 @@
+> Module Section_63_scenario_7
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_7:
+  output result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_7:
+  # Scenario: Nonresident alien individual filing Single in tax year 2017.
+  # Tested law refs: §63(c)(6)(B) - nonresident alien → standard deduction = 0.
+  definition result equals
+    let nra1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    let birth_nra1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: nra1
+      -- birth_date: Date.of_year_month_day of 1995, 12, 12
+      -- is_counterfactual: false
+    } in
+
+    # Nonresident alien status spans the entire tax year 2017
+    let nra_status_2017 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: nra1
+      -- start_date: Date.of_year_month_day of 2017, 1, 1
+      -- end_date: Date.of_year_month_day of 2017, 12, 31
+      -- residency_status: IRC.ResidencyStatus.NonresidentAlien
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Single, tax year 2017
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: nra1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Temporary marital status output for §7703 (not computing scope here)
+    let marital_status equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: nra1
+      -- tax_year: 2017
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Temporary §151 exemptions list result (minimal placeholder)
+    let taxpayer_exemptions_list equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: nra1
+      -- spouse_exemption_allowed_151_b: false
+      -- individuals_entitled_to_exemptions_under_151: [ nra1 ]
+    } in
+    let taxpayer_exemptions equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: taxpayer_exemptions_list
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ nra1 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Temporary §151 personal exemption result (placeholder)
+    let taxpayer_personal_exemption equals IRC.IndividualSection151PersonalExemptionOutput {
+      -- individual: nra1
+      -- exemption_amount_base: $0
+      -- exemption_amount_after_disallowance: $0
+      -- exemption_amount_after_phaseout: $0
+      -- personal_exemptions_deduction_151_a: $0
+      -- applicable_percentage_151_d_3_B: 0.0
+      -- exemption_amount_zero_151_d_5: true
+    } in
+
+    # Temporary §68 itemized deductions result (not relevant since non-itemizer)
+    let itemized_deductions_result equals IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+      -- individual_tax_return: individual_tax_return
+      -- applicable_amount_68_b_1: $0
+      -- three_percent_reduction_68_a_1: $0
+      -- eighty_percent_reduction_68_a_2: $0
+      -- reduction_amount_68_a: $0
+      -- itemized_deductions_after_68: $0
+      -- section_not_applicable_68_f: true
+    } in
+
+    # Compute §63 taxable income/standard deduction; AGI set to $0 (irrelevant for (c)(6)(B) exclusion)
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ birth_nra1 ]
+      -- blindness_status_events: []
+      -- death_events: []
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: [ nra_status_2017 ]
+      -- taxpayer_marital_status: marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions
+      -- taxpayer_exemption_result: taxpayer_personal_exemption
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_deductions_result
+    }).main_output
+
+  # Assertions:
+  # §63(c)(6)(B): Nonresident alien individual → standard deduction shall be zero.
+  assertion (result.standard_deduction_63_c_1 = $0)
+
+  # Ineligibility flag under §63(c)(6): ensures the zero is due to (c)(6)(B) NRA rule.
+  assertion (result.standard_deduction_eligible_63_c_6 = false)
+```

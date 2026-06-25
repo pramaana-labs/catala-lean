@@ -1,0 +1,131 @@
+> Module Section_152_scenario_12
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_12:
+  output dependents_s12 content IRC.IndividualSection152DependentsOutput
+
+scope Section_152_scenario_12:
+  # Scenario: Interplay of §152(c)(1)(E) vs §152(b)(2)
+  # - The individual (ss12) files a joint return only for refund → still can be a qualifying child per §152(c)(1)(E)
+  # - However, §152(b)(2) independently disqualifies anyone who made a joint return from being a “dependent” under §152(a)
+  # Tested law refs: §152(c)(1), §152(c)(1)(E), §152(c)(2)(B), §152(c)(1)(B), §152(c)(3), §152(b)(2), §152(a)
+
+  definition dependents_s12 equals
+    # Persons
+    let t12 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let ss12 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Household
+    let h12 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth events (for §152(c)(3) age requirement and taxpayer being older)
+    let b_t12 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t12
+      -- birth_date: Date.of_year_month_day of 1982, 2, 2
+      -- is_counterfactual: false
+    } in
+    let b_ss12 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: ss12
+      -- birth_date: Date.of_year_month_day of 2004, 3, 3
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods (for §152(c)(1)(B): same principal place of abode > half of year)
+    let res_t12 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t12
+      -- household: h12
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_ss12 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: ss12
+      -- household: h12
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 7, 15
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Family relationship (for §152(c)(2)(B): stepsister of taxpayer)
+    let rel_ss12_stepsister equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t12
+      -- relative: ss12
+      -- start_date: Date.of_year_month_day of 2010, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Stepsister
+      -- is_counterfactual: false
+    } in
+
+    # Tax return event for ss12: joint return filed only for refund
+    # - Satisfies §152(c)(1)(E) exception for qualifying child
+    # - Triggers §152(b)(2) disqualification as a dependent
+    let trev_ss12 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: ss12
+      -- tax_year: 2023
+      -- filed_joint_return: true
+      -- is_only_for_refund_claim: true
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Taxpayer's own individual income tax return (Single, 2023) - not directly used by §152 scopes
+    let single_ret_details equals IRC.SingleVariant {
+      -- taxpayer: t12
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let indiv_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.Single content single_ret_details
+    } in
+
+    # Compute §152 dependents for taxpayer t12 in 2023 over candidate individual ss12
+    (output of IRC.IndividualSection152Dependents with {
+      -- taxpayer: t12
+      -- tax_year: 2023
+      -- individuals: [ ss12 ]
+      -- family_relationship_events: [ rel_ss12_stepsister ]
+      -- birth_events: [ b_t12 ] ++ [ b_ss12 ]
+      -- residence_period_events: [ res_t12 ] ++ [ res_ss12 ]
+      -- tax_return_events: [ trev_ss12 ]
+      -- income_events: []
+      -- marriage_events: []
+    }).main_output
+
+  # Assertions - ONLY check the output from dependents_s12
+
+  # 1) §152(c)(1) and §152(c)(1)(E): ss12 is a qualifying child of t12 in 2023,
+  #    despite filing a joint return, because it was only for a claim of refund.
+  assertion (
+    exists qc among dependents_s12.qualifying_children
+      such that qc.individual.id = 2 and qc.is_qualifying_child = true
+  )
+
+  # 2) §152(b)(2): ss12 made a joint return → disqualified as a "dependent" under §152(a)
+  #    Check the per-individual dependent status flag is_excepted_under_152_b_2 = true
+  assertion (
+    exists st among dependents_s12.individual_dependent_statuses
+      such that st.individual.id = 2 and st.is_excepted_under_152_b_2 = true
+  )
+
+  # 3) §152(a) with §152(b)(2) exception applied: ss12 is not a dependent of t12 for 2023
+  #    i.e., not present in dependents_after_152b2 list.
+  assertion (
+    not exists d among dependents_s12.dependents_after_152b2 such that d.id = 2
+  )
+```

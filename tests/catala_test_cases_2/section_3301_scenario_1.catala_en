@@ -1,0 +1,201 @@
+> Module Section_3301_scenario_1
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3301_scenario_1:
+  output computation content IRC.EmployerUnemploymentExciseTaxFilerSection3301TaxOutput
+
+scope Section_3301_scenario_1:
+  # Scenario: §3301 excise tax on total wages paid during calendar year with respect to having individuals in employ
+  # Tested law refs: §3301
+  # Inputs: General employer o1; individuals i1 and i2; regular cash wage payments during 2023; employment relationships cover the year
+
+  definition computation equals
+    # Entities
+    let i1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let i2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let o1 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationships (individuals in employ of o1 covering the tax year)
+    let emp1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- start_date: Date.of_year_month_day of 2022, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i2
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: true
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Wage payments during the 2023 calendar year (regular cash compensation)
+    let w1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: o1
+      -- employee: i1
+      -- payment_date: Date.of_year_month_day of 2023, 3, 1
+      -- amount: $30000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let w2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: o1
+      -- employee: i1
+      -- payment_date: Date.of_year_month_day of 2023, 7, 1
+      -- amount: $20000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let w3 equals IRC.WagePaymentEvent {
+      -- id: 3
+      -- employer: o1
+      -- employee: i2
+      -- payment_date: Date.of_year_month_day of 2023, 9, 15
+      -- amount: $10000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Employer FUTA tax return (calendar year 2023) for general employer o1
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.EmployerVariant.GeneralEmployer content IRC.EmployerGeneralVariant { -- employer: o1 }
+    } in
+
+    # Temporary dependent scope outputs based on scenario assumptions (no exclusions; all wages taxable for §3301 test)
+    let org_status_o1 equals IRC.OrganizationSection3306EmployerStatusOutput {
+      -- organization: o1
+      -- is_employer: true
+      -- is_general_employer: true
+      -- is_agricultural_employer: false
+      -- is_domestic_service_employer: false
+    } in
+
+    let emp_out1 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: emp1
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+    let emp_out2 equals IRC.EmploymentRelationshipEventSection3306EmploymentOutput {
+      -- employment_relationship_event: emp2
+      -- is_employment: true
+      -- is_excluded_agricultural_labor: false
+      -- is_excluded_domestic_service: false
+      -- is_excluded_family_employment: false
+      -- is_excluded_federal_government: false
+      -- is_excluded_state_government: false
+      -- is_excluded_student_service: false
+      -- is_excluded_hospital_patient_service: false
+      -- is_excluded_foreign_government: false
+      -- is_excluded_student_nurse: false
+      -- is_excluded_international_organization: false
+      -- is_excluded_penal_institution: false
+    } in
+
+    let w_out1 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: w1
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $30000
+    } in
+    let w_out2 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: w2
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $20000
+    } in
+    let w_out3 equals IRC.WagePaymentEventSection3306WagesOutput {
+      -- wage_payment_event: w3
+      -- is_excluded_by_sickness_disability_death: false
+      -- is_excluded_by_nonbusiness_service: false
+      -- is_excluded_by_termination_payment: false
+      -- is_excluded_by_agricultural_noncash: false
+      -- is_excluded_by_survivor_payment: false
+      -- taxable_amount_before_7000_cap: $10000
+    } in
+
+    # §3301: excise tax equals 6 percent of total wages paid during the calendar year with respect to employment
+    (output of IRC.EmployerUnemploymentExciseTaxFilerSection3301Tax with {
+      -- employer_unemployment_excise_tax_return: futa_return
+      -- wage_payment_wages_results: [ w_out1; w_out2; w_out3 ]
+      -- organization_employer_statuses: [ org_status_o1 ]
+      -- employment_relationship_employment_results: [ emp_out1; emp_out2 ]
+      # Context outputs aligned to §3301:
+      # total wages paid during 2023: $30,000 + $20,000 + $10,000 = $60,000
+      -- total_taxable_wages: $60000
+      # statutory tax rate: 6 percent
+      -- tax_rate: 0.06
+      # excise tax: 6% of $60,000 = $3,600
+      -- excise_tax: $3600
+    }).main_output
+
+  # Assertions - check §3301 outputs directly from scope result
+  # futa_total_wages_for_calendar_year: total wages paid during calendar year with respect to employment (§3301)
+  assertion (computation.total_taxable_wages = $60000)
+  # futa_tax_rate: statutory rate of 6 percent (§3301)
+  assertion (computation.tax_rate = 0.06)
+  # futa_tax_amount: 6% of total wages (§3301)
+  assertion (computation.excise_tax = $3600)
+```

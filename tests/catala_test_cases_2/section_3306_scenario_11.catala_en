@@ -1,0 +1,191 @@
+> Module Section_3306_scenario_11
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_11:
+  output computation content IRC.IRCSimplified
+
+scope Section_3306_scenario_11:
+  # Scenario: Wage exclusions under §3306(b)(2)(A), §3306(b)(2)(C), and §3306(b)(15)
+  # Tested law refs: §3306(b)(2)(A), §3306(b)(2)(C), §3306(b)(15)
+
+  definition computation equals
+    let i10 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let dep1 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let org11 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    let fr1 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: i10
+      -- relative: dep1
+      -- start_date: Date.of_year_month_day of 2020, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    let death1 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: i10
+      -- death_date: Date.of_year_month_day of 2023, 12, 15
+      -- is_counterfactual: false
+    } in
+
+    let emp_rel1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org11
+      -- employee: i10
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 15
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Wage payment excluded by §3306(b)(2)(A) (sickness/accident disability plan payment) in 2024
+    let wp1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: org11
+      -- employee: i10
+      -- payment_date: Date.of_year_month_day of 2024, 2, 1
+      -- amount: $1500
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.SicknessOrAccidentDisability
+      -- is_under_plan_or_system: true
+      -- is_for_employee_generally: true
+      -- is_for_class_of_employees: true
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Wage payment excluded by §3306(b)(2)(C) (death-related plan payment) in 2023
+    let wp2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: org11
+      -- employee: i10
+      -- payment_date: Date.of_year_month_day of 2023, 12, 20
+      -- amount: $4000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.Death
+      -- is_under_plan_or_system: true
+      -- is_for_employee_generally: true
+      -- is_for_class_of_employees: true
+      -- is_for_dependents: true
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Payment to survivor/estate after calendar year of death, excluded by §3306(b)(15) in 2024
+    let wp3 equals IRC.WagePaymentEvent {
+      -- id: 3
+      -- employer: org11
+      -- employee: i10
+      -- payment_date: Date.of_year_month_day of 2024, 1, 10
+      -- amount: $2000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.Death
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: true
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: true
+      -- is_counterfactual: false
+    } in
+
+    # Employer FUTA return for 2024
+    let futa_details equals IRC.EmployerGeneralVariant { -- employer: org11 } in
+    let futa_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2024
+      -- details: IRC.EmployerVariant.GeneralEmployer content futa_details
+    } in
+
+    # Minimal individual income tax return (not used for FUTA, but required by IRCSimplified)
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: dep1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2024
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    output of IRC.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ i10 ] ++ [ dep1 ]
+      -- organizations: [ org11 ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: [ death1 ]
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: [ fr1 ]
+      -- tax_return_events: []
+      -- income_events: []
+      -- employment_relationship_events: [ emp_rel1 ]
+      -- wage_payment_events: [ wp1 ] ++ [ wp2 ] ++ [ wp3 ]
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: futa_return
+      -- itemized_deductions: $0
+      -- adjusted_gross_income: $0
+    }
+
+  # Assertions - ONLY check the output from 'computation'
+
+  # §3306(b)(2)(A): Sickness/accident disability plan payment exclusion → $1500 excluded; taxable amount $0
+  assertion (
+    exists w among computation.wage_payment_wages_results such that
+      w.wage_payment_event.payment_date = Date.of_year_month_day of 2024, 2, 1
+      and w.wage_payment_event.amount = $1500
+      and w.wage_payment_event.payment_reason = IRC.PaymentReason.SicknessOrAccidentDisability
+      and w.is_excluded_by_sickness_disability_death = true
+      and w.taxable_amount_before_7000_cap = $0
+  )
+
+  # §3306(b)(2)(C): Death-related plan payment exclusion → $4000 excluded; taxable amount $0
+  assertion (
+    exists w among computation.wage_payment_wages_results such that
+      w.wage_payment_event.payment_date = Date.of_year_month_day of 2023, 12, 20
+      and w.wage_payment_event.amount = $4000
+      and w.wage_payment_event.payment_reason = IRC.PaymentReason.Death
+      and w.is_excluded_by_sickness_disability_death = true
+      and w.taxable_amount_before_7000_cap = $0
+  )
+
+  # §3306(b)(15): Payment to survivor/estate after calendar year of death → $2000 excluded; taxable amount $0
+  assertion (
+    exists w among computation.wage_payment_wages_results such that
+      w.wage_payment_event.payment_date = Date.of_year_month_day of 2024, 1, 10
+      and w.wage_payment_event.amount = $2000
+      and w.is_excluded_by_survivor_payment = true
+      and w.taxable_amount_before_7000_cap = $0
+  )
+
+  # Total taxable wages for FUTA (§3301 base, applying §3306(b) exclusions) for 2024 should be $0
+  assertion (computation.employer_unemployment_excise_tax_result.total_taxable_wages = $0)
+```

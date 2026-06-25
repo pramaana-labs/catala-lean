@@ -1,0 +1,109 @@
+> Module Section_3306_scenario_6
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_6:
+  output employer_status content IRC.OrganizationSection3306EmployerStatusOutput
+
+scope Section_3306_scenario_6:
+  # Scenario: §3306(a)(4) special rule — domestic service employer under §3306(a)(3) is not
+  # treated as an employer for other services unless §3306(a)(1) or (2) is met.
+  # Tested law refs: §3306(a)(3), §3306(a)(1)(A), §3306(a)(4)
+
+  definition employer_status equals
+    # Entities
+    let i5 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let i6 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let org6 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Club  # Local college club context fits §3306(a)(3)
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationship events
+    let emp_domestic equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org6
+      -- employee: i5
+      -- start_date: Date.of_year_month_day of 2024, 4, 1
+      -- end_date: Date.of_year_month_day of 2024, 4, 30
+      -- employment_category: IRC.EmploymentCategory.DomesticService
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_general equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: org6
+      -- employee: i6
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 5, 31
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Wage payment events
+    let wage_domestic equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: org6
+      -- employee: i5
+      -- payment_date: Date.of_year_month_day of 2024, 4, 15
+      -- amount: $1000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.DomesticServiceNonBusiness
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+    let wage_general equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: org6
+      -- employee: i6
+      -- payment_date: Date.of_year_month_day of 2024, 5, 15
+      -- amount: $1200
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.RegularCompensation
+      -- is_under_plan_or_system: false
+      -- is_for_employee_generally: false
+      -- is_for_class_of_employees: false
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Compute §3306 employer status for calendar year 2024
+    (output of IRC.OrganizationSection3306EmployerStatus with {
+      -- organization: org6
+      -- calendar_year: 2024
+      -- wage_payment_events: [ wage_domestic ] ++ [ wage_general ]
+      -- employment_relationship_events: [ emp_domestic ] ++ [ emp_general ]
+    }).main_output
+
+  # Assertions - ONLY reference scope output
+
+  # Tests §3306(a)(3): domestic service in a local college club with ≥ $1,000 cash wages
+  assertion (employer_status.is_domestic_service_employer = true)
+
+  # Tests §3306(a)(1)(A): general wages threshold ($1,500) NOT met; also the 10-days-in-different-weeks
+  # alternative under §3306(a)(1)(B) is not met here (general employment spans ~5 different weeks),
+  # so general employer status under §3306(a)(1) is false
+  assertion (employer_status.is_general_employer = false)
+
+  # Tests §3306(a)(4): special rule — being an employer under (a)(3) does not make one an employer
+  # for other (non-domestic) services unless (a)(1) or (a)(2) applies; here (a)(1) is not satisfied,
+  # so employer status for other services remains false
+  assertion (employer_status.is_general_employer = false)
+```

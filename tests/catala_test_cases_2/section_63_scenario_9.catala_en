@@ -1,0 +1,125 @@
+> Module Section_63_scenario_9
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_9:
+  output taxable_income_result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_9:
+  # Scenario: Single filer is flagged as an estate or trust for tax year 2017.
+  # Tested law refs: §63(c)(6)(D)
+  # Purpose: Validate that the standard deduction is zero when the return is for an estate or trust.
+
+  definition taxable_income_result equals
+    # Entities
+    let et1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    # Events (birth for age context; blindness none)
+    let birth_et1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: et1
+      -- birth_date: Date.of_year_month_day of 1975, 7, 7
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return: Single, estate or trust, TY 2017
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: et1
+      -- itemization_election: false
+      -- is_estate_or_trust: true
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Temporary marital status output (dependency input for §63 scope)
+    let taxpayer_marital_status equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: et1
+      -- tax_year: 2017
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Temporary §151 exemption list (dependency input)
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: IRC.IndividualSection151ExemptionsListOutput {
+        -- individual: et1
+        -- spouse_exemption_allowed_151_b: false
+        -- individuals_entitled_to_exemptions_under_151: [ et1 ]
+      }
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ et1 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Temporary §151 personal exemption (dependency input)
+    let taxpayer_exemption_result equals IRC.IndividualSection151PersonalExemptionOutput {
+      -- individual: et1
+      -- exemption_amount_base: $0
+      -- exemption_amount_after_disallowance: $0
+      -- exemption_amount_after_phaseout: $0
+      -- personal_exemptions_deduction_151_a: $0
+      -- applicable_percentage_151_d_3_B: 0.0
+      -- exemption_amount_zero_151_d_5: true
+    } in
+
+    # Temporary §68 itemized deductions result (dependency input)
+    let itemized_deductions_result equals IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+      -- individual_tax_return: individual_tax_return
+      -- applicable_amount_68_b_1: $0
+      -- three_percent_reduction_68_a_1: $0
+      -- eighty_percent_reduction_68_a_2: $0
+      -- reduction_amount_68_a: $0
+      -- itemized_deductions_after_68: $0
+      -- section_not_applicable_68_f: false
+    } in
+
+    # Call §63 taxable income scope with context reflecting §63(c)(6)(D) disallowance
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ birth_et1 ]
+      -- blindness_status_events: []
+      -- death_events: []
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_deductions_result
+
+      # Context variables for §63:
+      # LAW: §63(c)(6)(D) — an estate or trust is not eligible for the standard deduction; set eligibility false and amount to $0
+      -- standard_deduction_eligible_63_c_6: false
+      -- standard_deduction_63_c_1: $0
+
+      # Additional context for completeness
+      -- additional_amount_taxpayer_aged_63_f_1_A: $0
+      -- additional_amount_spouse_aged_63_f_1_B: $0
+      -- additional_amount_taxpayer_blind_63_f_2_A: $0
+      -- additional_amount_spouse_blind_63_f_2_B: $0
+      -- additional_standard_deduction_63_c_3: $0
+      -- taxable_income: $0
+    }).main_output
+
+  # Assertions:
+  # Assert the standard deduction amount is zero (tests §63(c)(6)(D) disallowance for estates or trusts).
+  assertion (taxable_income_result.standard_deduction_63_c_1 = $0)
+
+  # Assert ineligibility under §63(c)(6) (driven by §63(c)(6)(D) estate/trust flag in filing status).
+  assertion (taxable_income_result.standard_deduction_eligible_63_c_6 = false)
+```

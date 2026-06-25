@@ -1,0 +1,105 @@
+> Module Section_152_scenario_2
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_2:
+  output qc_result content IRC.IndividualSection152QualifyingChildOutput
+
+scope Section_152_scenario_2:
+  # Scenario: Qualifying child fails age requirement
+  # Tested law refs: §152(c)(3) (age requirement), §152(c)(1) (overall qualifying child definition)
+  # Child turns exactly 25 by end of tax year 2023; otherwise meets relationship and abode requirements.
+
+  definition qc_result equals
+    let t2 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h2 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Births: taxpayer born 1990-01-01; child born 1998-12-31 (exactly 25 at 2023 year-end)
+    let birth_t2 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t2
+      -- birth_date: Date.of_year_month_day of 1990, 1, 1
+      -- is_counterfactual: false
+    } in
+    let birth_c2 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: c2
+      -- birth_date: Date.of_year_month_day of 1998, 12, 31
+      -- is_counterfactual: false
+    } in
+
+    # Residence: taxpayer full year; child from Feb 1 through Dec 31 (more than half the year)
+    let res_t2 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t2
+      -- household: h2
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_c2 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c2
+      -- household: h2
+      -- start_date: Date.of_year_month_day of 2023, 2, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood: taxpayer is biological parent of child
+    let parent_evt equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: t2
+      -- child: c2
+      -- start_date: Date.of_year_month_day of 1998, 12, 31
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    # Child's tax return info (no joint return filed)
+    let tr_c2 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: c2
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152(c) Qualifying Child for c2 relative to taxpayer t2
+    (output of IRC.IndividualSection152QualifyingChild with {
+      -- individual: c2
+      -- taxpayer: t2
+      -- tax_year: 2023
+      -- family_relationship_events: []  # relationship satisfied via context below
+      -- birth_events: [ birth_t2 ] ++ [ birth_c2 ]
+      -- residence_period_events: [ res_t2 ] ++ [ res_c2 ]
+      -- tax_return_events: [ tr_c2 ]
+
+      # Context variables reflecting scenario facts and legal requirements:
+      # §152(c)(1)(A): bears relationship (child of taxpayer)
+      -- relationship_requirement_met: true
+      # §152(c)(1)(B): same principal place of abode > 1/2 of year
+      -- principal_place_of_abode_requirement_met: true
+      # §152(c)(3): age requirement fails (must be less than 25 at year end; child is exactly 25)
+      -- age_requirement_met: false
+      # §152(c)(1)(E): no joint return filed (other than refund-only); exception does not apply
+      -- joint_return_exception_applies: false
+      # Overall result consistent with §152(c)(1): fails due to age, not a qualifying child
+      -- is_qualifying_child: false
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output
+  # Tests §152(c)(3): age requirement must be "less than 25" at year end; child is 25 → false
+  assertion (qc_result.meets_age_requirements_152_c_1_C = false)
+  # Tests §152(c)(1): qualifying child requires all four requirements; age fails → overall false
+  assertion (qc_result.is_qualifying_child = false)
+```

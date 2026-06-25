@@ -1,0 +1,122 @@
+> Module Section_63_scenario_1
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_1:
+  output tax_63_result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_1:
+  # Scenario: Single filer, tax year 2017; not aged 65 or blind; not a dependent; eligible for the standard deduction.
+  # Tested law refs:
+  # - §63(c)(1) Standard deduction equals basic + additional
+  # - §63(c)(2)(C) Basic standard deduction for "any other case" = $3,000 (for 2017; no §63(c)(7) special rules apply)
+  # Comments: No special rule under §63(c)(7) applies because tax year is 2017; marital status determination under §63(g)/§7703 not implicated beyond Single status.
+
+  definition tax_63_result equals
+    # Entities
+    let i1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth event for age checks under §63(f)
+    let birth_i1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: i1
+      -- birth_date: Date.of_year_month_day of 1990, 5, 10
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return: Single filer, tax year 2017, does not itemize
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: i1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2017
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Temporary marital status output (assumption for Single in 2017)
+    let taxpayer_marital_status equals
+      IRC.IndividualSection7703MaritalStatusOutput {
+        -- individual: i1
+        -- tax_year: 2017
+        -- determination_date_7703_a_1: Date.of_year_month_day of 2017, 12, 31
+        -- is_married_7703_a_1: false
+        -- is_legally_separated_7703_a_2: false
+        -- maintains_household_7703_b_1: false
+        -- furnishes_over_one_half_cost_7703_b_2: false
+        -- spouse_not_member_last_6_months_7703_b_3: false
+        -- considered_not_married_7703_b: false
+        -- is_married_for_tax_purposes_7703: false
+      } in
+
+    # Temporary §151 exemptions list (assumption: taxpayer is not a dependent of another; entitled for self)
+    let taxpayer_result equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: i1
+      -- spouse_exemption_allowed_151_b: false
+      -- individuals_entitled_to_exemptions_under_151: [ i1 ]
+    } in
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: taxpayer_result
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ i1 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Temporary §151 personal exemption result (values not used for §63(c) assertions here)
+    let taxpayer_exemption_result equals IRC.IndividualSection151PersonalExemptionOutput {
+      -- individual: i1
+      -- exemption_amount_base: $0
+      -- exemption_amount_after_disallowance: $0
+      -- exemption_amount_after_phaseout: $0
+      -- personal_exemptions_deduction_151_a: $0
+      -- applicable_percentage_151_d_3_B: 0.0
+      -- exemption_amount_zero_151_d_5: false
+    } in
+
+    # Temporary §68 itemized deductions limitation result (not applicable; taxpayer does not itemize)
+    let itemized_deductions_result equals IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+      -- individual_tax_return: individual_tax_return
+      -- applicable_amount_68_b_1: $0
+      -- three_percent_reduction_68_a_1: $0
+      -- eighty_percent_reduction_68_a_2: $0
+      -- reduction_amount_68_a: $0
+      -- itemized_deductions_after_68: $0
+      -- section_not_applicable_68_f: true
+    } in
+
+    # Call §63 taxable income / standard deduction scope
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ birth_i1 ]
+      -- blindness_status_events: []
+      -- death_events: []
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+      -- taxpayer_marital_status: taxpayer_marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+      -- adjusted_gross_income: $0
+      -- itemized_deductions_result: itemized_deductions_result
+    }).main_output
+
+  # Assertions:
+  # §63(c)(2)(C): Basic standard deduction for "any other case" (Single) = $3,000 (for 2017; no §63(c)(7) special rules).
+  assertion (tax_63_result.basic_standard_deduction_63_c_2_before_c_5 = $3000)
+
+  # §63(c)(3) and §63(f): Additional standard deduction for aged/blind — taxpayer is neither aged 65 nor blind → $0.
+  assertion (tax_63_result.additional_standard_deduction_63_c_3 = $0)
+
+  # §63(c)(1): Standard deduction equals basic + additional → $3,000 + $0 = $3,000.
+  assertion (tax_63_result.standard_deduction_63_c_1 = $3000)
+
+  # Implicit check that §63(c)(7) special rules (2018–2025) are not applied: after §63(c)(5) dependent check, basic remains $3,000.
+  assertion (tax_63_result.basic_standard_deduction_63_c_2_after_c_5 = $3000)
+```

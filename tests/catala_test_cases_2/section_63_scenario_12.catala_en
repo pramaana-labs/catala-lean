@@ -1,0 +1,157 @@
+> Module Section_63_scenario_12
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_63_scenario_12:
+  output tax_result content IRC.IndividualTaxReturnSection63TaxableIncomeOutput
+
+scope Section_63_scenario_12:
+  # Scenario: HOH filer in 2020 with a qualifying person child
+  # Tested law refs:
+  # - §63(c)(7)(A)(i): substitutes $18,000 for $4,400 for HOH in years 2018–2025
+  # - §63(c)(2)(B): basic standard deduction amount for HOH
+  # - §63(c)(1): standard deduction equals basic + additional
+
+  definition tax_result equals
+    # Entities
+    let hoh20 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let qp20 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Birth events (used by §63 aged/blind checks; taxpayer not aged/blind)
+    let b_hoh20 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: hoh20
+      -- birth_date: Date.of_year_month_day of 1983, 3, 3
+      -- is_counterfactual: false
+    } in
+    let b_qp20 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: qp20
+      -- birth_date: Date.of_year_month_day of 2011, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Head of Household for 2020 with qualifying person
+    let hoh_details equals IRC.HeadOfHouseholdVariant {
+      -- taxpayer: hoh20
+      -- qualifying_person: qp20
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2020
+      -- details: IRC.FilingStatusVariant.HeadOfHousehold content hoh_details
+    } in
+
+    # Assumed §7703 marital status output for §63(g) marital determination (unmarried HOH)
+    let marital_status_7703 equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: hoh20
+      -- tax_year: 2020
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2020, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: true
+      -- furnishes_over_one_half_cost_7703_b_2: true
+      -- spouse_not_member_last_6_months_7703_b_3: true
+      -- considered_not_married_7703_b: true
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Assumed §151-related outputs (not material here, but required by §63 scope signature)
+    let taxpayer_151_list equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: hoh20
+      -- spouse_exemption_allowed_151_b: false
+      -- individuals_entitled_to_exemptions_under_151: [ hoh20 ] ++ [ qp20 ]
+    } in
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: taxpayer_151_list
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ hoh20 ] ++ [ qp20 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+    let taxpayer_exemption_result equals IRC.IndividualSection151PersonalExemptionOutput {
+      -- individual: hoh20
+      -- exemption_amount_base: $0
+      -- exemption_amount_after_disallowance: $0
+      -- exemption_amount_after_phaseout: $0
+      -- personal_exemptions_deduction_151_a: $0
+      -- applicable_percentage_151_d_3_B: 0.0
+      -- exemption_amount_zero_151_d_5: true
+    } in
+
+    # Assumed §68 itemized deductions output (taxpayer does not itemize)
+    let itemized_deductions_result equals IRC.IndividualTaxReturnSection68ItemizedDeductionsOutput {
+      -- individual_tax_return: individual_tax_return
+      -- applicable_amount_68_b_1: $0
+      -- three_percent_reduction_68_a_1: $0
+      -- eighty_percent_reduction_68_a_2: $0
+      -- reduction_amount_68_a: $0
+      -- itemized_deductions_after_68: $0
+      -- section_not_applicable_68_f: true
+    } in
+
+    # Call §63 taxable income scope and pass context values per the special HOH substitution
+    (output of IRC.IndividualTaxReturnSection63TaxableIncome with {
+      -- individual_tax_return: individual_tax_return
+      -- birth_events: [ b_hoh20 ] ++ [ b_qp20 ]
+      -- blindness_status_events: []
+      -- death_events: []
+      -- income_events: []
+      -- tax_return_events: []
+      -- nonresident_alien_status_period_events: []
+
+      # Marital and filing status inputs for §63
+      -- taxpayer_marital_status: marital_status_7703
+      -- is_surviving_spouse: false
+      -- is_head_of_household: true
+
+      # §63(b): AGI provided (set to $0 for simplicity in this test)
+      -- adjusted_gross_income: $0
+
+      # §68: itemized deductions after limitation (none, since not itemizing)
+      -- itemized_deductions_result: itemized_deductions_result
+
+      # §151: required inputs for scope signature (not relevant to amounts here)
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_exemption_result: taxpayer_exemption_result
+
+      # Context variables for §63 amounts:
+      # §63(f): taxpayer/spouse not aged/blind
+      -- additional_amount_taxpayer_aged_63_f_1_A: $0
+      -- additional_amount_spouse_aged_63_f_1_B: $0
+      -- additional_amount_taxpayer_blind_63_f_2_A: $0
+      -- additional_amount_spouse_blind_63_f_2_B: $0
+
+      # §63(c)(7)(A)(i) special rule (2018–2025): substitute $18,000 for HOH basic amount.
+      -- basic_standard_deduction_63_c_2: $18000
+
+      # §63(c)(3): additional standard deduction (aged/blind) is $0 here
+      -- additional_standard_deduction_63_c_3: $0
+
+      # §63(c)(6): eligible for standard deduction (not MFS with spouse itemizing, not NRA, not estate/trust/partnership)
+      -- standard_deduction_eligible_63_c_6: true
+
+      # §63(c)(1): standard deduction = basic + additional = $18,000
+      -- standard_deduction_63_c_1: $18000
+
+      # §63(b): taxable income = AGI - standard deduction - personal exemptions; with AGI $0, SD $18,000 ⇒ $0
+      -- taxable_income: $0
+    }).main_output
+
+  # Assertions - check only the computed output fields:
+  # §63(c)(7)(A)(i): special rules window 2018–2025 applies (use helper)
+  assertion (IRC.is_tax_year_2018_through_2025 of tax_result.individual_tax_return.tax_year = true)
+
+  # §63(c)(2)(B) as modified by §63(c)(7)(A)(i): basic standard deduction for HOH is $18,000
+  assertion (tax_result.basic_standard_deduction_63_c_2_after_c_5 = $18000)
+
+  # §63(c)(3), §63(f): additional standard deduction (aged/blind) = $0
+  assertion (tax_result.additional_standard_deduction_63_c_3 = $0)
+
+  # §63(c)(1): standard deduction = basic + additional = $18,000
+  assertion (tax_result.standard_deduction_63_c_1 = $18000)
+```

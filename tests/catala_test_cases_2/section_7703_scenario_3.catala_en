@@ -1,0 +1,77 @@
+> Module Section_7703_scenario_3
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_7703_scenario_3:
+  output person_status content IRC.IndividualSection7703MaritalStatusOutput
+
+scope Section_7703_scenario_3:
+  # Scenario: Legal separation by divorce during taxable year; not considered married under §7703(a)(2).
+  # Tested law refs: §7703(a)(2)
+  # Correlation:
+  # - The scenario's "is_considered_married_under_7703a" maps to the computed field
+  #   person_status.is_married_for_tax_purposes_7703, which reflects §7703(a) determinations,
+  #   including the legal separation rule in §7703(a)(2).
+
+  definition person_status equals
+    # Entities
+    let p1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let p2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    # Events
+    let marriage1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: p1
+      -- spouse2: p2
+      -- marriage_date: Date.of_year_month_day of 2018, 7, 1
+      -- is_counterfactual: false
+    } in
+
+    let divorce1 equals IRC.DivorceOrLegalSeparationEvent {
+      -- id: 1
+      -- person1: p1
+      -- person2: p2
+      -- decree_date: Date.of_year_month_day of 2023, 6, 1
+      -- decree_type: IRC.DecreeType.Divorce
+      -- is_counterfactual: false
+    } in
+
+    # Tax return: Single for tax year 2023, filer p1
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: p1
+      -- itemization_election: true
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Call §7703 marital status scope
+    (output of IRC.IndividualSection7703MaritalStatus with {
+      -- individual: p1
+      -- tax_year: 2023
+      -- marriage_events: [ marriage1 ]
+      -- divorce_or_legal_separation_events: [ divorce1 ]
+      -- death_events: []
+      -- individual_tax_return: individual_tax_return
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- qualifying_children: []
+      -- individuals_entitled_to_exemptions_under_151: []
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output:
+  # Tests §7703(a)(2): legal separation (divorce) → not considered married
+  assertion (person_status.is_legally_separated_7703_a_2 = true)
+  # Scenario's value_to_be_computed: is_considered_married_under_7703a → false
+  # Mapping: check is_married_for_tax_purposes_7703 (reflects §7703(a) status)
+  assertion (person_status.is_married_for_tax_purposes_7703 = false)
+  # Additional check of §7703(a)(1) determination at year end: not married at close of tax year
+  assertion (person_status.is_married_7703_a_1 = false)
+```

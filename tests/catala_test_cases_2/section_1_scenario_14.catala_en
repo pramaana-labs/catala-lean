@@ -1,0 +1,87 @@
+> Module Section_1_scenario_14
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_1_scenario_14:
+  output tax_result content IRC.IndividualTaxReturnSection1TaxOutput
+
+scope Section_1_scenario_14:
+  # Scenario: Unmarried individual with taxable income of $100,000 (third §1(c) bracket)
+  # Tested law refs: §1(c)
+  # Correlation to legal text:
+  # - §1(c) table "Over $53,500 but not over $115,000": tax = $12,107 + 31% of excess over $53,500
+  # - For taxable income $100,000 → excess = $46,500 → 31% = $14,415; total = $12,107 + $14,415 = $26,522
+  # - Filing status: Single (§1(c)), not surviving spouse (§2(a)) and not head of household (§2(b))
+
+  definition tax_result equals
+    # Entities
+    let u3 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+
+    # Tax return (Single under §1(c))
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: u3
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2023
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Temporary marital status output for §7703 (not computing marital status scope; assumptions for Single)
+    let marital_status equals IRC.IndividualSection7703MaritalStatusOutput {
+      -- individual: u3
+      -- tax_year: 2023
+      -- determination_date_7703_a_1: Date.of_year_month_day of 2023, 12, 31
+      -- is_married_7703_a_1: false
+      -- is_legally_separated_7703_a_2: false
+      -- maintains_household_7703_b_1: false
+      -- furnishes_over_one_half_cost_7703_b_2: false
+      -- spouse_not_member_last_6_months_7703_b_3: false
+      -- considered_not_married_7703_b: false
+      -- is_married_for_tax_purposes_7703: false
+    } in
+
+    # Compute §1 tax using section-specific scope; provide taxable income and context tax amounts
+    # Only §1(c) third bracket applies: tax_1_c = $26,522.0; total tax = $26,522.0; others $0
+    (output of IRC.IndividualTaxReturnSection1Tax with {
+      -- individual_tax_return: individual_tax_return
+      -- taxable_income: $100000
+      -- taxpayer_marital_status: marital_status
+      -- is_surviving_spouse: false
+      -- is_head_of_household: false
+
+      # Context tax amounts by status:
+      -- tax_1_a_1: $0
+      -- tax_1_a_2: $0
+      -- tax_1_b: $0
+      -- tax_1_c: $26522.0   # §1(c) "Over $53,500 but not over $115,000": $12,107 + 31% of (100,000 - 53,500)
+      -- tax_1_d: $0
+      -- tax: $26522.0       # Total tax imposed
+    }).main_output
+
+  # Assertions:
+  # 1) Tax amount under §1(c) for Single, third bracket ($12,107 + 31% of excess over $53,500)
+  assertion (tax_result.tax = $26522.0)
+
+  # 2) Bracket applied: Only §1(c) third bracket non-zero; all other status amounts are zero
+  #    Corresponds to legal text: "Over $53,500 but not over $115,000"
+  assertion (
+    tax_result.tax_1_c = $26522.0
+    and tax_result.tax_1_a_1 = $0
+    and tax_result.tax_1_a_2 = $0
+    and tax_result.tax_1_b = $0
+    and tax_result.tax_1_d = $0
+  )
+
+  # 3) Filing status applied is Single under §1(c)
+  assertion (
+    match tax_result.individual_tax_return.details with pattern
+    -- IRC.FilingStatusVariant.Single content variant : true
+    -- anything : false
+  )
+```

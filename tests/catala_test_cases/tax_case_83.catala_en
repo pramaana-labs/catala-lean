@@ -1,0 +1,1910 @@
+> Module Tax_case_83
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase83:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase83:
+  # In 2016, Alice's gross income was $567192.
+  # Alice has employed Bob, Cameron, Dan, Emily, Fred and George for agricultural labor on various occasions during the year 2016:
+  # - Jan 24: B, C, D, E and F
+  # - Feb 4: B, C and F
+  # - Mar 3: B, C, D, E and F
+  # - Mar 19: C, D, E, F and G
+  # - Apr 2: B, C, D, F and G
+  # - May 9: C, D, E, F and G
+  # - Oct 15: B, C, D, E and G
+  # - Oct 25: B, E, F and G
+  # - Nov 8: B, C, E, F and G
+  # - Nov 22: B, C, D, E and F
+  # - Dec 1: B, C, D, E and G
+  # - Dec 3: B, C, D, E and G
+  # On each occasion, Alice paid each of them $550. Alice takes the standard deduction in 2016.
+
+  # How much tax does Alice have to pay in 2016? $206073
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let cameron equals
+      Sara.Individual {
+        -- id: 3
+        -- is_counterfactual: false
+      } in
+    let dan equals
+      Sara.Individual {
+        -- id: 4
+        -- is_counterfactual: false
+      } in
+    let emily equals
+      Sara.Individual {
+        -- id: 5
+        -- is_counterfactual: false
+      } in
+    let fred equals
+      Sara.Individual {
+        -- id: 6
+        -- is_counterfactual: false
+      } in
+    let george equals
+      Sara.Individual {
+        -- id: 7
+        -- is_counterfactual: false
+      } in
+    let alice_org equals
+      Sara.Organization {
+        -- id: 1
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let bob_employment_jan24 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 1, 24
+        -- end_date: Date.of_year_month_day of 2016, 1, 24
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_jan24 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 2
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 1, 24
+        -- end_date: Date.of_year_month_day of 2016, 1, 24
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_jan24 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 3
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 1, 24
+        -- end_date: Date.of_year_month_day of 2016, 1, 24
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_jan24 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 4
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 1, 24
+        -- end_date: Date.of_year_month_day of 2016, 1, 24
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_jan24 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 5
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 1, 24
+        -- end_date: Date.of_year_month_day of 2016, 1, 24
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_feb4 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 6
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 2, 4
+        -- end_date: Date.of_year_month_day of 2016, 2, 4
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_feb4 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 7
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 2, 4
+        -- end_date: Date.of_year_month_day of 2016, 2, 4
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_feb4 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 8
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 2, 4
+        -- end_date: Date.of_year_month_day of 2016, 2, 4
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_mar3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 9
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 3, 3
+        -- end_date: Date.of_year_month_day of 2016, 3, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_mar3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 10
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 3, 3
+        -- end_date: Date.of_year_month_day of 2016, 3, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_mar3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 11
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 3, 3
+        -- end_date: Date.of_year_month_day of 2016, 3, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_mar3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 12
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 3, 3
+        -- end_date: Date.of_year_month_day of 2016, 3, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_mar3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 13
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 3, 3
+        -- end_date: Date.of_year_month_day of 2016, 3, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_mar19 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 14
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 3, 19
+        -- end_date: Date.of_year_month_day of 2016, 3, 19
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_mar19 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 15
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 3, 19
+        -- end_date: Date.of_year_month_day of 2016, 3, 19
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_mar19 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 16
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 3, 19
+        -- end_date: Date.of_year_month_day of 2016, 3, 19
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_mar19 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 17
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 3, 19
+        -- end_date: Date.of_year_month_day of 2016, 3, 19
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_mar19 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 18
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 3, 19
+        -- end_date: Date.of_year_month_day of 2016, 3, 19
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_apr2 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 19
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 4, 2
+        -- end_date: Date.of_year_month_day of 2016, 4, 2
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_apr2 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 20
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 4, 2
+        -- end_date: Date.of_year_month_day of 2016, 4, 2
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_apr2 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 21
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 4, 2
+        -- end_date: Date.of_year_month_day of 2016, 4, 2
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_apr2 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 22
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 4, 2
+        -- end_date: Date.of_year_month_day of 2016, 4, 2
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_apr2 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 23
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 4, 2
+        -- end_date: Date.of_year_month_day of 2016, 4, 2
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_may9 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 24
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 5, 9
+        -- end_date: Date.of_year_month_day of 2016, 5, 9
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_may9 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 25
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 5, 9
+        -- end_date: Date.of_year_month_day of 2016, 5, 9
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_may9 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 26
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 5, 9
+        -- end_date: Date.of_year_month_day of 2016, 5, 9
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_may9 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 27
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 5, 9
+        -- end_date: Date.of_year_month_day of 2016, 5, 9
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_may9 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 28
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 5, 9
+        -- end_date: Date.of_year_month_day of 2016, 5, 9
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_oct15 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 29
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 10, 15
+        -- end_date: Date.of_year_month_day of 2016, 10, 15
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_oct15 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 30
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 10, 15
+        -- end_date: Date.of_year_month_day of 2016, 10, 15
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_oct15 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 31
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 10, 15
+        -- end_date: Date.of_year_month_day of 2016, 10, 15
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_oct15 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 32
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 10, 15
+        -- end_date: Date.of_year_month_day of 2016, 10, 15
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_oct15 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 33
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 10, 15
+        -- end_date: Date.of_year_month_day of 2016, 10, 15
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_oct25 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 34
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 10, 25
+        -- end_date: Date.of_year_month_day of 2016, 10, 25
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_oct25 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 35
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 10, 25
+        -- end_date: Date.of_year_month_day of 2016, 10, 25
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_oct25 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 36
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 10, 25
+        -- end_date: Date.of_year_month_day of 2016, 10, 25
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_oct25 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 37
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 10, 25
+        -- end_date: Date.of_year_month_day of 2016, 10, 25
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_nov8 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 38
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 11, 8
+        -- end_date: Date.of_year_month_day of 2016, 11, 8
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_nov8 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 39
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 11, 8
+        -- end_date: Date.of_year_month_day of 2016, 11, 8
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_nov8 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 40
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 11, 8
+        -- end_date: Date.of_year_month_day of 2016, 11, 8
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_nov8 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 41
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 11, 8
+        -- end_date: Date.of_year_month_day of 2016, 11, 8
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_nov8 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 42
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 11, 8
+        -- end_date: Date.of_year_month_day of 2016, 11, 8
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_nov22 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 43
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 11, 22
+        -- end_date: Date.of_year_month_day of 2016, 11, 22
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_nov22 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 44
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 11, 22
+        -- end_date: Date.of_year_month_day of 2016, 11, 22
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_nov22 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 45
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 11, 22
+        -- end_date: Date.of_year_month_day of 2016, 11, 22
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_nov22 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 46
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 11, 22
+        -- end_date: Date.of_year_month_day of 2016, 11, 22
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let fred_employment_nov22 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 47
+        -- employer: alice_org
+        -- employee: fred
+        -- start_date: Date.of_year_month_day of 2016, 11, 22
+        -- end_date: Date.of_year_month_day of 2016, 11, 22
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_dec1 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 48
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 12, 1
+        -- end_date: Date.of_year_month_day of 2016, 12, 1
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_dec1 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 49
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 12, 1
+        -- end_date: Date.of_year_month_day of 2016, 12, 1
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_dec1 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 50
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 12, 1
+        -- end_date: Date.of_year_month_day of 2016, 12, 1
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_dec1 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 51
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 12, 1
+        -- end_date: Date.of_year_month_day of 2016, 12, 1
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_dec1 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 52
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 12, 1
+        -- end_date: Date.of_year_month_day of 2016, 12, 1
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_employment_dec3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 53
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2016, 12, 3
+        -- end_date: Date.of_year_month_day of 2016, 12, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let cameron_employment_dec3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 54
+        -- employer: alice_org
+        -- employee: cameron
+        -- start_date: Date.of_year_month_day of 2016, 12, 3
+        -- end_date: Date.of_year_month_day of 2016, 12, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let dan_employment_dec3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 55
+        -- employer: alice_org
+        -- employee: dan
+        -- start_date: Date.of_year_month_day of 2016, 12, 3
+        -- end_date: Date.of_year_month_day of 2016, 12, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let emily_employment_dec3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 56
+        -- employer: alice_org
+        -- employee: emily
+        -- start_date: Date.of_year_month_day of 2016, 12, 3
+        -- end_date: Date.of_year_month_day of 2016, 12, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let george_employment_dec3 equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 57
+        -- employer: alice_org
+        -- employee: george
+        -- start_date: Date.of_year_month_day of 2016, 12, 3
+        -- end_date: Date.of_year_month_day of 2016, 12, 3
+        -- employment_category: Sara.EmploymentCategory.AgriculturalLabor
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_01_24 equals
+      Sara.WagePaymentEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 1, 24
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_01_24 equals
+      Sara.WagePaymentEvent {
+        -- id: 2
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 1, 24
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_01_24 equals
+      Sara.WagePaymentEvent {
+        -- id: 3
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 1, 24
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_01_24 equals
+      Sara.WagePaymentEvent {
+        -- id: 4
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 1, 24
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_01_24 equals
+      Sara.WagePaymentEvent {
+        -- id: 5
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 1, 24
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_02_04 equals
+      Sara.WagePaymentEvent {
+        -- id: 6
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 2, 4
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_02_04 equals
+      Sara.WagePaymentEvent {
+        -- id: 7
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 2, 4
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_02_04 equals
+      Sara.WagePaymentEvent {
+        -- id: 8
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 2, 4
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_03_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 9
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 3, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_03_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 10
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 3, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_03_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 11
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 3, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_03_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 12
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 3, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_03_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 13
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 3, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_03_19 equals
+      Sara.WagePaymentEvent {
+        -- id: 14
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 3, 19
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_03_19 equals
+      Sara.WagePaymentEvent {
+        -- id: 15
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 3, 19
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_03_19 equals
+      Sara.WagePaymentEvent {
+        -- id: 16
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 3, 19
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_03_19 equals
+      Sara.WagePaymentEvent {
+        -- id: 17
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 3, 19
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_03_19 equals
+      Sara.WagePaymentEvent {
+        -- id: 18
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 3, 19
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_04_02 equals
+      Sara.WagePaymentEvent {
+        -- id: 19
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 4, 2
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_04_02 equals
+      Sara.WagePaymentEvent {
+        -- id: 20
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 4, 2
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_04_02 equals
+      Sara.WagePaymentEvent {
+        -- id: 21
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 4, 2
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_04_02 equals
+      Sara.WagePaymentEvent {
+        -- id: 22
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 4, 2
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_04_02 equals
+      Sara.WagePaymentEvent {
+        -- id: 23
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 4, 2
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_05_09 equals
+      Sara.WagePaymentEvent {
+        -- id: 24
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 5, 9
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_05_09 equals
+      Sara.WagePaymentEvent {
+        -- id: 25
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 5, 9
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_05_09 equals
+      Sara.WagePaymentEvent {
+        -- id: 26
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 5, 9
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_05_09 equals
+      Sara.WagePaymentEvent {
+        -- id: 27
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 5, 9
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_05_09 equals
+      Sara.WagePaymentEvent {
+        -- id: 28
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 5, 9
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_10_15 equals
+      Sara.WagePaymentEvent {
+        -- id: 29
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 10, 15
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_10_15 equals
+      Sara.WagePaymentEvent {
+        -- id: 30
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 10, 15
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_10_15 equals
+      Sara.WagePaymentEvent {
+        -- id: 31
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 10, 15
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_10_15 equals
+      Sara.WagePaymentEvent {
+        -- id: 32
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 10, 15
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_10_15 equals
+      Sara.WagePaymentEvent {
+        -- id: 33
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 10, 15
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_10_25 equals
+      Sara.WagePaymentEvent {
+        -- id: 34
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 10, 25
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_10_25 equals
+      Sara.WagePaymentEvent {
+        -- id: 35
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 10, 25
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_10_25 equals
+      Sara.WagePaymentEvent {
+        -- id: 36
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 10, 25
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_10_25 equals
+      Sara.WagePaymentEvent {
+        -- id: 37
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 10, 25
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_11_08 equals
+      Sara.WagePaymentEvent {
+        -- id: 38
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 11, 8
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_11_08 equals
+      Sara.WagePaymentEvent {
+        -- id: 39
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 11, 8
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_11_08 equals
+      Sara.WagePaymentEvent {
+        -- id: 40
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 11, 8
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_11_08 equals
+      Sara.WagePaymentEvent {
+        -- id: 41
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 11, 8
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_11_08 equals
+      Sara.WagePaymentEvent {
+        -- id: 42
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 11, 8
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_11_22 equals
+      Sara.WagePaymentEvent {
+        -- id: 43
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 11, 22
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_11_22 equals
+      Sara.WagePaymentEvent {
+        -- id: 44
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 11, 22
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_11_22 equals
+      Sara.WagePaymentEvent {
+        -- id: 45
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 11, 22
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_11_22 equals
+      Sara.WagePaymentEvent {
+        -- id: 46
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 11, 22
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let fred_wage_payment_2016_11_22 equals
+      Sara.WagePaymentEvent {
+        -- id: 47
+        -- employer: alice_org
+        -- employee: fred
+        -- payment_date: Date.of_year_month_day of 2016, 11, 22
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_12_01 equals
+      Sara.WagePaymentEvent {
+        -- id: 48
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 12, 1
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_12_01 equals
+      Sara.WagePaymentEvent {
+        -- id: 49
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 12, 1
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_12_01 equals
+      Sara.WagePaymentEvent {
+        -- id: 50
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 12, 1
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_12_01 equals
+      Sara.WagePaymentEvent {
+        -- id: 51
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 12, 1
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_12_01 equals
+      Sara.WagePaymentEvent {
+        -- id: 52
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 12, 1
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment_2016_12_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 53
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2016, 12, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let cameron_wage_payment_2016_12_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 54
+        -- employer: alice_org
+        -- employee: cameron
+        -- payment_date: Date.of_year_month_day of 2016, 12, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let dan_wage_payment_2016_12_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 55
+        -- employer: alice_org
+        -- employee: dan
+        -- payment_date: Date.of_year_month_day of 2016, 12, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let emily_wage_payment_2016_12_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 56
+        -- employer: alice_org
+        -- employee: emily
+        -- payment_date: Date.of_year_month_day of 2016, 12, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let george_wage_payment_2016_12_03 equals
+      Sara.WagePaymentEvent {
+        -- id: 57
+        -- employer: alice_org
+        -- employee: george
+        -- payment_date: Date.of_year_month_day of 2016, 12, 3
+        -- amount: $550
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let alice_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2016
+        -- has_income: true
+        -- earned_income: $567192
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2016
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let single_variant equals
+      Sara.SingleVariant {
+        -- taxpayer: alice
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2016
+        -- details: Sara.FilingStatusVariant.Single content single_variant
+      } in
+    let employer_agricultural_variant equals
+      Sara.EmployerAgriculturalLaborVariant {
+        -- employer: alice_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 1
+        -- tax_year: 2016
+        -- details: Sara.EmployerVariant.AgriculturalEmployer content employer_agricultural_variant
+      } in
+    let income_events_list equals [ alice_income ] in
+    let adjusted_gross_income equals $567192 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ] ++ [ cameron ] ++ [ dan ] ++ [ emily ] ++ [ fred ] ++ [ george ]
+      -- organizations: [ alice_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: [ bob_employment_jan24 ] ++ [ cameron_employment_jan24 ] ++ [ dan_employment_jan24 ] ++ [ emily_employment_jan24 ] ++ [ fred_employment_jan24 ] ++ [ bob_employment_feb4 ] ++ [ cameron_employment_feb4 ] ++ [ fred_employment_feb4 ] ++ [ bob_employment_mar3 ] ++ [ cameron_employment_mar3 ] ++ [ dan_employment_mar3 ] ++ [ emily_employment_mar3 ] ++ [ fred_employment_mar3 ] ++ [ cameron_employment_mar19 ] ++ [ dan_employment_mar19 ] ++ [ emily_employment_mar19 ] ++ [ fred_employment_mar19 ] ++ [ george_employment_mar19 ] ++ [ bob_employment_apr2 ] ++ [ cameron_employment_apr2 ] ++ [ dan_employment_apr2 ] ++ [ fred_employment_apr2 ] ++ [ george_employment_apr2 ] ++ [ cameron_employment_may9 ] ++ [ dan_employment_may9 ] ++ [ emily_employment_may9 ] ++ [ fred_employment_may9 ] ++ [ george_employment_may9 ] ++ [ bob_employment_oct15 ] ++ [ cameron_employment_oct15 ] ++ [ dan_employment_oct15 ] ++ [ emily_employment_oct15 ] ++ [ george_employment_oct15 ] ++ [ bob_employment_oct25 ] ++ [ emily_employment_oct25 ] ++ [ fred_employment_oct25 ] ++ [ george_employment_oct25 ] ++ [ bob_employment_nov8 ] ++ [ cameron_employment_nov8 ] ++ [ emily_employment_nov8 ] ++ [ fred_employment_nov8 ] ++ [ george_employment_nov8 ] ++ [ bob_employment_nov22 ] ++ [ cameron_employment_nov22 ] ++ [ dan_employment_nov22 ] ++ [ emily_employment_nov22 ] ++ [ fred_employment_nov22 ] ++ [ bob_employment_dec1 ] ++ [ cameron_employment_dec1 ] ++ [ dan_employment_dec1 ] ++ [ emily_employment_dec1 ] ++ [ george_employment_dec1 ] ++ [ bob_employment_dec3 ] ++ [ cameron_employment_dec3 ] ++ [ dan_employment_dec3 ] ++ [ emily_employment_dec3 ] ++ [ george_employment_dec3 ]
+      -- wage_payment_events: [ bob_wage_payment_2016_01_24 ] ++ [ cameron_wage_payment_2016_01_24 ] ++ [ dan_wage_payment_2016_01_24 ] ++ [ emily_wage_payment_2016_01_24 ] ++ [ fred_wage_payment_2016_01_24 ] ++ [ bob_wage_payment_2016_02_04 ] ++ [ cameron_wage_payment_2016_02_04 ] ++ [ fred_wage_payment_2016_02_04 ] ++ [ bob_wage_payment_2016_03_03 ] ++ [ cameron_wage_payment_2016_03_03 ] ++ [ dan_wage_payment_2016_03_03 ] ++ [ emily_wage_payment_2016_03_03 ] ++ [ fred_wage_payment_2016_03_03 ] ++ [ cameron_wage_payment_2016_03_19 ] ++ [ dan_wage_payment_2016_03_19 ] ++ [ emily_wage_payment_2016_03_19 ] ++ [ fred_wage_payment_2016_03_19 ] ++ [ george_wage_payment_2016_03_19 ] ++ [ bob_wage_payment_2016_04_02 ] ++ [ cameron_wage_payment_2016_04_02 ] ++ [ dan_wage_payment_2016_04_02 ] ++ [ fred_wage_payment_2016_04_02 ] ++ [ george_wage_payment_2016_04_02 ] ++ [ cameron_wage_payment_2016_05_09 ] ++ [ dan_wage_payment_2016_05_09 ] ++ [ emily_wage_payment_2016_05_09 ] ++ [ fred_wage_payment_2016_05_09 ] ++ [ george_wage_payment_2016_05_09 ] ++ [ bob_wage_payment_2016_10_15 ] ++ [ cameron_wage_payment_2016_10_15 ] ++ [ dan_wage_payment_2016_10_15 ] ++ [ emily_wage_payment_2016_10_15 ] ++ [ george_wage_payment_2016_10_15 ] ++ [ bob_wage_payment_2016_10_25 ] ++ [ emily_wage_payment_2016_10_25 ] ++ [ fred_wage_payment_2016_10_25 ] ++ [ george_wage_payment_2016_10_25 ] ++ [ bob_wage_payment_2016_11_08 ] ++ [ cameron_wage_payment_2016_11_08 ] ++ [ emily_wage_payment_2016_11_08 ] ++ [ fred_wage_payment_2016_11_08 ] ++ [ george_wage_payment_2016_11_08 ] ++ [ bob_wage_payment_2016_11_22 ] ++ [ cameron_wage_payment_2016_11_22 ] ++ [ dan_wage_payment_2016_11_22 ] ++ [ emily_wage_payment_2016_11_22 ] ++ [ fred_wage_payment_2016_11_22 ] ++ [ bob_wage_payment_2016_12_01 ] ++ [ cameron_wage_payment_2016_12_01 ] ++ [ dan_wage_payment_2016_12_01 ] ++ [ emily_wage_payment_2016_12_01 ] ++ [ george_wage_payment_2016_12_01 ] ++ [ bob_wage_payment_2016_12_03 ] ++ [ cameron_wage_payment_2016_12_03 ] ++ [ dan_wage_payment_2016_12_03 ] ++ [ emily_wage_payment_2016_12_03 ] ++ [ george_wage_payment_2016_12_03 ]
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of (computation.tax) + round of (computation.employer_unemployment_excise_tax_result.excise_tax) = $206073)
+```

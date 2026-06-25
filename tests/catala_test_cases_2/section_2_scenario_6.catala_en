@@ -1,0 +1,145 @@
+> Module Section_2_scenario_6
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_2_scenario_6:
+  output hoh_result content IRC.IndividualTaxReturnSection2bHeadOfHouseholdOutput
+
+scope Section_2_scenario_6:
+  # Scenario: §2(b)(1)(A)(i) Head of Household via qualifying child
+  # Assumptions: c6 is a qualifying child under §152(c); taxpayer is not a surviving spouse
+  definition hoh_result equals
+    let t6 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c6 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h6 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Child resides in the household as principal place of abode for > half of the year
+    let res_c6 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: c6
+      -- household: h6
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 9, 1
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Taxpayer furnishes over half of the household maintenance cost
+    let hmc_t6 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: t6
+      -- household: h6
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- cost_furnished_percentage: 0.6
+      -- is_counterfactual: false
+    } in
+
+    # Parenthood establishes relationship for §152(c)
+    let par1 equals IRC.ParenthoodEvent {
+      -- id: 1
+      -- parent: t6
+      -- child: c6
+      -- start_date: Date.of_year_month_day of 2010, 1, 1
+      -- parent_type: IRC.ParentType.Biological
+      -- is_counterfactual: false
+    } in
+
+    # Residency status (not a nonresident alien during the year)
+    let nra_t6 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: t6
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Head of Household with qualifying person c6
+    let head_details equals IRC.HeadOfHouseholdVariant {
+      -- taxpayer: t6
+      -- qualifying_person: c6
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2025
+      -- details: IRC.FilingStatusVariant.HeadOfHousehold content head_details
+    } in
+
+    # Assume c6 is a qualifying child under §152(c) per scenario comment; provide via context
+    let qc_c6 equals IRC.IndividualSection152QualifyingChildOutput {
+      -- individual: c6
+      -- taxpayer: t6
+      -- is_qualifying_child: true
+      -- bears_relationship_152_c_1_A: true
+      -- has_same_principal_place_of_abode_152_c_1_B: true
+      -- meets_age_requirements_152_c_1_C: true
+      -- has_not_filed_joint_return_152_c_1_E: true
+    } in
+
+    # Provide a minimal dependents result consistent with the assumption
+    let dep_status_c6 equals IRC.IndividualDependentStatus {
+      -- individual: c6
+      -- is_qualifying_child: true
+      -- is_qualifying_relative: false
+      -- is_excepted_under_152_b_2: false
+      -- is_ineligible_under_152_b_1: false
+    } in
+    let deps_result equals IRC.IndividualSection152DependentsOutput {
+      -- taxpayer: t6
+      -- dependents_initial: [ c6 ]
+      -- dependents_after_152b1: [ c6 ]
+      -- dependents_after_152b2: [ c6 ]
+      -- qualifying_children: [ qc_c6 ]
+      -- qualifying_relatives: []
+      -- individual_dependent_statuses: [ dep_status_c6 ]
+    } in
+
+    # Provide a minimal §151 exemptions list output (not used for (A)(i), but required by scope)
+    let t151_taxpayer equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: t6
+      -- spouse_exemption_allowed_151_b: false
+      -- individuals_entitled_to_exemptions_under_151: [ c6 ]
+    } in
+    let t151_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: t151_taxpayer
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ c6 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Compute §2(b) Head of Household status; pass the §152(c) QC assumption via context
+    (output of IRC.IndividualTaxReturnSection2bHeadOfHousehold with {
+      -- individual_tax_return: individual_tax_return
+      -- nonresident_alien_status_period_events: [ nra_t6 ]
+      -- parenthood_events: [ par1 ]
+      -- household_maintenance_events: [ hmc_t6 ]
+      -- residence_period_events: [ res_c6 ]
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- family_relationship_events: []
+      -- birth_events: []
+      -- tax_return_events: []
+      -- taxpayer_exemptions_list_result: t151_result
+      -- taxpayer_dependents_result: deps_result
+      -- death_events: []
+      -- is_surviving_spouse_2_a: false
+      -- qualifying_person_qualifying_child_result: Present content qc_c6
+    }).main_output
+
+  # Assertions
+  # Tests §2(b)(1)(A)(i): overall head of household status satisfied
+  assertion (hoh_result.is_head_of_household_2_b = true)
+
+  # Tests §2(b)(1)(A): the household is the principal place of abode for > half the year AND taxpayer maintains the household
+  assertion (hoh_result.maintains_household_principal_place_of_abode_more_than_half_year_2_b_1_A = true)
+
+  # Tests §2(b)(1) concluding sentence (cost > half) as incorporated into the maintains_household_... field above
+  assertion (hoh_result.maintains_household_principal_place_of_abode_more_than_half_year_2_b_1_A = true)
+```

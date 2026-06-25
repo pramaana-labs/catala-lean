@@ -1,0 +1,307 @@
+> Module Tax_case_20
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase20:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase20:
+  # In 2017, Alice's gross income was $310192. Since 2014, Alice maintains a house where she and her daughter lived. Alice was married since Jan 14th, 2010 until her husband died on Nov 23rd, 2016. In 2017, Alice is allowed itemized deductions of $17890. Alice has paid $45252 to Bob for work done in the year 2017. In 2017, Alice has also paid $9832 into a retirement fund for Bob, and $5322 into health insurance for Charlie, who is Alice's father and has retired in 2016. Charlie had no income in 2017.
+
+  # How much tax does Alice have to pay in 2017? $90683
+ 
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let charlie equals
+      Sara.Individual {
+        -- id: 3
+        -- is_counterfactual: false
+      } in
+    let daughter equals
+      Sara.Individual {
+        -- id: 4
+        -- is_counterfactual: false
+      } in
+    let husband equals
+      Sara.Individual {
+        -- id: 5
+        -- is_counterfactual: false
+      } in
+    let marriage equals
+      Sara.MarriageEvent {
+        -- id: 1
+        -- spouse1: alice
+        -- spouse2: husband
+        -- marriage_date: Date.of_year_month_day of 2010, 1, 14
+        -- is_counterfactual: false
+      } in
+    let husband_death equals
+      Sara.DeathEvent {
+        -- id: 1
+        -- decedent: husband
+        -- death_date: Date.of_year_month_day of 2016, 11, 23
+        -- is_counterfactual: false
+      } in
+    let alice_parenthood equals
+      Sara.ParenthoodEvent {
+        -- id: 1
+        -- parent: alice
+        -- child: daughter
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- parent_type: Sara.ParentType.Biological
+        -- is_counterfactual: false
+      } in
+    let alice_family_relationship_daughter equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 1
+        -- person: alice
+        -- relative: daughter
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- relationship_type: Sara.FamilyRelationshipType.Child
+        -- is_counterfactual: false
+      } in
+    let daughter_family_relationship_alice equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 2
+        -- person: daughter
+        -- relative: alice
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- relationship_type: Sara.FamilyRelationshipType.Mother
+        -- is_counterfactual: false
+      } in
+    let charlie_parenthood equals
+      Sara.ParenthoodEvent {
+        -- id: 2
+        -- parent: charlie
+        -- child: alice
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- parent_type: Sara.ParentType.Biological
+        -- is_counterfactual: false
+      } in
+    let charlie_family_relationship_alice equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 3
+        -- person: charlie
+        -- relative: alice
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- relationship_type: Sara.FamilyRelationshipType.Child
+        -- is_counterfactual: false
+      } in
+    let alice_family_relationship_charlie equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 4
+        -- person: alice
+        -- relative: charlie
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- relationship_type: Sara.FamilyRelationshipType.Father
+        -- is_counterfactual: false
+      } in
+    let household equals
+      Sara.Household {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let alice_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 1
+        -- individual: alice
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- end_date: Date.of_year_month_day of 2017, 12, 31
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let daughter_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 2
+        -- individual: daughter
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2014, 1, 1
+        -- end_date: Date.of_year_month_day of 2017, 12, 31
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let alice_household_maintenance equals
+      Sara.HouseholdMaintenanceEvent {
+        -- id: 1
+        -- individual: alice
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2017, 1, 1
+        -- end_date: Date.of_year_month_day of 2017, 12, 31
+        -- cost_furnished_percentage: 100%
+        -- is_counterfactual: false
+      } in
+    let alice_org equals
+      Sara.Organization {
+        -- id: 1
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let bob_employment equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2017, 1, 1
+        -- end_date: Date.of_year_month_day of 2017, 12, 31
+        -- employment_category: Sara.EmploymentCategory.General
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment equals
+      Sara.WagePaymentEvent {
+        -- id: 1
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2017, 12, 31
+        -- amount: $45252
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_retirement_fund_payment equals
+      Sara.WagePaymentEvent {
+        -- id: 2
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2017, 12, 31
+        -- amount: $9832
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: true
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let charlie_health_insurance_payment equals
+      Sara.WagePaymentEvent {
+        -- id: 3
+        -- employer: alice_org
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2017, 12, 31
+        -- amount: $5322
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.SicknessOrAccidentDisability
+        -- is_under_plan_or_system: true
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: true
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let alice_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2017
+        -- has_income: true
+        -- earned_income: $310192
+        -- is_counterfactual: false
+      } in
+    let charlie_income equals
+      Sara.IncomeEvent {
+        -- id: 2
+        -- individual: charlie
+        -- tax_year: 2017
+        -- has_income: false
+        -- earned_income: $0
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: alice
+        -- tax_year: 2017
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: [ daughter ]
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let surviving_spouse_variant equals
+      Sara.SurvivingSpouseVariant {
+        -- taxpayer: alice
+        -- deceased_spouse: husband
+        -- qualifying_dependent: daughter
+        -- itemization_election: true
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2017
+        -- details: Sara.FilingStatusVariant.SurvivingSpouse content surviving_spouse_variant
+      } in
+    let employer_general_variant equals
+      Sara.EmployerGeneralVariant {
+        -- employer: alice_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 0
+        -- tax_year: 2017
+        -- details: Sara.EmployerVariant.GeneralEmployer content employer_general_variant
+      } in
+    let income_events_list equals [ alice_income ] ++ [ charlie_income ] in
+    let employment_events_list equals [ bob_employment ] in
+    let wage_payment_events_list equals [ bob_wage_payment ] ++ [ bob_retirement_fund_payment ] ++ [ charlie_health_insurance_payment ] in
+    let adjusted_gross_income equals $310192 in
+    let itemized_deductions equals $17890 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ] ++ [ charlie ] ++ [ daughter ] ++ [ husband ]
+      -- organizations: [ alice_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: [ husband_death ]
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: [ marriage ]
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: [ alice_residence ] ++ [ daughter_residence ]
+      -- household_maintenance_events: [ alice_household_maintenance ]
+      -- parenthood_events: [ alice_parenthood ] ++ [ charlie_parenthood ]
+      -- family_relationship_events: [ alice_family_relationship_daughter ] ++ [ daughter_family_relationship_alice ] ++ [ charlie_family_relationship_alice ] ++ [ alice_family_relationship_charlie ]
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: employment_events_list
+      -- wage_payment_events: wage_payment_events_list
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+      -- itemized_deductions: itemized_deductions
+    }
+  assertion (round of (computation.tax) + round of (computation.employer_unemployment_excise_tax_result.excise_tax) = $90683)
+```

@@ -1,0 +1,131 @@
+> Module Section_152_scenario_1
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_1:
+  output dependents_t1 content IRC.IndividualSection152DependentsOutput
+
+scope Section_152_scenario_1:
+  # Scenario: §152 qualifying child and dependent determination
+  # Tested law refs:
+  # - §152(a): dependent means a qualifying child or qualifying relative
+  # - §152(c)(1): qualifying child definition
+  # - §152(c)(2)(A): relationship (child/descendant)
+  # - §152(c)(1)(B): same principal place of abode > half year
+  # - §152(c)(3): age requirements
+  # - §152(c)(1)(E): no joint return (other than for refund only)
+
+  definition dependents_t1 equals
+    let t1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c1 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h1 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth events (used for §152(c)(3) age test)
+    let birth_t1 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t1
+      -- birth_date: Date.of_year_month_day of 1985, 6, 1
+      -- is_counterfactual: false
+    } in
+    let birth_c1 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: c1
+      -- birth_date: Date.of_year_month_day of 2013, 4, 10
+      -- is_counterfactual: false
+    } in
+
+    # Family relationship event: c1 is the child of t1 (maps to §152(c)(2)(A))
+    let rel_c1_child_of_t1 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: c1
+      -- relative: t1
+      -- start_date: Date.of_year_month_day of 2013, 4, 10
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods: principal place of abode for > half of 2023 (maps to §152(c)(1)(B))
+    let res_t1 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_c1 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c1
+      -- household: h1
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 10, 1
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Child's tax return filing (for §152(c)(1)(E) joint return test)
+    let tx_c1 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: c1
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152 dependents for taxpayer t1 in 2023, considering c1 as potential dependent
+    (output of IRC.IndividualSection152Dependents with {
+      -- taxpayer: t1
+      -- tax_year: 2023
+      -- individuals: [ c1 ]
+      -- family_relationship_events: [ rel_c1_child_of_t1 ]
+      -- birth_events: [ birth_t1 ] ++ [ birth_c1 ]
+      -- residence_period_events: [ res_t1 ] ++ [ res_c1 ]
+      -- tax_return_events: [ tx_c1 ]
+      -- income_events: []
+      -- marriage_events: []
+    }).main_output
+
+  # Assertions - ONLY check the already computed output dependents_t1
+
+  # is_dependent_c1_of_t1_2023: true (§152(a), after §152(b)(2) filter)
+  assertion (
+    exists dep among dependents_t1.dependents_after_152b2 such that dep.id = 2
+  )
+
+  # is_qualifying_child_c1_of_t1_2023: true (overall §152(c)(1))
+  assertion (
+    exists qc among dependents_t1.qualifying_children
+      such that qc.individual.id = 2 and qc.is_qualifying_child = true
+  )
+
+  # qc_relationship_c1_t1_2023: true (§152(c)(1)(A) via §152(c)(2)(A))
+  assertion (
+    exists qc among dependents_t1.qualifying_children
+      such that qc.individual.id = 2 and qc.bears_relationship_152_c_1_A = true
+  )
+
+  # qc_abode_over_half_c1_t1_2023: true (§152(c)(1)(B))
+  assertion (
+    exists qc among dependents_t1.qualifying_children
+      such that qc.individual.id = 2 and qc.has_same_principal_place_of_abode_152_c_1_B = true
+  )
+
+  # qc_age_requirement_c1_t1_2023: true (§152(c)(1)(C) and §152(c)(3))
+  assertion (
+    exists qc among dependents_t1.qualifying_children
+      such that qc.individual.id = 2 and qc.meets_age_requirements_152_c_1_C = true
+  )
+
+  # qc_no_joint_return_or_refund_only_c1_2023: true (§152(c)(1)(E))
+  assertion (
+    exists qc among dependents_t1.qualifying_children
+      such that qc.individual.id = 2 and qc.has_not_filed_joint_return_152_c_1_E = true
+  )
+```

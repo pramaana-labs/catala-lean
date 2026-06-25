@@ -1,0 +1,43 @@
+## R1/P4 Reduction Test: Function with depends on
+
+Tests that function-typed variables with a single unconditional rule
+are fully simplified through R1 (inner match removal) and P4 (Option removal).
+
+Before R1 reduction:
+```
+def ComputeTax_compute_leaf_0 (input : ComputeTax_Input) : Option (Money → Money) :=
+  some (fun (x : Money) => match some ((multiply x input.rate)) with | some r => r | _ => default)
+```
+
+After R1 reduction (no inner match):
+```
+def ComputeTax_compute_leaf_0 (input : ComputeTax_Input) : Option (Money → Money) :=
+  some (fun (x : Money) => (multiply x input.rate))
+```
+
+After P4 reduction (no Option, no some wrapper, no match at call site):
+```
+def ComputeTax_compute_leaf_0 (input : ComputeTax_Input) : (Money → Money) :=
+  fun (x : Money) => (multiply x input.rate)
+-- call site:
+let _compute := ComputeTax_compute_leaf_0 input
+```
+
+```catala
+declaration scope ComputeTax:
+  input rate content decimal
+  output compute content money depends on x content money
+
+scope ComputeTax:
+  definition compute of x equals x * rate
+```
+
+```catala-test-cli
+$ catala Typecheck --check-invariants
+┌─[RESULT]─
+│ All invariant checks passed
+└─
+┌─[RESULT]─
+│ Typechecking successful!
+└─
+```

@@ -1,0 +1,58 @@
+# Cloud Build configuration for Catala to Lean4 API Server
+# Builds the Docker image, pushes to Artifact Registry, then deploys to Cloud Run
+# Note: This file is in server/ directory. Cloud Build trigger must be configured
+# to use this file path: server/cloudbuild.yaml
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: us-central1
+  _REPO: catala-lean-repo
+  _IMAGE: catala-api
+
+steps:
+  # Step 1: Build Docker image
+  # Build context is repo root (.) but Dockerfile is in server/
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--platform'
+      - 'linux/amd64'  # Required for Cloud Run
+      - '-f'
+      - 'server/Dockerfile'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'
+      - '.'
+    id: 'build-image'
+
+  # Step 2: Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'
+    waitFor:
+      - 'build-image'
+    id: 'push-image'
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'catala-lean-server'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      
+    waitFor:
+      - 'push-image'
+    id: 'deploy-cloud-run'
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest'

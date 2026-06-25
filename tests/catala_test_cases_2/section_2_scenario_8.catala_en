@@ -1,0 +1,144 @@
+> Module Section_2_scenario_8
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_2_scenario_8:
+  output hoh_result content IRC.IndividualTaxReturnSection2bHeadOfHouseholdOutput
+
+scope Section_2_scenario_8:
+  # Scenario: §2(b)(1)(B) - Head of household via father
+  # Taxpayer (t8) maintains a household that is the principal place of abode of taxpayer’s father (f8) for the taxable year,
+  # furnishes over half the cost, and is not married at close. Assumes t8 is entitled to a §151 deduction for f8.
+  # Tested law refs: §2(b)(1)(B)
+
+  definition hoh_result equals
+    let t8 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let f8 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let h8 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Father resides as a member and principal place of abode of the household for the taxable year (§2(b)(1)(B))
+    let res_f8 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: f8
+      -- household: h8
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Taxpayer furnishes over one-half the cost of maintaining the household for the taxable year
+    # (maintenance requirement applies to §2(b)(1)(B) as per the paragraph’s final sentence)
+    let hmc_t8 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: t8
+      -- household: h8
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- cost_furnished_percentage: 0.7
+      -- is_counterfactual: false
+    } in
+
+    # Family relationship: father
+    let rel_t8_f8 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t8
+      -- relative: f8
+      -- start_date: Date.of_year_month_day of 1990, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Father
+      -- is_counterfactual: false
+    } in
+
+    # Taxpayer is resident for the year (not a nonresident alien; §2(b)(3)(A) limitation does not apply)
+    let nra_t8 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: t8
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+
+    # Individual tax return: HeadOfHousehold with father as qualifying person (§2(b)(1)(B))
+    let hoh_details equals IRC.HeadOfHouseholdVariant {
+      -- taxpayer: t8
+      -- qualifying_person: f8
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2025
+      -- details: IRC.FilingStatusVariant.HeadOfHousehold content hoh_details
+    } in
+
+    # Assumption from scenario: taxpayer entitled to §151 deduction for father
+    # Provide a temporary exemptions list result including father (f8)
+    let taxpayer_exemptions_list_result equals
+      IRC.TaxpayerExemptionsList151Output {
+        -- taxpayer_result:
+          IRC.IndividualSection151ExemptionsListOutput {
+            -- individual: t8
+            -- spouse_exemption_allowed_151_b: false
+            -- individuals_entitled_to_exemptions_under_151: [ f8 ]
+          }
+        -- spouse_result: Absent
+        -- individuals_entitled_to_exemptions_under_151: [ f8 ]
+        -- spouse_exemption_allowed_151_b: false
+      } in
+
+    # Temporary dependents result, including father as qualifying relative/dependent
+    let f8_dep_status equals IRC.IndividualDependentStatus {
+      -- individual: f8
+      -- is_qualifying_child: false
+      -- is_qualifying_relative: true
+      -- is_excepted_under_152_b_2: false
+      -- is_ineligible_under_152_b_1: false
+    } in
+    let taxpayer_dependents_result equals
+      IRC.IndividualSection152DependentsOutput {
+        -- taxpayer: t8
+        -- dependents_initial: [ f8 ]
+        -- dependents_after_152b1: [ f8 ]
+        -- dependents_after_152b2: [ f8 ]
+        -- qualifying_children: []
+        -- qualifying_relatives: []
+        -- individual_dependent_statuses: [ f8_dep_status ]
+      } in
+
+    # Compute §2(b) Head of Household status; not a surviving spouse (per §2(b)(1) requirement)
+    (output of IRC.IndividualTaxReturnSection2bHeadOfHousehold with {
+      -- individual_tax_return: individual_tax_return
+      -- nonresident_alien_status_period_events: [ nra_t8 ]
+      -- parenthood_events: []
+      -- household_maintenance_events: [ hmc_t8 ]
+      -- residence_period_events: [ res_f8 ]
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- family_relationship_events: [ rel_t8_f8 ]
+      -- birth_events: []
+      -- tax_return_events: []
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+      -- taxpayer_dependents_result: taxpayer_dependents_result
+      -- death_events: []
+      -- is_surviving_spouse_2_a: false
+    }).main_output
+
+  # Assertions:
+  # is_head_of_household_under_2b1 → maps to is_head_of_household_2_b (overall §2(b) status)
+  # Tests §2(b)(1)(B): taxpayer qualifies as head of household via father
+  assertion (hoh_result.is_head_of_household_2_b = true)
+
+  # maintains_household_over_half_cost_for_tax_year → §2(b)(1)(B) maintenance requirement (> half cost)
+  # The field maintains_household_for_father_or_mother_2_b_1_B encodes both maintenance (> 1/2 cost)
+  # and principal abode of father/mother for the taxable year.
+  assertion (hoh_result.maintains_household_for_father_or_mother_2_b_1_B = true)
+
+  # principal_place_of_abode_for_tax_year → §2(b)(1)(B) abode requirement for father/mother
+  assertion (hoh_result.maintains_household_for_father_or_mother_2_b_1_B = true)
+```

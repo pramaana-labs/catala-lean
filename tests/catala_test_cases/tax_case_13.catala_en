@@ -1,0 +1,218 @@
+> Module Tax_case_13
+> Using Sections as Sara
+
+```catala
+#[test]
+declaration scope TestTaxCase13:
+  output computation content Sara.IRCSimplified
+
+scope TestTaxCase13:
+  # Alice's father, Bob, was paid $53249 in remuneration in 2017 for services performed for Johns Hopkins University. Alice was enrolled at Johns Hopkins University and attending classes from August 29, 2015 to May 30th, 2019. While attending classes at Johns Hopkins University, Alice lived at Bob's house, for which Bob furnished all costs. In 2017, Bob takes the standard deduction.
+
+  # How much tax does Bob have to pay in 2017? $8710
+
+  definition computation equals
+    let alice equals
+      Sara.Individual {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob equals
+      Sara.Individual {
+        -- id: 2
+        -- is_counterfactual: false
+      } in
+    let hopkins equals
+      Sara.Organization {
+        -- id: 1
+        -- organization_type: Sara.OrganizationType.EducationalInstitution
+        -- is_counterfactual: false
+      } in
+    let bob_parenthood equals
+      Sara.ParenthoodEvent {
+        -- id: 1
+        -- parent: bob
+        -- child: alice
+        -- start_date: Date.of_year_month_day of 2015, 1, 1
+        -- parent_type: Sara.ParentType.Biological
+        -- is_counterfactual: false
+      } in
+    let bob_family_relationship equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 1
+        -- person: bob
+        -- relative: alice
+        -- start_date: Date.of_year_month_day of 2015, 1, 1
+        -- relationship_type: Sara.FamilyRelationshipType.Child
+        -- is_counterfactual: false
+      } in
+    let alice_family_relationship equals
+      Sara.FamilyRelationshipEvent {
+        -- id: 2
+        -- person: alice
+        -- relative: bob
+        -- start_date: Date.of_year_month_day of 2015, 1, 1
+        -- relationship_type: Sara.FamilyRelationshipType.Father
+        -- is_counterfactual: false
+      } in
+    let alice_enrollment equals
+      Sara.StudentEnrollmentEvent {
+        -- id: 1
+        -- student: alice
+        -- institution: hopkins
+        -- start_date: Date.of_year_month_day of 2015, 8, 29
+        -- end_date: Date.of_year_month_day of 2019, 5, 30
+        -- is_regularly_attending: true
+        -- is_counterfactual: false
+      } in
+    let household equals
+      Sara.Household {
+        -- id: 1
+        -- is_counterfactual: false
+      } in
+    let bob_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 1
+        -- individual: bob
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2015, 1, 1
+        -- end_date: Date.of_year_month_day of 2019, 12, 31
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let alice_residence equals
+      Sara.ResidencePeriodEvent {
+        -- id: 2
+        -- individual: alice
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2015, 8, 29
+        -- end_date: Date.of_year_month_day of 2019, 5, 30
+        -- is_member_of_household: true
+        -- is_principal_place_of_abode: true
+        -- is_counterfactual: false
+      } in
+    let bob_household_maintenance equals
+      Sara.HouseholdMaintenanceEvent {
+        -- id: 1
+        -- individual: bob
+        -- household: household
+        -- start_date: Date.of_year_month_day of 2017, 1, 1
+        -- end_date: Date.of_year_month_day of 2017, 12, 31
+        -- cost_furnished_percentage: 100%
+        -- is_counterfactual: false
+      } in
+    let bob_employment equals
+      Sara.EmploymentRelationshipEvent {
+        -- id: 1
+        -- employer: hopkins
+        -- employee: bob
+        -- start_date: Date.of_year_month_day of 2017, 1, 1
+        -- end_date: Date.of_year_month_day of 2017, 12, 31
+        -- employment_category: Sara.EmploymentCategory.General
+        -- service_location: Sara.ServiceLocation.WithinUnitedStates
+        -- is_american_employer: true
+        -- employee_is_us_citizen: true
+        -- is_counterfactual: false
+      } in
+    let bob_wage_payment equals
+      Sara.WagePaymentEvent {
+        -- id: 1
+        -- employer: hopkins
+        -- employee: bob
+        -- payment_date: Date.of_year_month_day of 2017, 12, 31
+        -- amount: $53249
+        -- payment_medium: Sara.PaymentMedium.Cash
+        -- payment_reason: Sara.PaymentReason.RegularCompensation
+        -- is_under_plan_or_system: false
+        -- is_for_employee_generally: true
+        -- is_for_class_of_employees: false
+        -- is_for_dependents: false
+        -- is_not_in_course_of_trade_or_business: false
+        -- would_have_been_paid_without_termination: false
+        -- is_paid_to_survivor_or_estate: false
+        -- is_counterfactual: false
+      } in
+    let bob_income equals
+      Sara.IncomeEvent {
+        -- id: 1
+        -- individual: bob
+        -- tax_year: 2017
+        -- has_income: true
+        -- earned_income: $53249
+        -- is_counterfactual: false
+      } in
+    let tax_return_event equals
+      Sara.TaxReturnEvent {
+        -- id: 1
+        -- individual: bob
+        -- tax_year: 2017
+        -- filed_joint_return: false
+        -- is_only_for_refund_claim: false
+        -- qualifying_children: []
+        -- dependents: []
+        -- is_counterfactual: false
+      } in
+    let head_of_household_variant equals
+      Sara.HeadOfHouseholdVariant {
+        -- taxpayer: bob
+        -- qualifying_person: alice
+        -- itemization_election: false
+        -- is_estate_or_trust: false
+        -- is_common_trust_fund: false
+        -- is_partnership: false
+      } in
+    let individual_tax_return equals
+      Sara.IndividualTaxReturn {
+        -- id: 1
+        -- tax_year: 2017
+        -- details: Sara.FilingStatusVariant.HeadOfHousehold content head_of_household_variant
+      } in
+    let dummy_org equals
+      Sara.Organization {
+        -- id: 0
+        -- organization_type: Sara.OrganizationType.Business
+        -- is_counterfactual: false
+      } in
+    let employer_general_variant equals
+      Sara.EmployerGeneralVariant {
+        -- employer: dummy_org
+      } in
+    let employer_tax_return equals
+      Sara.EmployerUnemploymentExciseTaxReturn {
+        -- id: 0
+        -- tax_year: 2017
+        -- details: Sara.EmployerVariant.GeneralEmployer content employer_general_variant
+      } in
+    let income_events_list equals [ bob_income ] in
+    let employment_events_list equals [ bob_employment ] in
+    let wage_payment_events_list equals [ bob_wage_payment ] in
+    let adjusted_gross_income equals $53249 in
+    output of Sara.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ alice ] ++ [ bob ]
+      -- organizations: [ hopkins ] ++ [ dummy_org ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- remarriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: [ bob_residence ] ++ [ alice_residence ]
+      -- household_maintenance_events: [ bob_household_maintenance ]
+      -- parenthood_events: [ bob_parenthood ]
+      -- family_relationship_events: [ bob_family_relationship ] ++ [ alice_family_relationship ]
+      -- tax_return_events: [ tax_return_event ]
+      -- income_events: income_events_list
+      -- employment_relationship_events: employment_events_list
+      -- wage_payment_events: wage_payment_events_list
+      -- student_enrollment_events: [ alice_enrollment ]
+      -- hospital_patient_events: []
+      -- immigration_admission_events: []
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_tax_return
+      -- adjusted_gross_income: adjusted_gross_income
+    }
+  assertion (round of computation.tax = $8710)
+```

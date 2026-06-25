@@ -1,0 +1,122 @@
+> Module Section_2_scenario_5
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_2_scenario_5:
+  output ss_result content IRC.IndividualTaxReturnSection2aSurvivingSpouseOutput
+
+scope Section_2_scenario_5:
+  # Scenario: Surviving spouse fails because dependent is a niece (not son/stepson/daughter/stepdaughter under §152)
+  # Tested law refs: §2(a)(1)(B)
+  # Assumption: n5 is otherwise a dependent under §§152 and 151; failure is solely due to relationship requirement in §2(a)(1)(B)(i)
+
+  definition ss_result equals
+    let t5 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let s5 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let n5 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let h5 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    let marriage5 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: t5
+      -- spouse2: s5
+      -- marriage_date: Date.of_year_month_day of 2010, 10, 10
+      -- is_counterfactual: false
+    } in
+
+    let death_s5 equals IRC.DeathEvent {
+      -- id: 1
+      -- decedent: s5
+      -- death_date: Date.of_year_month_day of 2024, 5, 30
+      -- is_counterfactual: false
+    } in
+
+    let res_n5_2025 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: n5
+      -- household: h5
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    let hm_t5_2025 equals IRC.HouseholdMaintenanceEvent {
+      -- id: 1
+      -- individual: t5
+      -- household: h5
+      -- start_date: Date.of_year_month_day of 2025, 1, 1
+      -- end_date: Date.of_year_month_day of 2025, 12, 31
+      -- cost_furnished_percentage: 0.7
+      -- is_counterfactual: false
+    } in
+
+    # Residency statuses in the spouse's death year (for §2(a)(2)(B) joint return possibility check)
+    let residency_t5_2024 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 1
+      -- individual: t5
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 12, 31
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+    let residency_s5_2024 equals IRC.NonresidentAlienStatusPeriodEvent {
+      -- id: 2
+      -- individual: s5
+      -- start_date: Date.of_year_month_day of 2024, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 5, 30
+      -- residency_status: IRC.ResidencyStatus.Resident
+      -- is_counterfactual: false
+    } in
+
+    # Individual income tax return: Surviving Spouse filing, with qualifying dependent set to n5 (a niece)
+    let ss_details equals IRC.SurvivingSpouseVariant {
+      -- taxpayer: t5
+      -- deceased_spouse: s5
+      -- qualifying_dependent: n5
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2025
+      -- details: IRC.FilingStatusVariant.SurvivingSpouse content ss_details
+    } in
+
+    # Temporary §151 exemptions list (assumption in scenario):
+    # Include n5 as an individual entitled to exemption under §151 to isolate failure to §2(a)(1)(B)(i) relationship.
+    let taxpayer_151_list equals IRC.IndividualSection151ExemptionsListOutput {
+      -- individual: t5
+      -- spouse_exemption_allowed_151_b: false
+      -- individuals_entitled_to_exemptions_under_151: [ n5 ]
+    } in
+    let taxpayer_exemptions_list_result equals IRC.TaxpayerExemptionsList151Output {
+      -- taxpayer_result: taxpayer_151_list
+      -- spouse_result: Absent
+      -- individuals_entitled_to_exemptions_under_151: [ n5 ]
+      -- spouse_exemption_allowed_151_b: false
+    } in
+
+    # Compute §2(a) Surviving Spouse status
+    (output of IRC.IndividualTaxReturnSection2aSurvivingSpouse with {
+      -- individual_tax_return: individual_tax_return
+      -- death_events: [ death_s5 ]
+      -- nonresident_alien_status_period_events: [ residency_t5_2024 ] ++ [ residency_s5_2024 ]
+      -- parenthood_events: []  # No parent-child relationship; n5 is a niece
+      -- household_maintenance_events: [ hm_t5_2025 ]
+      -- residence_period_events: [ res_n5_2025 ]
+      -- marriage_events: [ marriage5 ]
+      -- taxpayer_exemptions_list_result: taxpayer_exemptions_list_result
+    }).main_output
+
+  # Assertion:
+  # Tests §2(a)(1)(B): Dependent must be a son, stepson, daughter, or stepdaughter (within §152).
+  # Here the dependent is a niece; even though §151 dependency and abode/maintenance are satisfied,
+  # the relationship clause fails, so the taxpayer is not a surviving spouse for §1.
+  assertion (ss_result.is_surviving_spouse_2_a = false)
+```

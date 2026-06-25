@@ -1,0 +1,101 @@
+> Module Section_152_scenario_8
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_8:
+  output qr_result content IRC.IndividualSection152QualifyingRelativeOutput
+
+scope Section_152_scenario_8:
+  # Scenario: Qualifying relative via household membership under §152(d)(2)(H)
+  # Tested law refs: §152(d)(2)(H), §152(d)(1)(A), §152(d)(1)(B), §152(d)(1)
+  # Individuals: taxpayer t8 and fiancé fi8 (not spouse), both residing full year in same household, fi8 has no income
+
+  # Use the section-specific scope for §152 qualifying relative:
+  # IRC.IndividualSection152QualifyingRelative
+
+  definition qr_result equals
+    let t8 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let fi8 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+
+    let h8 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Residence: both are members of the same household and that household is their principal place of abode for the taxable year
+    let res_t8 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t8
+      -- household: h8
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_fi8 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: fi8
+      -- household: h8
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Income: fi8 has no income for tax year 2023 (§152(d)(1)(B))
+    let income_fi8 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: fi8
+      -- tax_year: 2023
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+
+    # Joint return status for fi8: did not file a joint return (§152(c)(1)(E) context for QC; also supports QR not-being-QC condition)
+    let tr_fi8 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: fi8
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Temporary qualifying child result for fi8 (not computing the QC scope; set assumed values)
+    # fi8 is not a qualifying child due to failing relationship and age requirements
+    let qc_fi8 equals IRC.IndividualSection152QualifyingChildOutput {
+      -- individual: fi8
+      -- taxpayer: t8
+      -- is_qualifying_child: false
+      -- bears_relationship_152_c_1_A: false
+      -- has_same_principal_place_of_abode_152_c_1_B: true
+      -- meets_age_requirements_152_c_1_C: false
+      -- has_not_filed_joint_return_152_c_1_E: true
+    } in
+
+    # Call §152 Qualifying Relative scope
+    (output of IRC.IndividualSection152QualifyingRelative with {
+      -- individual: fi8
+      -- taxpayer: t8
+      -- tax_year: 2023
+      -- family_relationship_events: []  # Unrelated; relying on §152(d)(2)(H) household membership
+      -- residence_period_events: [ res_t8 ] ++ [ res_fi8 ]
+      -- qualifying_child_results: [ qc_fi8 ]  # Temporary structure to indicate fi8 is not a qualifying child
+      -- tax_return_events: [ tr_fi8 ]
+      -- income_events: [ income_fi8 ]
+      -- marriage_events: []  # Not spouses at any time during the year (fiancé)
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output (qr_result)
+  # Tests §152(d)(2)(H): same principal place of abode and member of taxpayer's household (not spouse)
+  assertion (qr_result.is_household_member_152_d_2_H = true)
+
+  # Tests §152(d)(1)(B): the individual has no income for the calendar year
+  assertion (qr_result.has_no_income_152_d_1_B = true)
+
+  # Tests §152(d)(1): qualifying relative status met (relationship via (H), no income, and not a qualifying child)
+  assertion (qr_result.is_qualifying_relative = true)
+```

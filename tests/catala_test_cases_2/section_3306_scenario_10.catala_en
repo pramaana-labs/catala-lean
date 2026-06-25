@@ -1,0 +1,143 @@
+> Module Section_3306_scenario_10
+> Using Sections as IRC
+
+```catala
+declaration structure Section3306Scenario10Output:
+  data wages_excluded_b10_termination_due_to_death_or_disability_retirement_under_plan content money
+  data wages_included_b10_payable_even_without_termination content money
+  data taxable_wages_total_b content money
+
+#[test]
+declaration scope Section_3306_scenario_10:
+  output computation content Section3306Scenario10Output
+
+scope Section_3306_scenario_10:
+  # Scenario: §3306(b)(10) wage exclusion for payments upon or after termination due to retirement for disability, under an employer plan.
+  # Tested law refs:
+  # - §3306(b)(10)(A): payment upon or after termination due to death or retirement for disability
+  # - §3306(b)(10)(B): under a plan for employees generally or a class of employees
+  # - Final clause: "other than any such payment ... which would have been paid if the employee's employment relationship had not been so terminated" (i.e., such payments remain wages)
+  definition computation equals
+    # Entities
+    let i9 equals IRC.Individual {
+      -- id: 1
+      -- is_counterfactual: false
+    } in
+    let org10 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationship (for context; termination below)
+    let emp_rel equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org10
+      -- employee: i9
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2024, 6, 1
+      -- employment_category: IRC.EmploymentCategory.General
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Termination due to retirement for disability (needed for §3306(b)(10)(A))
+    let term1 equals IRC.EmploymentTerminationEvent {
+      -- id: 1
+      -- employer: org10
+      -- employee: i9
+      -- termination_date: Date.of_year_month_day of 2024, 6, 1
+      -- reason: IRC.TerminationReason.DisabilityRetirement
+      -- is_counterfactual: false
+    } in
+
+    # First payment: qualifies for exclusion under §3306(b)(10)
+    # - Under plan/system (B)
+    # - Would NOT have been paid absent termination (final clause satisfied for exclusion)
+    let w1 equals IRC.WagePaymentEvent {
+      -- id: 1
+      -- employer: org10
+      -- employee: i9
+      -- payment_date: Date.of_year_month_day of 2024, 6, 15
+      -- amount: $3000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.TerminationAfterDeathOrDisabilityRetirement
+      -- is_under_plan_or_system: true
+      -- is_for_employee_generally: true
+      -- is_for_class_of_employees: true
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: false
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Second payment: under plan, but would have been paid even without termination
+    # - Therefore, remains wages per the "other than" clause in §3306(b)(10)
+    let w2 equals IRC.WagePaymentEvent {
+      -- id: 2
+      -- employer: org10
+      -- employee: i9
+      -- payment_date: Date.of_year_month_day of 2024, 7, 15
+      -- amount: $2000
+      -- payment_medium: IRC.PaymentMedium.Cash
+      -- payment_reason: IRC.PaymentReason.TerminationAfterDeathOrDisabilityRetirement
+      -- is_under_plan_or_system: true
+      -- is_for_employee_generally: true
+      -- is_for_class_of_employees: true
+      -- is_for_dependents: false
+      -- is_not_in_course_of_trade_or_business: false
+      -- would_have_been_paid_without_termination: true
+      -- is_paid_to_survivor_or_estate: false
+      -- is_counterfactual: false
+    } in
+
+    # Compute §3306(b)(10) wage treatment for each payment
+    let wage_res_1 equals
+      (output of IRC.WagePaymentEventSection3306Wages with {
+        -- wage_payment_event: w1
+        -- employment_termination_events: [ term1 ]
+        -- death_events: []
+      }).main_output in
+
+    let wage_res_2 equals
+      (output of IRC.WagePaymentEventSection3306Wages with {
+        -- wage_payment_event: w2
+        -- employment_termination_events: [ term1 ]
+        -- death_events: []
+      }).main_output in
+
+    # Total taxable wages after §3306(b) exclusions (before $7,000 cap)
+    let total_calc equals
+      (output of IRC.TotalWages3306Calculation with {
+        -- wage_results: [ wage_res_1 ] ++ [ wage_res_2 ]
+      }).main_output in
+
+    # Derive scenario outputs from the computed scope outputs:
+    # - Excluded amount under §3306(b)(10) for the qualifying termination payment
+    # - Included amount under §3306(b)(10) for the payment payable even without termination
+    # - Total taxable wages after §3306(b) exclusions
+    let excluded_b10 equals
+      if wage_res_1.is_excluded_by_termination_payment then wage_res_1.wage_payment_event.amount else $0 in
+    let included_b10 equals wage_res_2.taxable_amount_before_7000_cap in
+    let taxable_total_b equals total_calc.total_taxable_wages in
+
+    Section3306Scenario10Output {
+      -- wages_excluded_b10_termination_due_to_death_or_disability_retirement_under_plan: excluded_b10
+      -- wages_included_b10_payable_even_without_termination: included_b10
+      -- taxable_wages_total_b: taxable_total_b
+    }
+
+  # Assertions - check only the precomputed scope output fields
+  # Correlation:
+  # - First payment: §3306(b)(10)(A) + (B), and not payable absent termination -> excluded amount $3000
+  assertion (computation.wages_excluded_b10_termination_due_to_death_or_disability_retirement_under_plan = $3000)
+
+  # - Second payment: §3306(b)(10) "other than" clause applies (payable even without termination) -> included $2000
+  assertion (computation.wages_included_b10_payable_even_without_termination = $2000)
+
+  # - Total taxable wages (after §3306(b) exclusions, before $7,000 cap) -> $2000
+  assertion (computation.taxable_wages_total_b = $2000)
+```

@@ -1,0 +1,108 @@
+> Module Section_152_scenario_15
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_15:
+  output qr_result content IRC.IndividualSection152QualifyingRelativeOutput
+
+scope Section_152_scenario_15:
+  # Scenario: Qualifying relative via in-law relationship — mother-in-law with no income
+  # Tested law refs:
+  # - §152(d)(2)(G): in-law relationship (mother-in-law)
+  # - §152(d)(1)(A): bears required relationship
+  # - §152(d)(1)(B): has no income
+  # - §152(d)(1)(D): not a qualifying child of any taxpayer
+  # - §152(d)(1): overall qualifying relative definition
+
+  definition qr_result equals
+    let t15 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let sp15 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let mil15 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+
+    let birth_t15 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t15
+      -- birth_date: Date.of_year_month_day of 1986, 6, 6
+      -- is_counterfactual: false
+    } in
+    let birth_sp15 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: sp15
+      -- birth_date: Date.of_year_month_day of 1987, 7, 7
+      -- is_counterfactual: false
+    } in
+    let birth_mil15 equals IRC.BirthEvent {
+      -- id: 3
+      -- individual: mil15
+      -- birth_date: Date.of_year_month_day of 1960, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    let marriage_1 equals IRC.MarriageEvent {
+      -- id: 1
+      -- spouse1: t15
+      -- spouse2: sp15
+      -- marriage_date: Date.of_year_month_day of 2015, 1, 1
+      -- is_counterfactual: false
+    } in
+
+    # Relationship event: mother-in-law of the taxpayer (qualifies under §152(d)(2)(G))
+    let rel_mil15 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t15
+      -- relative: mil15
+      -- start_date: Date.of_year_month_day of 2015, 1, 1
+      -- relationship_type: IRC.FamilyRelationshipType.MotherInLaw
+      -- is_counterfactual: false
+    } in
+
+    # Income: mother-in-law has no income for 2023 (§152(d)(1)(B))
+    let income_mil15_2023 equals IRC.IncomeEvent {
+      -- id: 1
+      -- individual: mil15
+      -- tax_year: 2023
+      -- has_income: false
+      -- earned_income: $0
+      -- is_counterfactual: false
+    } in
+
+    # Tax return status for mother-in-law in 2023 (not a joint return)
+    let tre_mil15_2023 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: mil15
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152(d) Qualifying Relative for mil15 with respect to taxpayer t15
+    (output of IRC.IndividualSection152QualifyingRelative with {
+      -- individual: mil15
+      -- taxpayer: t15
+      -- tax_year: 2023
+      -- family_relationship_events: [ rel_mil15 ]
+      -- residence_period_events: []  # Not needed for in-law relationship under §152(d)(2)(G)
+      -- qualifying_child_results: []  # Assumption: not a qualifying child of any taxpayer (§152(d)(1)(D))
+      -- tax_return_events: [ tre_mil15_2023 ]
+      -- income_events: [ income_mil15_2023 ]
+      -- marriage_events: [ marriage_1 ]
+    }).main_output
+
+  # Assertions - Only reference the computed output (qr_result)
+
+  # §152(d)(1)(A) via §152(d)(2)(G): bears the required relationship (mother-in-law)
+  assertion (qr_result.bears_relationship_152_d_1_A = true)
+
+  # §152(d)(1)(B): has no income for the calendar year in which the taxable year begins
+  assertion (qr_result.has_no_income_152_d_1_B = true)
+
+  # §152(d)(1)(D): not a qualifying child of any taxpayer (assumed and passed via empty QC results)
+  assertion (qr_result.is_not_qualifying_child_152_d_1_D = true)
+
+  # §152(d)(1): overall qualifying relative status
+  assertion (qr_result.is_qualifying_relative = true)
+```

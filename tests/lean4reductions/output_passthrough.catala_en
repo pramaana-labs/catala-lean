@@ -1,0 +1,54 @@
+# R2 Reduction Test: Output passthrough and always-some leaf functions
+
+Tests that leaf functions with a single unconditional rule return T directly
+instead of Option T, eliminating pattern-match unwrapping at call sites.
+
+Before R2 reduction, each leaf wraps result in Option and call sites use match-unwrap:
+```
+def SimpleTax_tax_amount_leaf_0 (input : SimpleTax_Input) : Option CatalaRuntime.Money :=
+  some ((CatalaRuntime.multiply input.income input.rate))
+
+def SimpleTax_effective_rate_leaf_0 (input : SimpleTax_Input) (tax_amount : CatalaRuntime.Money) : Option Rat :=
+  some ((tax_amount / input.income))
+
+def SimpleTax_effective_rate_output_leaf_0 (input : SimpleTax_Input) (effective_rate : Rat) : Option Rat :=
+  some (effective_rate)
+
+def simpleTax (input : SimpleTax_Input) : SimpleTax :=
+  let _tax_amount := match SimpleTax_tax_amount_leaf_0 input with | some val => val | _ => default
+  let _effective_rate := match SimpleTax_effective_rate_leaf_0 input _tax_amount with | some val => val | _ => default
+  let _effective_rate_output := match SimpleTax_effective_rate_output_leaf_0 input _effective_rate with | some val => val | _ => default
+  { tax_amount := _tax_amount, effective_rate_output := _effective_rate_output }
+```
+
+After R2 reduction, leaf functions return T directly and call sites are direct assignments:
+```
+def SimpleTax_tax_amount_leaf_0 (input : SimpleTax_Input) : CatalaRuntime.Money :=
+  (CatalaRuntime.multiply input.income input.rate)
+
+def SimpleTax_effective_rate_leaf_0 (input : SimpleTax_Input) (tax_amount : CatalaRuntime.Money) : Rat :=
+  (tax_amount / input.income)
+
+def SimpleTax_effective_rate_output_leaf_0 (input : SimpleTax_Input) (effective_rate : Rat) : Rat :=
+  effective_rate
+
+def simpleTax (input : SimpleTax_Input) : SimpleTax :=
+  let _tax_amount := SimpleTax_tax_amount_leaf_0 input
+  let _effective_rate := SimpleTax_effective_rate_leaf_0 input _tax_amount
+  let _effective_rate_output := SimpleTax_effective_rate_output_leaf_0 input _effective_rate
+  { tax_amount := _tax_amount, effective_rate_output := _effective_rate_output }
+```
+
+```catala
+declaration scope SimpleTax:
+  input income content money
+  input rate content decimal
+  output tax_amount content money
+  internal effective_rate content decimal
+  output effective_rate_output content decimal
+
+scope SimpleTax:
+  definition tax_amount equals income * rate
+  definition effective_rate equals tax_amount / income
+  definition effective_rate_output equals effective_rate
+```

@@ -1,0 +1,124 @@
+> Module Section_152_scenario_13
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_13:
+  output qc_result content IRC.IndividualSection152QualifyingChildOutput
+
+scope Section_152_scenario_13:
+  # Scenario: Qualifying child via descendant-of-sibling relationship (niece)
+  # Tested law refs:
+  # - §152(c)(2)(B): relationship includes "a brother, sister, stepbrother, or stepsister of the taxpayer or a descendant of any such relative"
+  # - §152(c)(1)(B): same principal place of abode as the taxpayer for more than half the year
+  # - §152(c)(3): age requirements (younger than taxpayer and less than 25 at year end)
+  # - §152(c)(1)(E): has not filed a joint return (other than only for claim of refund)
+  # - §152(c)(1): overall qualifying child definition
+  definition qc_result equals
+    let t13 equals IRC.Individual {
+      -- id: 1
+      -- is_counterfactual: false
+    } in
+    let n13 equals IRC.Individual {
+      -- id: 2
+      -- is_counterfactual: false
+    } in
+    let h13 equals IRC.Household {
+      -- id: 1
+      -- is_counterfactual: false
+    } in
+
+    # Birth events for taxpayer and niece (used for §152(c)(3) age test and "younger than taxpayer")
+    let birth_t13 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t13
+      -- birth_date: Date.of_year_month_day of 1983, 3, 3
+      -- is_counterfactual: false
+    } in
+    let birth_n13 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: n13
+      -- birth_date: Date.of_year_month_day of 2007, 9, 9
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods (used for §152(c)(1)(B) principal abode > half-year)
+    let res_t13 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t13
+      -- household: h13
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_n13 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: n13
+      -- household: h13
+      -- start_date: Date.of_year_month_day of 2023, 2, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Family relationship events satisfying §152(c)(2)(B) (niece; descendant of sibling)
+    let rel_niece equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t13
+      -- relative: n13
+      -- start_date: Date.of_year_month_day of 2007, 9, 9
+      -- relationship_type: IRC.FamilyRelationshipType.NieceOrNephew
+      -- is_counterfactual: false
+    } in
+    let rel_descendant_of_sibling equals IRC.FamilyRelationshipEvent {
+      -- id: 2
+      -- person: t13
+      -- relative: n13
+      -- start_date: Date.of_year_month_day of 2007, 9, 9
+      -- relationship_type: IRC.FamilyRelationshipType.DescendantOfSibling
+      -- is_counterfactual: false
+    } in
+
+    # Tax return event for the child (used for §152(c)(1)(E) joint return condition)
+    let tr_n13 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: n13
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152 Qualifying Child result
+    (output of IRC.IndividualSection152QualifyingChild with {
+      -- individual: n13
+      -- taxpayer: t13
+      -- tax_year: 2023
+      -- family_relationship_events: [ rel_niece ] ++ [ rel_descendant_of_sibling ]
+      -- birth_events: [ birth_t13 ] ++ [ birth_n13 ]
+      -- residence_period_events: [ res_t13 ] ++ [ res_n13 ]
+      -- tax_return_events: [ tr_n13 ]
+    }).main_output
+
+  # Assertions: Only reference qc_result (output of the computed scope)
+
+  # §152(c)(2)(B) relationship: niece/descendant of sibling qualifies
+  assertion (qc_result.bears_relationship_152_c_1_A = true)
+
+  # §152(c)(1)(B): same principal place of abode > half of year
+  assertion (qc_result.has_same_principal_place_of_abode_152_c_1_B = true)
+
+  # §152(c)(3): younger than taxpayer and less than 25 at year end
+  assertion (qc_result.meets_age_requirements_152_c_1_C = true)
+
+  # §152(c)(1)(E): has not filed a joint return (other than only for claim of refund)
+  assertion (qc_result.has_not_filed_joint_return_152_c_1_E = true)
+
+  # §152(c)(1): overall qualifying child status
+  assertion (qc_result.is_qualifying_child = true)
+```

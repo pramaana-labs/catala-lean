@@ -1,0 +1,766 @@
+> Module Section_3306_scenario_9
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_3306_scenario_9:
+  output computation content IRC.IRCSimplified
+
+scope Section_3306_scenario_9:
+  # Scenario: §3306(a)(2)(B) agricultural employer test (5+ individuals on 10 days in different calendar weeks)
+  # and §3306(c)(1)(B) H-2A alien agricultural labor exclusion.
+  # Tested law refs: §3306(a)(2)(B), §3306(c)(1)(B)
+
+  definition computation equals
+    # Individuals
+    let b1 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let b2 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let b3 equals IRC.Individual { -- id: 3 -- is_counterfactual: false } in
+    let b4 equals IRC.Individual { -- id: 4 -- is_counterfactual: false } in
+    let b5 equals IRC.Individual { -- id: 5 -- is_counterfactual: false } in
+    let h1 equals IRC.Individual { -- id: 6 -- is_counterfactual: false } in
+    let h2 equals IRC.Individual { -- id: 7 -- is_counterfactual: false } in
+
+    # Organization (employer)
+    let org9 equals IRC.Organization {
+      -- id: 1
+      -- organization_type: IRC.OrganizationType.Business
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationship events - non-H2A agricultural workers (b1..b5)
+    # Ten dates, each in a different calendar week: 05/01, 05/08, 05/15, 05/22, 05/29, 06/05, 06/12, 06/19, 06/26, 07/03
+    let emp_20240501_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 1
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 5, 1
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240501_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 2
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 5, 1
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240501_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 3
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 5, 1
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240501_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 4
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 5, 1
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240501_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 5
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 5, 1
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240508_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 6
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 5, 8
+      -- end_date: Date.of_year_month_day of 2024, 5, 8
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240508_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 7
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 5, 8
+      -- end_date: Date.of_year_month_day of 2024, 5, 8
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240508_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 8
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 5, 8
+      -- end_date: Date.of_year_month_day of 2024, 5, 8
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240508_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 9
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 5, 8
+      -- end_date: Date.of_year_month_day of 2024, 5, 8
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240508_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 10
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 5, 8
+      -- end_date: Date.of_year_month_day of 2024, 5, 8
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240515_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 11
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 5, 15
+      -- end_date: Date.of_year_month_day of 2024, 5, 15
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240515_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 12
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 5, 15
+      -- end_date: Date.of_year_month_day of 2024, 5, 15
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240515_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 13
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 5, 15
+      -- end_date: Date.of_year_month_day of 2024, 5, 15
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240515_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 14
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 5, 15
+      -- end_date: Date.of_year_month_day of 2024, 5, 15
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240515_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 15
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 5, 15
+      -- end_date: Date.of_year_month_day of 2024, 5, 15
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240522_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 16
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 5, 22
+      -- end_date: Date.of_year_month_day of 2024, 5, 22
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240522_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 17
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 5, 22
+      -- end_date: Date.of_year_month_day of 2024, 5, 22
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240522_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 18
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 5, 22
+      -- end_date: Date.of_year_month_day of 2024, 5, 22
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240522_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 19
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 5, 22
+      -- end_date: Date.of_year_month_day of 2024, 5, 22
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240522_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 20
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 5, 22
+      -- end_date: Date.of_year_month_day of 2024, 5, 22
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240529_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 21
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 5, 29
+      -- end_date: Date.of_year_month_day of 2024, 5, 29
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240529_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 22
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 5, 29
+      -- end_date: Date.of_year_month_day of 2024, 5, 29
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240529_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 23
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 5, 29
+      -- end_date: Date.of_year_month_day of 2024, 5, 29
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240529_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 24
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 5, 29
+      -- end_date: Date.of_year_month_day of 2024, 5, 29
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240529_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 25
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 5, 29
+      -- end_date: Date.of_year_month_day of 2024, 5, 29
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Additional 5 weeks to reach 10 different calendar weeks
+    let emp_20240605_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 28
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 6, 5
+      -- end_date: Date.of_year_month_day of 2024, 6, 5
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240605_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 29
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 6, 5
+      -- end_date: Date.of_year_month_day of 2024, 6, 5
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240605_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 30
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 6, 5
+      -- end_date: Date.of_year_month_day of 2024, 6, 5
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240605_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 31
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 6, 5
+      -- end_date: Date.of_year_month_day of 2024, 6, 5
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240605_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 32
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 6, 5
+      -- end_date: Date.of_year_month_day of 2024, 6, 5
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240612_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 33
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 6, 12
+      -- end_date: Date.of_year_month_day of 2024, 6, 12
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240612_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 34
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 6, 12
+      -- end_date: Date.of_year_month_day of 2024, 6, 12
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240612_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 35
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 6, 12
+      -- end_date: Date.of_year_month_day of 2024, 6, 12
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240612_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 36
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 6, 12
+      -- end_date: Date.of_year_month_day of 2024, 6, 12
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240612_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 37
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 6, 12
+      -- end_date: Date.of_year_month_day of 2024, 6, 12
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240619_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 38
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 6, 19
+      -- end_date: Date.of_year_month_day of 2024, 6, 19
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240619_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 39
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 6, 19
+      -- end_date: Date.of_year_month_day of 2024, 6, 19
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240619_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 40
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 6, 19
+      -- end_date: Date.of_year_month_day of 2024, 6, 19
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240619_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 41
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 6, 19
+      -- end_date: Date.of_year_month_day of 2024, 6, 19
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240619_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 42
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 6, 19
+      -- end_date: Date.of_year_month_day of 2024, 6, 19
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240626_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 43
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 6, 26
+      -- end_date: Date.of_year_month_day of 2024, 6, 26
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240626_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 44
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 6, 26
+      -- end_date: Date.of_year_month_day of 2024, 6, 26
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240626_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 45
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 6, 26
+      -- end_date: Date.of_year_month_day of 2024, 6, 26
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240626_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 46
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 6, 26
+      -- end_date: Date.of_year_month_day of 2024, 6, 26
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240626_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 47
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 6, 26
+      -- end_date: Date.of_year_month_day of 2024, 6, 26
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    let emp_20240703_b1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 48
+      -- employer: org9
+      -- employee: b1
+      -- start_date: Date.of_year_month_day of 2024, 7, 3
+      -- end_date: Date.of_year_month_day of 2024, 7, 3
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240703_b2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 49
+      -- employer: org9
+      -- employee: b2
+      -- start_date: Date.of_year_month_day of 2024, 7, 3
+      -- end_date: Date.of_year_month_day of 2024, 7, 3
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240703_b3 equals IRC.EmploymentRelationshipEvent {
+      -- id: 50
+      -- employer: org9
+      -- employee: b3
+      -- start_date: Date.of_year_month_day of 2024, 7, 3
+      -- end_date: Date.of_year_month_day of 2024, 7, 3
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240703_b4 equals IRC.EmploymentRelationshipEvent {
+      -- id: 51
+      -- employer: org9
+      -- employee: b4
+      -- start_date: Date.of_year_month_day of 2024, 7, 3
+      -- end_date: Date.of_year_month_day of 2024, 7, 3
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+    let emp_20240703_b5 equals IRC.EmploymentRelationshipEvent {
+      -- id: 52
+      -- employer: org9
+      -- employee: b5
+      -- start_date: Date.of_year_month_day of 2024, 7, 3
+      -- end_date: Date.of_year_month_day of 2024, 7, 3
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: true
+      -- is_counterfactual: false
+    } in
+
+    # Employment relationship events - H2A agricultural labor (aliens)
+    let emp_h1 equals IRC.EmploymentRelationshipEvent {
+      -- id: 26
+      -- employer: org9
+      -- employee: h1
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 6, 30
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: false
+      -- is_counterfactual: false
+    } in
+    let emp_h2 equals IRC.EmploymentRelationshipEvent {
+      -- id: 27
+      -- employer: org9
+      -- employee: h2
+      -- start_date: Date.of_year_month_day of 2024, 5, 1
+      -- end_date: Date.of_year_month_day of 2024, 6, 30
+      -- employment_category: IRC.EmploymentCategory.AgriculturalLabor
+      -- service_location: IRC.ServiceLocation.WithinUnitedStates
+      -- is_american_employer: false
+      -- employee_is_us_citizen: false
+      -- is_counterfactual: false
+    } in
+
+    # Immigration admission events for H2A workers
+    let adm_h1 equals IRC.ImmigrationAdmissionEvent {
+      -- id: 1
+      -- individual: h1
+      -- visa_category: IRC.VisaCategory.H2A
+      -- admission_date: Date.of_year_month_day of 2024, 4, 28
+      -- is_counterfactual: false
+    } in
+    let adm_h2 equals IRC.ImmigrationAdmissionEvent {
+      -- id: 2
+      -- individual: h2
+      -- visa_category: IRC.VisaCategory.H2A
+      -- admission_date: Date.of_year_month_day of 2024, 4, 28
+      -- is_counterfactual: false
+    } in
+
+    # Minimal individual income tax return (required by IRCSimplified)
+    let single_details equals IRC.SingleVariant {
+      -- taxpayer: b1
+      -- itemization_election: false
+      -- is_estate_or_trust: false
+      -- is_common_trust_fund: false
+      -- is_partnership: false
+    } in
+    let individual_tax_return equals IRC.IndividualTaxReturn {
+      -- id: 1
+      -- tax_year: 2024
+      -- details: IRC.FilingStatusVariant.Single content single_details
+    } in
+
+    # Employer unemployment excise tax return (FUTA unit) for 2024
+    let agr_employer_variant equals IRC.EmployerAgriculturalLaborVariant { -- employer: org9 } in
+    let employer_unemployment_excise_tax_return equals IRC.EmployerUnemploymentExciseTaxReturn {
+      -- id: 1
+      -- tax_year: 2024
+      -- details: IRC.EmployerVariant.AgriculturalEmployer content agr_employer_variant
+    } in
+
+    # Call IRCSimplified to compute all outputs needed for §3306
+    output of IRC.IRCSimplified with {
+      -- individual_tax_return: individual_tax_return
+      -- individuals: [ b1 ] ++ [ b2 ] ++ [ b3 ] ++ [ b4 ] ++ [ b5 ] ++ [ h1 ] ++ [ h2 ]
+      -- organizations: [ org9 ]
+      -- birth_events: []
+      -- blindness_status_events: []
+      -- death_events: []
+      -- nonresident_alien_status_period_events: []
+      -- marriage_events: []
+      -- divorce_or_legal_separation_events: []
+      -- residence_period_events: []
+      -- household_maintenance_events: []
+      -- parenthood_events: []
+      -- family_relationship_events: []
+      -- tax_return_events: []
+      -- income_events: []
+      -- employment_relationship_events:
+           [ emp_20240501_b1 ] ++ [ emp_20240501_b2 ] ++ [ emp_20240501_b3 ] ++ [ emp_20240501_b4 ] ++ [ emp_20240501_b5 ]
+        ++ [ emp_20240508_b1 ] ++ [ emp_20240508_b2 ] ++ [ emp_20240508_b3 ] ++ [ emp_20240508_b4 ] ++ [ emp_20240508_b5 ]
+        ++ [ emp_20240515_b1 ] ++ [ emp_20240515_b2 ] ++ [ emp_20240515_b3 ] ++ [ emp_20240515_b4 ] ++ [ emp_20240515_b5 ]
+        ++ [ emp_20240522_b1 ] ++ [ emp_20240522_b2 ] ++ [ emp_20240522_b3 ] ++ [ emp_20240522_b4 ] ++ [ emp_20240522_b5 ]
+        ++ [ emp_20240529_b1 ] ++ [ emp_20240529_b2 ] ++ [ emp_20240529_b3 ] ++ [ emp_20240529_b4 ] ++ [ emp_20240529_b5 ]
+        ++ [ emp_20240605_b1 ] ++ [ emp_20240605_b2 ] ++ [ emp_20240605_b3 ] ++ [ emp_20240605_b4 ] ++ [ emp_20240605_b5 ]
+        ++ [ emp_20240612_b1 ] ++ [ emp_20240612_b2 ] ++ [ emp_20240612_b3 ] ++ [ emp_20240612_b4 ] ++ [ emp_20240612_b5 ]
+        ++ [ emp_20240619_b1 ] ++ [ emp_20240619_b2 ] ++ [ emp_20240619_b3 ] ++ [ emp_20240619_b4 ] ++ [ emp_20240619_b5 ]
+        ++ [ emp_20240626_b1 ] ++ [ emp_20240626_b2 ] ++ [ emp_20240626_b3 ] ++ [ emp_20240626_b4 ] ++ [ emp_20240626_b5 ]
+        ++ [ emp_20240703_b1 ] ++ [ emp_20240703_b2 ] ++ [ emp_20240703_b3 ] ++ [ emp_20240703_b4 ] ++ [ emp_20240703_b5 ]
+        ++ [ emp_h1 ] ++ [ emp_h2 ]
+      -- wage_payment_events: []
+      -- student_enrollment_events: []
+      -- hospital_patient_events: []
+      -- immigration_admission_events: [ adm_h1 ] ++ [ adm_h2 ]
+      -- employment_termination_events: []
+      -- employer_unemployment_excise_tax_return: employer_unemployment_excise_tax_return
+      -- itemized_deductions: $0
+      -- adjusted_gross_income: $0
+    }
+
+  # Assertions - ONLY check the output of IRCSimplified (computation)
+  # employer_status_a2_agricultural_days_threshold_met = true
+  # Tests §3306(a)(2)(B): agricultural employer status (5+ individuals in agricultural labor on 10 days in different calendar weeks)
+  assertion (
+    exists status among computation.organization_employer_statuses
+      such that status.is_agricultural_employer = true
+  )
+
+  # employment_excluded_c1B_h2a_alien_labor = true
+  # Tests §3306(c)(1)(B): H-2A alien agricultural labor is not "employment"
+  # Ensure all agricultural labor events with non-U.S. citizen workers are excluded from employment.
+  assertion (
+    for all res among computation.employment_relationship_employment_results
+      we have
+        not (
+          (res.employment_relationship_event.employee_is_us_citizen = false)
+          and (res.employment_relationship_event.employment_category = IRC.EmploymentCategory.AgriculturalLabor)
+        ) or (res.is_employment = false)
+  )
+```

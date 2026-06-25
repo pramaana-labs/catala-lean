@@ -1,0 +1,129 @@
+> Module Section_152_scenario_3
+> Using Sections as IRC
+
+```catala
+declaration structure Section152Scenario3Output:
+  data qc_result content IRC.IndividualSection152QualifyingChildOutput
+  data younger_than_taxpayer content boolean
+  data less_than_25_at_end content boolean
+
+#[test]
+declaration scope Section_152_scenario_3:
+  output computation content Section152Scenario3Output
+
+scope Section_152_scenario_3:
+  # Scenario: §152(c) qualifying child fails the "younger than the taxpayer" test.
+  # Facts:
+  # - Taxpayer (t3) born 2000-06-01 (age 23 at 2023 year-end)
+  # - Sibling (s3) born 1999-06-01 (age 24 at 2023 year-end)
+  # - Relationship: siblings (Brother)
+  # - Principal place of abode: s3 lived with t3 in same household more than half of 2023
+  # - s3 did not file a joint return
+  #
+  # Tested law refs:
+  # - §152(c)(3): Age requirements — must be younger than taxpayer and less than 25 at year-end
+  # - §152(c)(2)(B): Relationship — brother/sister qualifies
+  # - §152(c)(1)(B): Same principal place of abode for more than half of the year
+  # - §152(c)(1): Overall definition of qualifying child
+
+  definition computation equals
+    let t3 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let s3 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h3 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth events
+    let b_t3 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t3
+      -- birth_date: Date.of_year_month_day of 2000, 6, 1
+      -- is_counterfactual: false
+    } in
+    let b_s3 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: s3
+      -- birth_date: Date.of_year_month_day of 1999, 6, 1
+      -- is_counterfactual: false
+    } in
+
+    # Residence periods – both in same household; s3 > half-year
+    let r_t3 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t3
+      -- household: h3
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let r_s3 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: s3
+      -- household: h3
+      -- start_date: Date.of_year_month_day of 2023, 1, 15
+      -- end_date: Date.of_year_month_day of 2023, 10, 15
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Sibling relationship
+    let rel_siblings equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: t3
+      -- relative: s3
+      -- start_date: Date.of_year_month_day of 1999, 6, 1
+      -- relationship_type: IRC.FamilyRelationshipType.Brother
+      -- is_counterfactual: false
+    } in
+
+    # s3 did not file a joint return for 2023
+    let tr_s3_2023 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: s3
+      -- tax_year: 2023
+      -- filed_joint_return: false
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152(c) qualifying child determination for s3 with respect to taxpayer t3, tax year 2023
+    let qc_result_local equals
+      (output of IRC.IndividualSection152QualifyingChild with {
+        -- individual: s3
+        -- taxpayer: t3
+        -- tax_year: 2023
+        -- family_relationship_events: [ rel_siblings ]
+        -- birth_events: [ b_t3 ] ++ [ b_s3 ]
+        -- residence_period_events: [ r_t3 ] ++ [ r_s3 ]
+        -- tax_return_events: [ tr_s3_2023 ]
+      }).main_output
+    in
+
+    let year_end equals Date.of_year_month_day of 2023, 12, 31 in
+    let younger_than_taxpayer equals b_s3.birth_date > b_t3.birth_date in
+    let less_than_25 equals Date.is_young_enough_rounding_down of b_s3.birth_date, 25 year, year_end in
+
+    Section152Scenario3Output {
+      -- qc_result: qc_result_local
+      -- younger_than_taxpayer: younger_than_taxpayer
+      -- less_than_25_at_end: less_than_25
+    }
+
+  # Assertions per scenario and legal text
+  # qc_age_younger_than_taxpayer_s3_t3_2023: false
+  assertion (computation.younger_than_taxpayer = false)
+
+  # qc_less_than_25_at_end_s3_2023: true
+  assertion (computation.less_than_25_at_end = true)
+
+  # is_qualifying_child_s3_of_t3_2023: false
+  assertion (computation.qc_result.is_qualifying_child = false)
+
+  # Additional checks consistent with tested references
+  assertion (computation.qc_result.bears_relationship_152_c_1_A = true)
+  assertion (computation.qc_result.has_same_principal_place_of_abode_152_c_1_B = true)
+  assertion (computation.qc_result.meets_age_requirements_152_c_1_C = false)
+```

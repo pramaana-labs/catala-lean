@@ -1,0 +1,126 @@
+> Module Section_152_scenario_5
+> Using Sections as IRC
+
+```catala
+#[test]
+declaration scope Section_152_scenario_5:
+  output dependents_result content IRC.IndividualSection152DependentsOutput
+
+scope Section_152_scenario_5:
+  # Scenario: Qualifying child disqualified due to filing a joint return not only for refund.
+  # Tested law refs:
+  # - §152(c)(2)(A) (relationship)
+  # - §152(c)(1)(B) (same principal place of abode > half year)
+  # - §152(c)(3) (age requirements)
+  # - §152(c)(1)(E) (no joint return other than only for claim of refund)
+  # - §152(c)(1) (qualifying child all-prongs test)
+
+  definition dependents_result equals
+    let t5 equals IRC.Individual { -- id: 1 -- is_counterfactual: false } in
+    let c5 equals IRC.Individual { -- id: 2 -- is_counterfactual: false } in
+    let h5 equals IRC.Household { -- id: 1 -- is_counterfactual: false } in
+
+    # Birth events
+    let b_t5 equals IRC.BirthEvent {
+      -- id: 1
+      -- individual: t5
+      -- birth_date: Date.of_year_month_day of 1980, 3, 3
+      -- is_counterfactual: false
+    } in
+    let b_c5 equals IRC.BirthEvent {
+      -- id: 2
+      -- individual: c5
+      -- birth_date: Date.of_year_month_day of 2006, 7, 7
+      -- is_counterfactual: false
+    } in
+
+    # Residence in household h5 during 2023
+    let res_t5 equals IRC.ResidencePeriodEvent {
+      -- id: 1
+      -- individual: t5
+      -- household: h5
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 12, 31
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+    let res_c5 equals IRC.ResidencePeriodEvent {
+      -- id: 2
+      -- individual: c5
+      -- household: h5
+      -- start_date: Date.of_year_month_day of 2023, 1, 1
+      -- end_date: Date.of_year_month_day of 2023, 9, 1
+      -- is_member_of_household: true
+      -- is_principal_place_of_abode: true
+      -- is_counterfactual: false
+    } in
+
+    # Family relationship event (child of taxpayer) to support §152(c)(2)(A)
+    let rel1 equals IRC.FamilyRelationshipEvent {
+      -- id: 1
+      -- person: c5
+      -- relative: t5
+      -- start_date: Date.of_year_month_day of 2006, 7, 7
+      -- relationship_type: IRC.FamilyRelationshipType.Child
+      -- is_counterfactual: false
+    } in
+
+    # Dependent individual's filing: joint return not only for refund (fails §152(c)(1)(E))
+    let tr_c5 equals IRC.TaxReturnEvent {
+      -- id: 1
+      -- individual: c5
+      -- tax_year: 2023
+      -- filed_joint_return: true
+      -- is_only_for_refund_claim: false
+      -- qualifying_children: []
+      -- dependents: []
+      -- is_counterfactual: false
+    } in
+
+    # Compute §152 dependents for taxpayer t5 in 2023, considering only c5 as candidate
+    (output of IRC.IndividualSection152Dependents with {
+      -- taxpayer: t5
+      -- tax_year: 2023
+      -- individuals: [ c5 ]
+      -- family_relationship_events: [ rel1 ]
+      -- birth_events: [ b_t5 ] ++ [ b_c5 ]
+      -- residence_period_events: [ res_t5 ] ++ [ res_c5 ]
+      -- tax_return_events: [ tr_c5 ]
+      -- income_events: []
+      -- marriage_events: []
+    }).main_output
+
+  # Assertions - ONLY reference the computed scope output.
+  # Correlate to §152(c) prongs and overall QC determination.
+
+  # §152(c)(2)(A): relationship (child of the taxpayer) → true
+  assertion (
+    exists qc among dependents_result.qualifying_children
+      such that qc.individual.id = 2 and qc.bears_relationship_152_c_1_A = true
+  )
+
+  # §152(c)(1)(B): same principal place of abode > half year → true
+  assertion (
+    exists qc among dependents_result.qualifying_children
+      such that qc.individual.id = 2 and qc.has_same_principal_place_of_abode_152_c_1_B = true
+  )
+
+  # §152(c)(3): age requirement (younger than taxpayer and < 25) → true
+  assertion (
+    exists qc among dependents_result.qualifying_children
+      such that qc.individual.id = 2 and qc.meets_age_requirements_152_c_1_C = true
+  )
+
+  # §152(c)(1)(E): no joint return other than only for refund → expected false (joint return not only for refund)
+  assertion (
+    exists qc among dependents_result.qualifying_children
+      such that qc.individual.id = 2 and qc.has_not_filed_joint_return_152_c_1_E = false
+  )
+
+  # §152(c)(1): overall qualifying child status → expected false due solely to (E)
+  assertion (
+    exists qc among dependents_result.qualifying_children
+      such that qc.individual.id = 2 and qc.is_qualifying_child = false
+  )
+```
