@@ -135,13 +135,52 @@ namespace Date
 /-- Create a Date -/
 @[inline,simp, grind]  def create (y m d : Int) : Date := ⟨y, m, d⟩
 
+@[inline] def isLeapYear (year : Int) : Bool :=
+  (year % 400 = 0) || (year % 4 = 0 && year % 100 != 0)
+
+@[inline] def daysInMonth (year month : Int) : Int :=
+  match month with
+  | 1 | 3 | 5 | 7 | 8 | 10 | 12 => 31
+  | 4 | 6 | 9 | 11 => 30
+  | 2 => if isLeapYear year then 29 else 28
+  | _ => 31
+
+@[inline] def daysFromCivil (year month day : Int) : Int :=
+  let y := year - if month <= 2 then 1 else 0
+  let era := (if y >= 0 then y else y - 399) / 400
+  let yoe := y - era * 400
+  let mp := month + if month > 2 then -3 else 9
+  let doy := (153 * mp + 2) / 5 + day - 1
+  let doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
+  era * 146097 + doe
+
+@[inline] def civilFromDays (days : Int) : Date :=
+  let era := (if days >= 0 then days else days - 146096) / 146097
+  let doe := days - era * 146097
+  let yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+  let y := yoe + era * 400
+  let doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+  let mp := (5 * doy + 2) / 153
+  let day := doy - (153 * mp + 2) / 5 + 1
+  let month := mp + if mp < 10 then 3 else -9
+  let year := y + if month <= 2 then 1 else 0
+  ⟨year, month, day⟩
+
+@[inline] def normalizeYearMonth (year month : Int) : Int × Int :=
+  let totalMonths := year * 12 + (month - 1)
+  let normalizedYear := totalMonths / 12
+  let normalizedMonth := totalMonths % 12 + 1
+  (normalizedYear, normalizedMonth)
+
 /-- Add duration to date (simplified) -/
 @[inline,simp, grind]  def addDuration (d : Date) (dur : Duration) : Date :=
   ⟨d.year + dur.years, d.month + dur.months, d.day + dur.days⟩
 
 /-- Subtract duration from date -/
 @[inline,simp, grind]  def subDuration (d : Date) (dur : Duration) : Date :=
-  ⟨d.year - dur.years, d.month - dur.months, d.day - dur.days⟩
+  let (year, month) := normalizeYearMonth (d.year - dur.years) (d.month - dur.months)
+  let day := min d.day (daysInMonth year month)
+  civilFromDays (daysFromCivil year month day - dur.days)
 
 /-- Subtract two dates to get duration (simplified) -/
 @[inline,simp, grind]  def difference (d1 d2 : Date) : Duration :=
